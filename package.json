@@ -1,0 +1,71 @@
+{
+  "name": "svstate",
+  "version": "0.0.1",
+  "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
+  "author": "BCsabaEngine",
+  "license": "ISC",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=9"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
+  ],
+  "bin": {
+    "svstate": "bin/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BCsabaEngine/svstate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BCsabaEngine/svstate/issues"
+  },
+  "homepage": "https://github.com/BCsabaEngine/svstate",
+  "scripts": {
+    "demo": "cd demo && ./node_modules/.bin/vite dev --host --open",
+    "test": "vitest run --pass-with-no-tests",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "tsc --build --clean",
+    "build": "tsc --build --clean && tsc --build --force",
+    "format:check": "prettier --check .",
+    "format:fix": "prettier --write . | grep -v 'unchanged' | sed G",
+    "lint:check": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "fix": "node --run format:fix && node --run lint:fix && node --run format:fix",
+    "all": "node --run fix && node --run build && node --run test",
+    "npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i"
+  },
+  "keywords": [
+    "svelte",
+    "svelte5",
+    "state",
+    "validation",
+    "runes",
+    "proxy"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.52.0",
+    "@typescript-eslint/parser": "^8.52.0",
+    "@vitest/coverage-v8": "^4.0.16",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-unicorn": "^62.0.0",
+    "nodemon": "^3.1.11",
+    "prettier": "^3.7.4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@qiwi/deep-proxy": "^3.0.0",
+    "svelte": "^5.0.0"
+  }
+}
