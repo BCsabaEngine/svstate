@@ -14,7 +14,7 @@ export default defineConfig({
 		cssMinify: true,
 		copyPublicDir: true,
 		emptyOutDir: true,
-		outDir: 'docs',
+		outDir: '../docs',
 		chunkSizeWarningLimit: 1500,
 		assetsInlineLimit: 0
 	},

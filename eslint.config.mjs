@@ -21,6 +21,7 @@ export default [
       '**/coverage',
       '**/bin',
       '**/dist',
+      '**/docs',
       '**/demo',
       '**/.env',
       '**/.env.*',

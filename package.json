@@ -20,9 +20,6 @@
     "dist/**/*.js",
     "dist/**/*.d.ts"
   ],
-  "bin": {
-    "svstate": "bin/index.js"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BCsabaEngine/svstate.git"
@@ -33,6 +30,7 @@
   "homepage": "https://github.com/BCsabaEngine/svstate",
   "scripts": {
     "demo": "cd demo && ./node_modules/.bin/vite dev --host --open",
+    "demo:build": "cd demo && ./node_modules/.bin/vite build",
     "test": "vitest run --pass-with-no-tests",
     "test:coverage": "vitest run --coverage",
     "clean": "tsc --build --clean",
@@ -42,7 +40,7 @@
     "lint:check": "eslint .",
     "lint:fix": "eslint --fix .",
     "fix": "node --run format:fix && node --run lint:fix && node --run format:fix",
-    "all": "node --run fix && node --run build && node --run test",
+    "all": "node --run fix && node --run build && node --run test && node --run demo:build",
     "npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i"
   },
   "keywords": [
