@@ -76,6 +76,13 @@ const { data, execute, state } = createSvState(init, actuators?, options?);
 - `action?: (params: P) => Promise<void> | void` - Async action to execute
 - `actionCompleted?: (error?: unknown) => void` - Callback after action completes
 
+**Options:**
+
+- `resetDirtyOnAction: boolean` (default: `true`) - Reset `isDirty` after successful action
+- `debounceValidation: number` (default: `0`) - Debounce validation by N ms (0 = `queueMicrotask`)
+- `allowConcurrentActions: boolean` (default: `false`) - Ignore `execute()` if action in progress
+- `persistActionError: boolean` (default: `false`) - Keep action errors until next action
+
 ### Deep Proxy System (src/proxy.ts)
 
 - `ChangeProxy<T>()` wraps objects with recursive Proxy handlers
@@ -86,7 +93,7 @@ const { data, execute, state } = createSvState(init, actuators?, options?);
 
 ### Validation System
 
-Validation is deferred via `queueMicrotask()` to batch changes. The `Validator` type is a nested object where leaf values are error strings (empty = valid).
+Validation is deferred via `queueMicrotask()` (or `setTimeout` when `debounceValidation > 0`) to batch changes. The `Validator` type is a nested object where leaf values are error strings (empty = valid).
 
 The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf strings are non-empty.
 

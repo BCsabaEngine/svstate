@@ -1,4 +1,4 @@
-import { derived, type Readable, writable } from 'svelte/store';
+import { derived, get, type Readable, writable } from 'svelte/store';
 
 import { ChangeProxy, type ProxyChanged } from './proxy';
 
@@ -31,10 +31,16 @@ const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && c
 
 // Options
 type Options = {
-  clearErrorOnChange: boolean;
+  resetDirtyOnAction: boolean;
+  debounceValidation: number;
+  allowConcurrentActions: boolean;
+  persistActionError: boolean;
 };
 const defaultOptions: Options = {
-  clearErrorOnChange: true
+  resetDirtyOnAction: true,
+  debounceValidation: 0,
+  allowConcurrentActions: false,
+  persistActionError: false
 };
 
 // createSvState
@@ -56,17 +62,28 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   const stateObject = $state<T>(init);
 
   let validationScheduled = false;
+  let validationTimeout: ReturnType<typeof setTimeout> | undefined;
+
   const scheduleValidation = () => {
-    if (validationScheduled || !validator) return;
-    validationScheduled = true;
-    queueMicrotask(() => {
-      errors.set(validator(data));
-      validationScheduled = false;
-    });
+    if (!validator) return;
+
+    if (usedOptions.debounceValidation > 0) {
+      clearTimeout(validationTimeout);
+      validationTimeout = setTimeout(() => {
+        errors.set(validator(data));
+      }, usedOptions.debounceValidation);
+    } else {
+      if (validationScheduled) return;
+      validationScheduled = true;
+      queueMicrotask(() => {
+        errors.set(validator(data));
+        validationScheduled = false;
+      });
+    }
   };
 
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
-    if (usedOptions.clearErrorOnChange) actionError.set(undefined);
+    if (!usedOptions.persistActionError) actionError.set(undefined);
     isDirty.set(true);
     effect?.(target, property, currentValue, oldValue);
     scheduleValidation();
@@ -75,10 +92,13 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   if (validator) errors.set(validator(data));
 
   const execute = async (parameters: P) => {
+    if (!usedOptions.allowConcurrentActions && get(actionInProgress)) return;
+
     actionError.set(undefined);
     actionInProgress.set(true);
     try {
       await actuators?.action?.(parameters);
+      if (usedOptions.resetDirtyOnAction) isDirty.set(false);
       actuators?.actionCompleted?.();
     } catch (caughtError) {
       actuators?.actionCompleted?.(caughtError);
