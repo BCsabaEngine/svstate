@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createSvState } from '../../src/state.svelte';
-	import { StringValidator } from '../../src/validators';
+	import { stringValidator } from '../../src/validators';
 
 	const sourceData = { name: 'Csaba', age: 10, address: { city: '', zip: '' } };
 
@@ -10,7 +10,7 @@
 		state: { actionInProgress, allValid, errors }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			name: new StringValidator(source.name, 'trim').maxLength(5).getError()
+			name: stringValidator(source.name, 'trim').maxLength(5).getError()
 		}),
 		effect: (target, property) => {
 			if (property === 'name') target.age = target.name.length * 2;

@@ -1,83 +1,85 @@
-class BaseValidator {
-  protected error = '';
-  protected setError(message: string) {
-    if (!this.error) this.error = message;
-  }
-
-  public getError() {
-    return this.error;
-  }
-}
-
 type BaseOption = 'trim' | 'normalize';
 type PrepareOption = BaseOption | 'upper' | 'lower';
 
-export class StringValidator extends BaseValidator {
-  private static readonly prepareOps: Record<PrepareOption, (s: string) => string> = {
-    trim: (s) => s.trim(),
-    normalize: (s) => s.replaceAll(/\s{2,}/g, ' '),
-    upper: (s) => s.toLocaleUpperCase(),
-    lower: (s) => s.toLocaleLowerCase()
+const prepareOps: Record<PrepareOption, (s: string) => string> = {
+  trim: (s) => s.trim(),
+  normalize: (s) => s.replaceAll(/\s{2,}/g, ' '),
+  upper: (s) => s.toLocaleUpperCase(),
+  lower: (s) => s.toLocaleLowerCase()
+};
+
+// Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
+export function stringValidator(input: string, ...prepares: (BaseOption | 'upper')[]): StringValidatorBuilder;
+export function stringValidator(input: string, ...prepares: (BaseOption | 'lower')[]): StringValidatorBuilder;
+export function stringValidator(input: string, ...prepares: BaseOption[]): StringValidatorBuilder;
+export function stringValidator(input: string, ...prepares: PrepareOption[]): StringValidatorBuilder {
+  let error = '';
+  const setError = (message: string) => {
+    if (!error) error = message;
   };
 
-  private input: string;
+  const processedInput = prepares.reduce((s, op) => prepareOps[op](s), input);
 
-  // Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
-  constructor(input: string, ...prepares: (BaseOption | 'upper')[]);
-  constructor(input: string, ...prepares: (BaseOption | 'lower')[]);
-  constructor(input: string, ...prepares: BaseOption[]);
-  constructor(input: string, ...prepares: PrepareOption[]) {
-    super();
-    this.input = prepares.reduce((s, op) => StringValidator.prepareOps[op](s), input);
-  }
+  const builder: StringValidatorBuilder = {
+    required() {
+      if (!error && !processedInput) setError('Required');
+      return builder;
+    },
 
-  public required(): this {
-    if (this.error) return this;
-    if (!this.input) this.setError('Required');
-    return this;
-  }
+    noSpace() {
+      if (!error && processedInput.includes(' ')) setError('No space allowed');
+      return builder;
+    },
 
-  public noSpace(): this {
-    if (this.error) return this;
-    if (this.input.includes(' ')) this.setError('No space allowed');
-    return this;
-  }
+    minLength(length: number) {
+      if (!error && processedInput.length < length) setError(`Min length ${length}`);
+      return builder;
+    },
 
-  public minLength(length: number): this {
-    if (this.error) return this;
-    if (this.input.length < length) this.setError(`Min length ${length}`);
-    return this;
-  }
+    maxLength(length: number) {
+      if (!error && processedInput.length > length) setError(`Max length ${length}`);
+      return builder;
+    },
 
-  public maxLength(length: number): this {
-    if (this.error) return this;
-    if (this.input.length > length) this.setError(`Max length ${length}`);
-    return this;
-  }
+    uppercase() {
+      if (!error && processedInput !== processedInput.toLocaleUpperCase()) setError('Uppercase only');
+      return builder;
+    },
 
-  public uppercase(): this {
-    if (this.error) return this;
-    if (this.input !== this.input.toLocaleUpperCase()) this.setError('Uppercase only');
-    return this;
-  }
+    lowercase() {
+      if (!error && processedInput !== processedInput.toLocaleLowerCase()) setError('Lowercase only');
+      return builder;
+    },
 
-  public lowercase(): this {
-    if (this.error) return this;
-    if (this.input !== this.input.toLocaleLowerCase()) this.setError('Lowercase only');
-    return this;
-  }
+    startsWith(prefix: string | string[]) {
+      if (error) return builder;
+      const prefixes = Array.isArray(prefix) ? prefix : [prefix];
+      if (processedInput && !prefixes.some((p) => processedInput.startsWith(p)))
+        setError(`Must starts with ${prefixes.join(', ')}`);
+      return builder;
+    },
 
-  public startsWith(prefix: string | string[]): this {
-    if (this.error) return this;
-    if (!Array.isArray(prefix)) prefix = [prefix];
-    if (this.input && !prefix.some((p) => this.input.startsWith(p)))
-      this.setError(`Must starts with ${prefix.join(', ')}`);
-    return this;
-  }
+    regexp(regexp: RegExp, message?: string) {
+      if (!error && processedInput && !regexp.test(processedInput)) setError(message ?? 'Not allowed chars');
+      return builder;
+    },
 
-  public regexp(regexp: RegExp, message?: string): this {
-    if (this.error) return this;
-    if (this.input && !regexp.test(this.input)) this.setError(message ?? 'Not allowed chars');
-    return this;
-  }
+    getError() {
+      return error;
+    }
+  };
+
+  return builder;
 }
+
+type StringValidatorBuilder = {
+  required(): StringValidatorBuilder;
+  noSpace(): StringValidatorBuilder;
+  minLength(length: number): StringValidatorBuilder;
+  maxLength(length: number): StringValidatorBuilder;
+  uppercase(): StringValidatorBuilder;
+  lowercase(): StringValidatorBuilder;
+  startsWith(prefix: string | string[]): StringValidatorBuilder;
+  regexp(regexp: RegExp, message?: string): StringValidatorBuilder;
+  getError(): string;
+};
