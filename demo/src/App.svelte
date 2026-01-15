@@ -1,5 +1,6 @@
 <script lang="ts">
 	import './app.postcss';
+
 	import Form from './Form.svelte';
 </script>
 

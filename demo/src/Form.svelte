@@ -7,12 +7,13 @@
 	const {
 		formData,
 		formExecute,
-		formState: { stateInProgress, stateError, stateAllValid, stateIsValid }
+		formState: { stateInProgress, stateAllValid, stateIsValid }
 	} = new FormLogic(
 		sourceData,
 		async (a) => {
+			/* eslint-disable no-console */
 			console.log('Form submitted', JSON.stringify(formData) + JSON.stringify(a));
-      return new Promise((resolve) => setTimeout(resolve, 1000));
+			return new Promise((resolve) => setTimeout(resolve, 1000));
 		},
 		{
 			validator: (source) => ({
@@ -47,7 +48,7 @@
 	<p class="error">Form is not valid!</p>
 {/if}
 
-<button on:click|preventDefault={() => formExecute({ a: 12 })} disabled={$stateInProgress}>
+<button disabled={$stateInProgress} on:click|preventDefault={() => formExecute({ a: 12 })}>
 	{#if $stateInProgress}Submitting...{:else}Submit{/if}
 </button>
 
