@@ -7,7 +7,7 @@
 	const {
 		data,
 		execute,
-		state: { actionInProgress, allValid, errors }
+		state: { actionInProgress, hasErrors, errors }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
 			name: stringValidator(source.name, 'trim').maxLength(5).getError()
@@ -49,7 +49,7 @@
 	</label>
 </form>
 
-{#if !$allValid}
+{#if $hasErrors}
 	<p class="error">Form is not valid!</p>
 {/if}
 

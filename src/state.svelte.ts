@@ -6,26 +6,28 @@ import { ChangeProxy, type ProxyChanged } from './proxy';
 type InputObject = Record<string, unknown>;
 
 type Validator = { [S in string]: string | Validator };
-const allValid = (validator: Validator): boolean =>
-  Object.values(validator).every((item) => (typeof item === 'string' ? !item : allValid(item)));
-const isAllValid = ($isValid: Validator | undefined): boolean => !$isValid || allValid($isValid);
 
 type Action<P extends object> = ((parameters: P) => Promise<void> | void) | (() => Promise<void> | void);
 
 type Actuators<P extends object, T extends InputObject, V extends Validator> = {
-  action?: Action<P>;
   validator?: (source: T) => V;
   effect?: ProxyChanged<T>;
+  action?: Action<P>;
   actionCompleted?: (error?: unknown) => void;
 };
 
 type StateResult<V extends Validator> = {
   errors: Readable<V | undefined>;
-  allValid: Readable<boolean>;
+  hasErrors: Readable<boolean>;
   isDirty: Readable<boolean>;
   actionInProgress: Readable<boolean>;
-  error: Readable<Error | undefined>;
+  actionError: Readable<Error | undefined>;
 };
+
+// Helpers
+const checkHasErrors = (validator: Validator): boolean =>
+  Object.values(validator).some((item) => (typeof item === 'string' ? !!item : checkHasErrors(item)));
+const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && checkHasErrors($errors);
 
 // Options
 type Options = {
@@ -46,10 +48,10 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   const { validator, effect } = actuators ?? {};
 
   const errors = writable<V | undefined>();
-  const allValidStore = derived(errors, isAllValid);
+  const hasErrors = derived(errors, hasAnyErrors);
   const isDirty = writable(false);
   const actionInProgress = writable(false);
-  const error = writable<Error | undefined>();
+  const actionError = writable<Error | undefined>();
 
   const stateObject = $state<T>(init);
 
@@ -64,7 +66,7 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   };
 
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
-    if (usedOptions.clearErrorOnChange) error.set(undefined);
+    if (usedOptions.clearErrorOnChange) actionError.set(undefined);
     isDirty.set(true);
     effect?.(target, property, currentValue, oldValue);
     scheduleValidation();
@@ -73,14 +75,14 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   if (validator) errors.set(validator(data));
 
   const execute = async (parameters: P) => {
-    error.set(undefined);
+    actionError.set(undefined);
     actionInProgress.set(true);
     try {
       await actuators?.action?.(parameters);
       actuators?.actionCompleted?.();
     } catch (caughtError) {
       actuators?.actionCompleted?.(caughtError);
-      error.set(caughtError instanceof Error ? caughtError : undefined);
+      actionError.set(caughtError instanceof Error ? caughtError : undefined);
     } finally {
       actionInProgress.set(false);
     }
@@ -88,10 +90,10 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
 
   const state: StateResult<V> = {
     errors,
-    allValid: allValidStore,
+    hasErrors,
     isDirty,
     actionInProgress,
-    error
+    actionError
   };
 
   return { data, execute, state };

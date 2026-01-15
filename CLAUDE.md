@@ -64,10 +64,10 @@ const { data, execute, state } = createSvState(init, actuators?, options?);
 - `execute(params)` - Async function to run the configured action
 - `state` - Object containing reactive stores:
   - `errors: Readable<V | undefined>` - Validation errors
-  - `allValid: Readable<boolean>` - Whether all validations pass
+  - `hasErrors: Readable<boolean>` - Whether any validation errors exist
   - `isDirty: Readable<boolean>` - Whether state has been modified
   - `actionInProgress: Readable<boolean>` - Action execution status
-  - `error: Readable<Error | undefined>` - Last action error
+  - `actionError: Readable<Error | undefined>` - Last action error
 
 **Actuators:**
 
@@ -88,7 +88,7 @@ const { data, execute, state } = createSvState(init, actuators?, options?);
 
 Validation is deferred via `queueMicrotask()` to batch changes. The `Validator` type is a nested object where leaf values are error strings (empty = valid).
 
-The `allValid` helper recursively checks if all leaf strings are empty.
+The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf strings are non-empty.
 
 ### Fluent Validator Builders (src/validators.ts)
 
