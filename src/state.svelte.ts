@@ -52,11 +52,22 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   const error = writable<Error | undefined>();
 
   const stateObject = $state<T>(init);
+
+  let validationScheduled = false;
+  const scheduleValidation = () => {
+    if (validationScheduled || !validator) return;
+    validationScheduled = true;
+    queueMicrotask(() => {
+      errors.set(validator(data));
+      validationScheduled = false;
+    });
+  };
+
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
     if (usedOptions.clearErrorOnChange) error.set(undefined);
     isDirty.set(true);
     effect?.(target, property, currentValue, oldValue);
-    if (validator) errors.set(validator(data));
+    scheduleValidation();
   });
 
   if (validator) errors.set(validator(data));

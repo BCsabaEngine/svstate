@@ -55,24 +55,23 @@
     "proxy"
   ],
   "devDependencies": {
-    "@types/node": "^25.0.6",
-    "@typescript-eslint/eslint-plugin": "^8.52.0",
-    "@typescript-eslint/parser": "^8.52.0",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@types/node": "^25.0.9",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-unicorn": "^62.0.0",
     "nodemon": "^3.1.11",
-    "prettier": "^3.7.4",
+    "prettier": "^3.8.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.17"
   },
   "dependencies": {},
   "peerDependencies": {
-    "@qiwi/deep-proxy": "^3.0.0",
     "svelte": "^5.0.0"
   }
 }
