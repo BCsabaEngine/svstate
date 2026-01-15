@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**svstate** is a Svelte 5 library that provides a supercharged `$state()` with deep reactive proxies, validation, and side effects. It's designed as a peer dependency for Svelte 5 projects.
+**svstate** is a Svelte 5 library that provides a supercharged `$state()` with deep reactive proxies, validation, snapshot/undo, and side effects. It's designed as a peer dependency for Svelte 5 projects.
 
 ## Development Commands
 
@@ -45,35 +45,38 @@ npm run demo            # Start Vite dev server with demo app (in demo/ director
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState` and validator builders
-- `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function
+- `src/index.ts` - Public exports: `createSvState`, validator builders, and snapshot types
+- `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
 
 ### createSvState Function (src/state.svelte.ts)
 
-The main export creates a validated state object with the following structure:
+The main export creates a validated state object with snapshot/undo support:
 
 ```typescript
-const { data, execute, state } = createSvState(init, actuators?, options?);
+const { data, execute, state, rollback, reset } = createSvState(init, actuators?, options?);
 ```
 
 **Returns:**
 
 - `data` - Deep reactive proxy around the state object
 - `execute(params)` - Async function to run the configured action
+- `rollback(steps?)` - Undo N steps (default 1), restores state and triggers validation
+- `reset()` - Return to initial snapshot, triggers validation
 - `state` - Object containing reactive stores:
   - `errors: Readable<V | undefined>` - Validation errors
   - `hasErrors: Readable<boolean>` - Whether any validation errors exist
   - `isDirty: Readable<boolean>` - Whether state has been modified
   - `actionInProgress: Readable<boolean>` - Action execution status
   - `actionError: Readable<Error | undefined>` - Last action error
+  - `snapshots: Readable<Snapshot<T>[]>` - Snapshot history for undo
 
 **Actuators:**
 
 - `validator?: (source: T) => V` - Validation function returning error structure
-- `effect?: ProxyChanged<T>` - Side effect on any property change
-- `action?: (params: P) => Promise<void> | void` - Async action to execute
+- `effect?: (context: EffectContext<T>) => void` - Side effect receiving context object with `snapshot` function
+- `action?: (params?: P) => Promise<void> | void` - Async action to execute
 - `actionCompleted?: (error?: unknown) => void` - Callback after action completes
 
 **Options:**
@@ -82,6 +85,21 @@ const { data, execute, state } = createSvState(init, actuators?, options?);
 - `debounceValidation: number` (default: `0`) - Debounce validation by N ms (0 = `queueMicrotask`)
 - `allowConcurrentActions: boolean` (default: `false`) - Ignore `execute()` if action in progress
 - `persistActionError: boolean` (default: `false`) - Keep action errors until next action
+
+### Snapshot/Undo System
+
+The effect callback receives `EffectContext<T>` with a `snapshot` function for creating undo points:
+
+```typescript
+effect: ({ snapshot, property }) => {
+  snapshot(`Changed ${property}`); // Creates snapshot with title
+};
+```
+
+- `snapshot(title, replace = true)` - Creates a snapshot; if `replace=true` and last snapshot has same title, replaces it (debouncing)
+- Initial state is saved as first snapshot with title `"Initial"`
+- Successful action execution resets snapshots with current state as new initial
+- `rollback()` and `reset()` trigger validation after restoring state
 
 ### Deep Proxy System (src/proxy.ts)
 

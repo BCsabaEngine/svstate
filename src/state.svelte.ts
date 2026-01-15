@@ -1,27 +1,41 @@
 import { derived, get, type Readable, writable } from 'svelte/store';
 
-import { ChangeProxy, type ProxyChanged } from './proxy';
+import { ChangeProxy } from './proxy';
 
 // Types
-type InputObject = Record<string, unknown>;
+export type Validator = { [S in string]: string | Validator };
 
-type Validator = { [S in string]: string | Validator };
+type Action<P extends object> = (parameters?: P) => Promise<void> | void;
 
-type Action<P extends object> = ((parameters: P) => Promise<void> | void) | (() => Promise<void> | void);
+export type Snapshot<T> = {
+  title: string;
+  data: T;
+};
 
-type Actuators<P extends object, T extends InputObject, V extends Validator> = {
+export type SnapshotFunction = (title: string, replace?: boolean) => void;
+
+export type EffectContext<T> = {
+  snapshot: SnapshotFunction;
+  target: T;
+  property: string;
+  currentValue: unknown;
+  oldValue: unknown;
+};
+
+type Actuators<T extends Record<string, unknown>, V extends Validator, P extends object> = {
   validator?: (source: T) => V;
-  effect?: ProxyChanged<T>;
+  effect?: (context: EffectContext<T>) => void;
   action?: Action<P>;
   actionCompleted?: (error?: unknown) => void;
 };
 
-type StateResult<V extends Validator> = {
+type StateResult<T, V> = {
   errors: Readable<V | undefined>;
   hasErrors: Readable<boolean>;
   isDirty: Readable<boolean>;
   actionInProgress: Readable<boolean>;
   actionError: Readable<Error | undefined>;
+  snapshots: Readable<Snapshot<T>[]>;
 };
 
 // Helpers
@@ -29,14 +43,23 @@ const checkHasErrors = (validator: Validator): boolean =>
   Object.values(validator).some((item) => (typeof item === 'string' ? !!item : checkHasErrors(item)));
 const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && checkHasErrors($errors);
 
+const deepClone = <T>(object: T): T => {
+  if (object === null || typeof object !== 'object') return object;
+  if (object instanceof Date) return new Date(object) as T;
+  if (Array.isArray(object)) return object.map((item) => deepClone(item)) as T;
+  const cloned = {} as T;
+  for (const key in object) if (Object.prototype.hasOwnProperty.call(object, key)) cloned[key] = deepClone(object[key]);
+  return cloned;
+};
+
 // Options
-type Options = {
+export type SvStateOptions = {
   resetDirtyOnAction: boolean;
   debounceValidation: number;
   allowConcurrentActions: boolean;
   persistActionError: boolean;
 };
-const defaultOptions: Options = {
+const defaultOptions: SvStateOptions = {
   resetDirtyOnAction: true,
   debounceValidation: 0,
   allowConcurrentActions: false,
@@ -44,12 +67,12 @@ const defaultOptions: Options = {
 };
 
 // createSvState
-export function createSvState<T extends InputObject, V extends Validator, P extends object>(
+export function createSvState<T extends Record<string, unknown>, V extends Validator, P extends object>(
   init: T,
-  actuators?: Actuators<P, T, V>,
-  options?: Partial<Options>
+  actuators?: Actuators<T, V, P>,
+  options?: Partial<SvStateOptions>
 ) {
-  const usedOptions: Options = { ...defaultOptions, ...options };
+  const usedOptions: SvStateOptions = { ...defaultOptions, ...options };
 
   const { validator, effect } = actuators ?? {};
 
@@ -58,8 +81,19 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   const isDirty = writable(false);
   const actionInProgress = writable(false);
   const actionError = writable<Error | undefined>();
+  const snapshots = writable<Snapshot<T>[]>([{ title: 'Initial', data: deepClone(init) }]);
 
   const stateObject = $state<T>(init);
+
+  const createSnapshot: SnapshotFunction = (title: string, replace = true) => {
+    const currentSnapshots = get(snapshots);
+    const createdSnapshot: Snapshot<T> = { title, data: deepClone(stateObject) };
+    const lastSnapshot = currentSnapshots.at(-1);
+
+    if (replace && lastSnapshot && lastSnapshot.title === title)
+      snapshots.set([...currentSnapshots.slice(0, -1), createdSnapshot]);
+    else snapshots.set([...currentSnapshots, createdSnapshot]);
+  };
 
   let validationScheduled = false;
   let validationTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -85,7 +119,7 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
     if (!usedOptions.persistActionError) actionError.set(undefined);
     isDirty.set(true);
-    effect?.(target, property, currentValue, oldValue);
+    effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
     scheduleValidation();
   });
 
@@ -99,6 +133,7 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
     try {
       await actuators?.action?.(parameters);
       if (usedOptions.resetDirtyOnAction) isDirty.set(false);
+      snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
       actuators?.actionCompleted?.();
     } catch (caughtError) {
       actuators?.actionCompleted?.(caughtError);
@@ -108,13 +143,39 @@ export function createSvState<T extends InputObject, V extends Validator, P exte
     }
   };
 
-  const state: StateResult<V> = {
+  const rollback = (steps = 1) => {
+    const currentSnapshots = get(snapshots);
+    if (currentSnapshots.length <= 1) return;
+
+    const targetIndex = Math.max(0, currentSnapshots.length - 1 - steps);
+    const targetSnapshot = currentSnapshots[targetIndex];
+    if (!targetSnapshot) return;
+
+    Object.assign(stateObject, deepClone(targetSnapshot.data));
+    snapshots.set(currentSnapshots.slice(0, targetIndex + 1));
+
+    if (validator) errors.set(validator(data));
+  };
+
+  const reset = () => {
+    const currentSnapshots = get(snapshots);
+    const initialSnapshot = currentSnapshots[0];
+    if (!initialSnapshot) return;
+
+    Object.assign(stateObject, deepClone(initialSnapshot.data));
+    snapshots.set([initialSnapshot]);
+
+    if (validator) errors.set(validator(data));
+  };
+
+  const state: StateResult<T, V> = {
     errors,
     hasErrors,
     isDirty,
     actionInProgress,
-    actionError
+    actionError,
+    snapshots
   };
 
-  return { data, execute, state };
+  return { data, execute, state, rollback, reset };
 }
