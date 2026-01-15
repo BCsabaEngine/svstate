@@ -4,7 +4,14 @@
   "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
   "author": "BCsabaEngine",
   "license": "ISC",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "engines": {
     "node": ">=20",
     "npm": ">=9"
