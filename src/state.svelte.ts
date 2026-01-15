@@ -26,7 +26,7 @@ type Actuators<T extends Record<string, unknown>, V extends Validator, P extends
   validator?: (source: T) => V;
   effect?: (context: EffectContext<T>) => void;
   action?: Action<P>;
-  actionCompleted?: (error?: unknown) => void;
+  actionCompleted?: (error?: unknown) => void | Promise<void>;
 };
 
 type StateResult<T, V> = {
@@ -119,7 +119,9 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
     if (!usedOptions.persistActionError) actionError.set(undefined);
     isDirty.set(true);
-    effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
+    const effectResult: unknown = effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
+    if (effectResult instanceof Promise)
+      throw new Error('svstate: effect callback must be synchronous. Use action for async operations.');
     scheduleValidation();
   });
 
@@ -134,9 +136,9 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       await actuators?.action?.(parameters);
       if (usedOptions.resetDirtyOnAction) isDirty.set(false);
       snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
-      actuators?.actionCompleted?.();
+      await actuators?.actionCompleted?.();
     } catch (caughtError) {
-      actuators?.actionCompleted?.(caughtError);
+      await actuators?.actionCompleted?.(caughtError);
       actionError.set(caughtError instanceof Error ? caughtError : undefined);
     } finally {
       actionInProgress.set(false);
