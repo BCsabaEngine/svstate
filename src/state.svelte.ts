@@ -35,71 +35,53 @@ const defaultOptions: Options = {
   clearErrorOnChange: true
 };
 
-// FormLogic
-export class SvState<T extends InputObject, V extends Validator, P extends object> {
-  private _stateObject = $state<T>({} as T);
-  private _data: T;
+// createSvState
+export function createSvState<T extends InputObject, V extends Validator, P extends object>(
+  init: T,
+  actuators?: Actuators<P, T, V>,
+  options?: Partial<Options>
+) {
+  const usedOptions: Options = { ...defaultOptions, ...options };
 
-  private _errors = writable<V | undefined>();
-  private _allValid = derived(this._errors, isAllValid);
-  private _isDirty = writable(false);
-  private _actionInProgress = writable(false);
-  private _error = writable<Error | undefined>();
+  const { validator, effect } = actuators ?? {};
 
-  private _actuators?: Actuators<P, T, V>;
-  private _state!: StateResult<V>;
+  const errors = writable<V | undefined>();
+  const allValidStore = derived(errors, isAllValid);
+  const isDirty = writable(false);
+  const actionInProgress = writable(false);
+  const error = writable<Error | undefined>();
 
-  private _execute = async (parameters: P) => {
-    this._error.set(undefined);
-    this._actionInProgress.set(true);
+  const stateObject = $state<T>(init);
+  const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
+    if (usedOptions.clearErrorOnChange) error.set(undefined);
+    isDirty.set(true);
+    effect?.(target, property, currentValue, oldValue);
+    if (validator) errors.set(validator(data));
+  });
+
+  if (validator) errors.set(validator(data));
+
+  const execute = async (parameters: P) => {
+    error.set(undefined);
+    actionInProgress.set(true);
     try {
-      await this._actuators?.action?.(parameters);
-      this._actuators?.actionCompleted?.();
-    } catch (error) {
-      this._actuators?.actionCompleted?.(error);
-      this._error.set(error instanceof Error ? error : undefined);
+      await actuators?.action?.(parameters);
+      actuators?.actionCompleted?.();
+    } catch (caughtError) {
+      actuators?.actionCompleted?.(caughtError);
+      error.set(caughtError instanceof Error ? caughtError : undefined);
     } finally {
-      this._actionInProgress.set(false);
+      actionInProgress.set(false);
     }
   };
 
-  constructor(init: T, actuators?: Actuators<P, T, V>, options?: Partial<Options>) {
-    const usedOptions: Options = { ...defaultOptions, ...options };
-    this._actuators = actuators;
+  const state: StateResult<V> = {
+    errors,
+    allValid: allValidStore,
+    isDirty,
+    actionInProgress,
+    error
+  };
 
-    const { validator, effect } = actuators ?? {};
-
-    this._stateObject = init;
-    this._data = ChangeProxy(
-      this._stateObject,
-      (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
-        if (usedOptions.clearErrorOnChange) this._error.set(undefined);
-        this._isDirty.set(true);
-        effect?.(target, property, currentValue, oldValue);
-        if (validator) this._errors.set(validator(this._data));
-      }
-    );
-
-    if (validator) this._errors.set(validator(this._data));
-
-    this._state = {
-      errors: this._errors,
-      allValid: this._allValid,
-      isDirty: this._isDirty,
-      actionInProgress: this._actionInProgress,
-      error: this._error
-    };
-  }
-
-  get data() {
-    return this._data;
-  }
-
-  get execute() {
-    return this._execute;
-  }
-
-  get state(): StateResult<V> {
-    return this._state;
-  }
+  return { data, execute, state };
 }
