@@ -7,12 +7,12 @@
 	const {
 		data,
 		execute,
-		state: { inProgress, allValid, isValid }
+		state: { actionInProgress, allValid, errors }
 	} = new SvState(sourceData, {
 		validator: (source) => ({
 			name: new StringValidator(source.name, 'trim').maxLength(5).getError()
 		}),
-		changed: (target, property) => {
+		effect: (target, property) => {
 			if (property === 'name') target.age = target.name.length * 2;
 			if (property === 'age') target.address.zip = (1000 + target.age).toString();
 		},
@@ -25,7 +25,7 @@
 				}, Math.random() * 1000)
 			);
 		},
-		submitted: (error) => {
+		actionCompleted: (error) => {
 			/* eslint-disable no-console */
 			console.log('Form submission:', error ? 'failed' : 'succeeded', error);
 		}
@@ -35,17 +35,17 @@
 <form>
 	<label
 		>Name: <input bind:value={data.name} />
-		{#if $isValid?.name}<span class="error">{$isValid?.name}</span>{/if}
+		{#if $errors?.name}<span class="error">{$errors?.name}</span>{/if}
 	</label>
 
 	<label
 		>Age: <input type="number" bind:value={data.age} />
-		{#if $isValid?.name}<span class="error">{$isValid?.name}</span>{/if}
+		{#if $errors?.name}<span class="error">{$errors?.name}</span>{/if}
 	</label>
 
 	<label
 		>ZIP: <input type="text" bind:value={data.address.zip} />
-		{#if $isValid?.name}<span class="error">{$isValid?.name}</span>{/if}
+		{#if $errors?.name}<span class="error">{$errors?.name}</span>{/if}
 	</label>
 </form>
 
@@ -53,8 +53,8 @@
 	<p class="error">Form is not valid!</p>
 {/if}
 
-<button disabled={$inProgress} on:click|preventDefault={() => execute({ a: 12 })}>
-	{#if $inProgress}Submitting...{:else}Submit{/if}
+<button disabled={$actionInProgress} on:click|preventDefault={() => execute({ a: 12 })}>
+	{#if $actionInProgress}Submitting...{:else}Submit{/if}
 </button>
 
 <style>
