@@ -9,7 +9,8 @@ class BaseValidator {
   }
 }
 
-type PrepareOption = 'trim' | 'normalize' | 'upper' | 'lower';
+type BaseOption = 'trim' | 'normalize';
+type PrepareOption = BaseOption | 'upper' | 'lower';
 
 export class StringValidator extends BaseValidator {
   private static readonly prepareOps: Record<PrepareOption, (s: string) => string> = {
@@ -21,6 +22,10 @@ export class StringValidator extends BaseValidator {
 
   private input: string;
 
+  // Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
+  constructor(input: string, ...prepares: (BaseOption | 'upper')[]);
+  constructor(input: string, ...prepares: (BaseOption | 'lower')[]);
+  constructor(input: string, ...prepares: BaseOption[]);
   constructor(input: string, ...prepares: PrepareOption[]) {
     super();
     this.input = prepares.reduce((s, op) => StringValidator.prepareOps[op](s), input);
