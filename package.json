@@ -34,7 +34,6 @@
   "scripts": {
     "demo": "cd demo && ./node_modules/.bin/vite dev --host --open",
     "test": "vitest run --pass-with-no-tests",
-    "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "clean": "tsc --build --clean",
     "build": "tsc --build --clean && tsc --build --force",
