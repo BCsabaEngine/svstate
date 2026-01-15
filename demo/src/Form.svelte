@@ -12,15 +12,15 @@
 		validator: (source) => ({
 			name: stringValidator(source.name, 'trim').maxLength(5).getError()
 		}),
-		effect: (target, property) => {
+		effect: ({target, property}) => {
 			if (property === 'name') target.age = target.name.length * 2;
 			if (property === 'age') target.address.zip = (1000 + target.age).toString();
 		},
-		action: async (a) => {
+		action: async (parameters) => {
 			/* eslint-disable no-console */
 			return new Promise((resolve) =>
 				setTimeout(() => {
-					console.log('Submit form...', JSON.stringify(data) + JSON.stringify(a));
+					console.log('Submit form...', JSON.stringify(data) + JSON.stringify(parameters));
 					resolve();
 				}, Math.random() * 1000)
 			);
@@ -53,7 +53,7 @@
 	<p class="error">Form is not valid!</p>
 {/if}
 
-<button disabled={$actionInProgress} on:click|preventDefault={() => execute({ a: 12 })}>
+<button disabled={$actionInProgress} on:click|preventDefault={() => execute()}>
 	{#if $actionInProgress}Submitting...{:else}Submit{/if}
 </button>
 

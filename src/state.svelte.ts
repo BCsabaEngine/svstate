@@ -125,7 +125,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   if (validator) errors.set(validator(data));
 
-  const execute = async (parameters: P) => {
+  const execute = async (parameters?: P) => {
     if (!usedOptions.allowConcurrentActions && get(actionInProgress)) return;
 
     actionError.set(undefined);
