@@ -64,6 +64,14 @@ export function stringValidator(input: string, ...prepares: PrepareOption[]): St
       return builder;
     },
 
+    inArray(values: string[] | Record<string, unknown>) {
+      if (error) return builder;
+      const allowed = Array.isArray(values) ? values : Object.keys(values);
+      if (processedInput && !allowed.includes(processedInput))
+        setError(`Must be one of: ${allowed.join(', ')}`);
+      return builder;
+    },
+
     getError() {
       return error;
     }
@@ -81,6 +89,7 @@ type StringValidatorBuilder = {
   lowercase(): StringValidatorBuilder;
   startsWith(prefix: string | string[]): StringValidatorBuilder;
   regexp(regexp: RegExp, message?: string): StringValidatorBuilder;
+  inArray(values: string[] | Record<string, unknown>): StringValidatorBuilder;
   getError(): string;
 };
 
