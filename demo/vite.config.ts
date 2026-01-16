@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import { defineConfig } from 'vite';
 
+import package_ from '../package.json';
+
 export default defineConfig({
 	plugins: [svelte(), tailwindcss()],
 	build: {
@@ -27,5 +29,9 @@ export default defineConfig({
 			$stores: path.resolve(__dirname, './src/stores'),
 			$types: path.resolve(__dirname, './src/types')
 		}
+	},
+	define: {
+		__PKG_VERSION__: `"${package_.version}"`,
+		__BASE_URL__: `"${process.env.NODE_ENV === 'production' ? '/pcb-tht-holder' : ''}"`
 	}
 });

@@ -5,4 +5,6 @@ declare global {
 		// interface PageData {}
 		// interface Platform {}
 	}
+	declare const __PKG_VERSION__: string;
+	declare const __BASE_URL__: string;
 }

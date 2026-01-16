@@ -13,14 +13,23 @@
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
+
+	/*global __PKG_VERSION__*/
+	const APP_VERSION = __PKG_VERSION__;
+	/*global __BASE_URL__*/
+	const BASE_URL = __BASE_URL__;
 </script>
 
 <div class="min-h-screen bg-gray-100 p-8">
 	<!-- Header -->
 	<header class="mb-8 flex items-center gap-6">
-		<img src="/favicon.png" alt="svstate logo" class="h-32 w-32" />
+		<img src={`${BASE_URL}/favicon.png`} alt="svstate logo" class="h-32 w-32" />
 		<div>
-			<h1 class="text-4xl font-bold text-gray-900">svstate</h1>
+			<h1 class="text-4xl font-bold text-gray-900">svstate
+			<span class="ml-2 text-xl font-normal text-gray-500">
+					v{APP_VERSION}
+				</span>
+			</h1>
 			<p class="mt-2 max-w-2xl text-gray-600">
 				A Svelte 5 library that provides a supercharged $state() with deep reactive proxies,
 				validation, snapshot/undo, and side effects.
