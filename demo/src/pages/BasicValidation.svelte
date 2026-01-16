@@ -3,6 +3,55 @@
 
 	import ErrorText from '../components/ErrorText.svelte';
 
+	let showSourceCode = $state(false);
+
+	const stateSourceCode = `const sourceData = {
+  username: '',
+  email: '',
+  age: 0,
+  bio: '',
+  website: ''
+};
+
+const {
+  data,
+  state: { errors, hasErrors, isDirty }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    username: stringValidator(source.username, 'trim')
+      .required()
+      .minLength(3)
+      .maxLength(20)
+      .noSpace()
+      .getError(),
+    email: stringValidator(source.email, 'trim')
+      .required()
+      .email()
+      .getError(),
+    age: numberValidator(source.age)
+      .required()
+      .min(18)
+      .max(120)
+      .integer()
+      .getError(),
+    bio: stringValidator(source.bio)
+      .maxLength(200)
+      .getError(),
+    website: stringValidator(source.website, 'trim')
+      .website('required')
+      .getError()
+  })
+});`;
+
+	const formSourceCode = `<input
+  id="username"
+  type="text"
+  placeholder="Enter username"
+  class="... {$errors?.username ? 'error-styles' : 'normal-styles'}"
+  bind:value={data.username}
+/>
+<ErrorText error={$errors?.username ?? ''} />`;
+
 	const sourceData = {
 		username: '',
 		email: '',
@@ -163,4 +212,37 @@
 	</button>
 
 </div>
+</div>
+
+<div class="mt-6 rounded-lg border border-gray-200 bg-white shadow-sm">
+	<button
+		type="button"
+		class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 {showSourceCode ? 'border-b border-gray-200' : ''}"
+		onclick={() => (showSourceCode = !showSourceCode)}
+	>
+		<span>Source Code</span>
+		<svg
+			class="h-5 w-5 transform transition-transform {showSourceCode ? 'rotate-180' : ''}"
+			fill="none"
+			stroke="currentColor"
+			viewBox="0 0 24 24"
+		>
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+		</svg>
+	</button>
+
+	{#if showSourceCode}
+		<div class="space-y-4 p-4">
+			<div>
+				<h6 class="mb-2 text-sm font-medium text-gray-700">State Setup</h6>
+				<pre
+					class="overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100">{stateSourceCode}</pre>
+			</div>
+			<div>
+				<h6 class="mb-2 text-sm font-medium text-gray-700">Form Binding Example</h6>
+				<pre
+					class="overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100">{formSourceCode}</pre>
+			</div>
+		</div>
+	{/if}
 </div>

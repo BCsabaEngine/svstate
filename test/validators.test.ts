@@ -913,6 +913,40 @@ describe('dateValidator', () => {
     it('should skip future validation for invalid date', () => {
       expect(dateValidator('invalid').future().getError()).toBe('');
     });
+
+    it('should skip weekday validation for invalid date', () => {
+      expect(dateValidator('invalid').weekday().getError()).toBe('');
+    });
+
+    it('should skip weekend validation for invalid date', () => {
+      expect(dateValidator('invalid').weekend().getError()).toBe('');
+    });
+
+    it('should skip minAge validation for invalid date', () => {
+      expect(dateValidator('invalid').minAge(18).getError()).toBe('');
+    });
+
+    it('should skip maxAge validation for invalid date', () => {
+      expect(dateValidator('invalid').maxAge(65).getError()).toBe('');
+    });
+  });
+
+  describe('chained error priority', () => {
+    it('should not run weekday if required already failed', () => {
+      expect(dateValidator('invalid').required().weekday().getError()).toBe('Required');
+    });
+
+    it('should not run weekend if required already failed', () => {
+      expect(dateValidator('invalid').required().weekend().getError()).toBe('Required');
+    });
+
+    it('should not run minAge if required already failed', () => {
+      expect(dateValidator('invalid').required().minAge(18).getError()).toBe('Required');
+    });
+
+    it('should not run maxAge if required already failed', () => {
+      expect(dateValidator('invalid').required().maxAge(65).getError()).toBe('Required');
+    });
   });
 
   describe('method chaining', () => {
