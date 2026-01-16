@@ -4,7 +4,14 @@
   "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
   "author": "BCsabaEngine",
   "license": "ISC",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "engines": {
     "node": ">=20",
     "npm": ">=9"
@@ -13,9 +20,6 @@
     "dist/**/*.js",
     "dist/**/*.d.ts"
   ],
-  "bin": {
-    "svstate": "bin/index.js"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BCsabaEngine/svstate.git"
@@ -26,8 +30,8 @@
   "homepage": "https://github.com/BCsabaEngine/svstate",
   "scripts": {
     "demo": "cd demo && ./node_modules/.bin/vite dev --host --open",
+    "demo:build": "cd demo && ./node_modules/.bin/vite build",
     "test": "vitest run --pass-with-no-tests",
-    "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "clean": "tsc --build --clean",
     "build": "tsc --build --clean && tsc --build --force",
@@ -36,7 +40,7 @@
     "lint:check": "eslint .",
     "lint:fix": "eslint --fix .",
     "fix": "node --run format:fix && node --run lint:fix && node --run format:fix",
-    "all": "node --run fix && node --run build && node --run test",
+    "all": "node --run fix && node --run build && node --run test && node --run demo:build",
     "npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i"
   },
   "keywords": [
@@ -48,24 +52,24 @@
     "proxy"
   ],
   "devDependencies": {
-    "@types/node": "^25.0.6",
-    "@typescript-eslint/eslint-plugin": "^8.52.0",
-    "@typescript-eslint/parser": "^8.52.0",
-    "@vitest/coverage-v8": "^4.0.16",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@types/node": "^25.0.9",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-unicorn": "^62.0.0",
     "nodemon": "^3.1.11",
-    "prettier": "^3.7.4",
+    "prettier": "^3.8.0",
+    "svelte": "^5.46.4",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.17"
   },
-  "dependencies": {},
   "peerDependencies": {
-    "@qiwi/deep-proxy": "^3.0.0",
     "svelte": "^5.0.0"
   }
 }

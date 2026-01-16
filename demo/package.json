@@ -1,0 +1,49 @@
+{
+	"name": "svstate-demo",
+	"version": "1.0.0",
+	"type": "module",
+	"main": "build/index.js",
+	"engines": {
+		"node": ">=20",
+		"npm": ">=9"
+	},
+	"scripts": {
+		"dev": "vite dev --host --open",
+		"build": "vite build",
+		"ts:check": "svelte-check --tsconfig ./tsconfig.json",
+		"format:check": "prettier --check .",
+		"format:fix": "prettier --write . | grep -v 'unchanged' | sed G",
+		"lint:check": "eslint .",
+		"lint:fix": "eslint --fix .",
+		"npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i",
+		"all": "node --run format:fix && node --run lint:fix && node --run ts:check && node --run build"
+	},
+	"devDependencies": {
+		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@tailwindcss/postcss": "^4.1.18",
+		"@tailwindcss/vite": "^4.1.18",
+		"@tsconfig/svelte": "^5.0.6",
+		"@typescript-eslint/eslint-plugin": "^8.53.0",
+		"@typescript-eslint/parser": "^8.53.0",
+		"eslint": "^9.39.2",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-simple-import-sort": "^12.1.1",
+		"eslint-plugin-svelte": "^3.14.0",
+		"eslint-plugin-unicorn": "^62.0.0",
+		"postcss": "^8.5.6",
+		"prettier": "^3.8.0",
+		"prettier-plugin-svelte": "^3.4.1",
+		"svelte-check": "^4.3.5",
+		"svelte-eslint-parser": "^1.4.1",
+		"svelte-preprocess": "^6.0.3",
+		"tailwindcss": "^4.1.18",
+		"tslib": "^2.8.1",
+		"typescript": "^5.9.3",
+		"vite": "^7.3.1"
+	},
+	"dependencies": {
+		"@iconify/svelte": "^5.2.1",
+		"svelte": "^5.46.4",
+		"zod": "^4.3.5"
+	}
+}
