@@ -20,6 +20,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
+			svstate: path.resolve(__dirname, '../src/index.ts'),
 			$components: path.resolve(__dirname, './src/components'),
 			$lib: path.resolve(__dirname, './src/lib'),
 			$stores: path.resolve(__dirname, './src/stores'),
