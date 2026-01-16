@@ -18,6 +18,7 @@ export default defineConfig({
 		chunkSizeWarningLimit: 1500,
 		assetsInlineLimit: 0
 	},
+	base: process.env.NODE_ENV === 'production' ? '/svstate' : '',
 	resolve: {
 		alias: {
 			svstate: path.resolve(__dirname, '../src/index.ts'),
