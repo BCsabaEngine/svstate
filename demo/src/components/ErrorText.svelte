@@ -1,9 +1,9 @@
 <script lang="ts">
-	interface Props {
+	interface Properties {
 		error: string;
 	}
 
-	let { error }: Props = $props();
+	let { error }: Properties = $props();
 </script>
 
 {#if error}

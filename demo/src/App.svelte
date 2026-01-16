@@ -1,15 +1,16 @@
 <script lang="ts">
 	import './app.postcss';
 
+	import ArrayProperty from './pages/ArrayProperty.svelte';
 	import BasicValidation from './pages/BasicValidation.svelte';
+	import NestedObjects from './pages/NestedObjects.svelte';
 
-	type DemoMode = 'basic-validation' | 'effects' | 'actions' | 'snapshots';
+	type DemoMode = 'basic-validation' | 'nested-objects' | 'array-property';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
-		{ value: 'effects', name: 'With Effects (Coming Soon)' },
-		{ value: 'actions', name: 'With Actions (Coming Soon)' },
-		{ value: 'snapshots', name: 'Snapshot/Undo (Coming Soon)' }
+		{ value: 'nested-objects', name: 'Nested Objects' },
+		{ value: 'array-property', name: 'Array Property' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -23,10 +24,11 @@
 <div class="min-h-screen bg-gray-100 p-8">
 	<!-- Header -->
 	<header class="mb-8 flex items-center gap-6">
-		<img src={`${BASE_URL}/favicon.png`} alt="svstate logo" class="h-32 w-32" />
+		<img class="h-32 w-32" alt="svstate logo" src={`${BASE_URL}/favicon.png`} />
 		<div>
-			<h1 class="text-4xl font-bold text-gray-900">svstate
-			<span class="ml-2 text-xl font-normal text-gray-500">
+			<h1 class="text-4xl font-bold text-gray-900">
+				svstate
+				<span class="ml-2 text-xl font-normal text-gray-500">
 					v{APP_VERSION}
 				</span>
 			</h1>
@@ -42,7 +44,7 @@
 		<!-- Left sidebar -->
 		<aside class="w-64 flex-shrink-0">
 			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-				<label for="demo-select" class="mb-2 block text-sm font-medium text-gray-900"
+				<label class="mb-2 block text-sm font-medium text-gray-900" for="demo-select"
 					>Demo Mode</label
 				>
 				<select
@@ -61,21 +63,10 @@
 		<main class="flex-1">
 			{#if selectedMode === 'basic-validation'}
 				<BasicValidation />
-			{:else if selectedMode === 'effects'}
-				<div class="max-w-xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h5 class="text-xl font-medium text-gray-500">With Effects</h5>
-					<p class="mt-2 text-gray-400">Coming soon...</p>
-				</div>
-			{:else if selectedMode === 'actions'}
-				<div class="max-w-xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h5 class="text-xl font-medium text-gray-500">With Actions</h5>
-					<p class="mt-2 text-gray-400">Coming soon...</p>
-				</div>
-			{:else if selectedMode === 'snapshots'}
-				<div class="max-w-xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h5 class="text-xl font-medium text-gray-500">Snapshot/Undo</h5>
-					<p class="mt-2 text-gray-400">Coming soon...</p>
-				</div>
+			{:else if selectedMode === 'nested-objects'}
+				<NestedObjects />
+			{:else if selectedMode === 'array-property'}
+				<ArrayProperty />
 			{/if}
 		</main>
 	</div>
