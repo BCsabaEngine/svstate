@@ -3,14 +3,16 @@
 
 	import ArrayProperty from './pages/ArrayProperty.svelte';
 	import BasicValidation from './pages/BasicValidation.svelte';
+	import CalculatedFields from './pages/CalculatedFields.svelte';
 	import NestedObjects from './pages/NestedObjects.svelte';
 
-	type DemoMode = 'basic-validation' | 'nested-objects' | 'array-property';
+	type DemoMode = 'basic-validation' | 'nested-objects' | 'array-property' | 'calculated-fields';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
 		{ value: 'nested-objects', name: 'Nested Objects' },
-		{ value: 'array-property', name: 'Array Property' }
+		{ value: 'array-property', name: 'Array Property' },
+		{ value: 'calculated-fields', name: 'Calculated Fields' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -67,6 +69,8 @@
 				<NestedObjects />
 			{:else if selectedMode === 'array-property'}
 				<ArrayProperty />
+			{:else if selectedMode === 'calculated-fields'}
+				<CalculatedFields />
 			{/if}
 		</main>
 	</div>
