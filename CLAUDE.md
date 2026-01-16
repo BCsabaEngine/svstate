@@ -149,13 +149,13 @@ The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf
 Four chainable validator builders with `getError()` to extract the first error:
 
 - **stringValidator(input, ...prepares)** - Preprocessing options: `trim`, `normalize`, `upper`, `lower`
-  - Methods: `required()`, `noSpace()`, `minLength()`, `maxLength()`, `uppercase()`, `lowercase()`, `startsWith()`, `regexp()`, `inArray()`
+  - Methods: `required()`, `noSpace()`, `minLength()`, `maxLength()`, `uppercase()`, `lowercase()`, `startsWith()`, `endsWith()`, `contains()`, `regexp()`, `inArray()`, `email()`, `website(prefix?)`, `alphanumeric()`, `numeric()`
 - **numberValidator(input)**
-  - Methods: `required()`, `min()`, `max()`, `between()`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `multipleOf()`
+  - Methods: `required()`, `min()`, `max()`, `between()`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `multipleOf()`, `decimal()`, `percentage()`
 - **arrayValidator(input)**
   - Methods: `required()`, `minLength()`, `maxLength()`, `unique()`
 - **dateValidator(input)**
-  - Methods: `required()`, `before()`, `after()`, `between()`, `past()`, `future()`
+  - Methods: `required()`, `before()`, `after()`, `between()`, `past()`, `future()`, `weekday()`, `weekend()`, `minAge()`, `maxAge()`
 
 ## Code Style
 

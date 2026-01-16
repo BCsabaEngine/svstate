@@ -188,6 +188,191 @@ describe('stringValidator', () => {
     });
   });
 
+  describe('email', () => {
+    it('should pass for valid email', () => {
+      expect(stringValidator('user@example.com').email().getError()).toBe('');
+    });
+
+    it('should pass for email with subdomain', () => {
+      expect(stringValidator('user@mail.example.com').email().getError()).toBe('');
+    });
+
+    it('should pass for email with plus sign', () => {
+      expect(stringValidator('user+tag@example.com').email().getError()).toBe('');
+    });
+
+    it('should fail for email without @', () => {
+      expect(stringValidator('userexample.com').email().getError()).toBe('Invalid email format');
+    });
+
+    it('should fail for email without domain', () => {
+      expect(stringValidator('user@').email().getError()).toBe('Invalid email format');
+    });
+
+    it('should fail for email without local part', () => {
+      expect(stringValidator('@example.com').email().getError()).toBe('Invalid email format');
+    });
+
+    it('should fail for email with spaces', () => {
+      expect(stringValidator('user @example.com').email().getError()).toBe('Invalid email format');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').email().getError()).toBe('');
+    });
+  });
+
+  describe('website', () => {
+    describe('required prefix', () => {
+      it('should pass for https URL', () => {
+        expect(stringValidator('https://example.com').website('required').getError()).toBe('');
+      });
+
+      it('should pass for http URL', () => {
+        expect(stringValidator('http://example.com').website('required').getError()).toBe('');
+      });
+
+      it('should fail for URL without prefix', () => {
+        expect(stringValidator('example.com').website('required').getError()).toBe(
+          'Must start with http:// or https://'
+        );
+      });
+
+      it('should fail for URL with wrong prefix', () => {
+        expect(stringValidator('ftp://example.com').website('required').getError()).toBe(
+          'Must start with http:// or https://'
+        );
+      });
+    });
+
+    describe('forbidden prefix', () => {
+      it('should pass for URL without prefix', () => {
+        expect(stringValidator('example.com').website('forbidden').getError()).toBe('');
+      });
+
+      it('should fail for https URL', () => {
+        expect(stringValidator('https://example.com').website('forbidden').getError()).toBe(
+          'Must not start with http:// or https://'
+        );
+      });
+
+      it('should fail for http URL', () => {
+        expect(stringValidator('http://example.com').website('forbidden').getError()).toBe(
+          'Must not start with http:// or https://'
+        );
+      });
+    });
+
+    describe('optional prefix', () => {
+      it('should pass for URL with https prefix', () => {
+        expect(stringValidator('https://example.com').website('optional').getError()).toBe('');
+      });
+
+      it('should pass for URL with http prefix', () => {
+        expect(stringValidator('http://example.com').website('optional').getError()).toBe('');
+      });
+
+      it('should pass for URL without prefix', () => {
+        expect(stringValidator('example.com').website('optional').getError()).toBe('');
+      });
+    });
+
+    describe('default parameter', () => {
+      it('should default to optional when no parameter provided', () => {
+        expect(stringValidator('https://example.com').website().getError()).toBe('');
+        expect(stringValidator('http://example.com').website().getError()).toBe('');
+        expect(stringValidator('example.com').website().getError()).toBe('');
+      });
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').website('required').getError()).toBe('');
+      expect(stringValidator('').website('forbidden').getError()).toBe('');
+      expect(stringValidator('').website('optional').getError()).toBe('');
+      expect(stringValidator('').website().getError()).toBe('');
+    });
+  });
+
+  describe('endsWith', () => {
+    it('should pass when string ends with suffix', () => {
+      expect(stringValidator('hello.txt').endsWith('.txt').getError()).toBe('');
+    });
+
+    it('should pass when string ends with one of multiple suffixes', () => {
+      expect(stringValidator('image.png').endsWith(['.jpg', '.png']).getError()).toBe('');
+    });
+
+    it('should fail when string does not end with suffix', () => {
+      expect(stringValidator('hello.txt').endsWith('.pdf').getError()).toBe('Must end with .pdf');
+    });
+
+    it('should fail when string does not end with any suffix', () => {
+      expect(stringValidator('document.doc').endsWith(['.pdf', '.txt']).getError()).toBe('Must end with .pdf, .txt');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').endsWith('.txt').getError()).toBe('');
+    });
+  });
+
+  describe('contains', () => {
+    it('should pass when string contains substring', () => {
+      expect(stringValidator('hello world').contains('world').getError()).toBe('');
+    });
+
+    it('should fail when string does not contain substring', () => {
+      expect(stringValidator('hello').contains('world').getError()).toBe('Must contain "world"');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').contains('test').getError()).toBe('');
+    });
+  });
+
+  describe('alphanumeric', () => {
+    it('should pass for alphanumeric string', () => {
+      expect(stringValidator('Hello123').alphanumeric().getError()).toBe('');
+    });
+
+    it('should pass for letters only', () => {
+      expect(stringValidator('Hello').alphanumeric().getError()).toBe('');
+    });
+
+    it('should pass for numbers only', () => {
+      expect(stringValidator('123').alphanumeric().getError()).toBe('');
+    });
+
+    it('should fail for string with special characters', () => {
+      expect(stringValidator('hello!').alphanumeric().getError()).toBe('Only letters and numbers allowed');
+    });
+
+    it('should fail for string with spaces', () => {
+      expect(stringValidator('hello world').alphanumeric().getError()).toBe('Only letters and numbers allowed');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').alphanumeric().getError()).toBe('');
+    });
+  });
+
+  describe('numeric', () => {
+    it('should pass for numeric string', () => {
+      expect(stringValidator('12345').numeric().getError()).toBe('');
+    });
+
+    it('should fail for string with letters', () => {
+      expect(stringValidator('123abc').numeric().getError()).toBe('Only numbers allowed');
+    });
+
+    it('should fail for string with special characters', () => {
+      expect(stringValidator('123-456').numeric().getError()).toBe('Only numbers allowed');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').numeric().getError()).toBe('');
+    });
+  });
+
   describe('method chaining', () => {
     it('should return first error only', () => {
       expect(stringValidator('').required().minLength(5).getError()).toBe('Required');
@@ -339,6 +524,54 @@ describe('numberValidator', () => {
 
     it('should fail when number is not multiple', () => {
       expect(numberValidator(7).multipleOf(5).getError()).toBe('Must be a multiple of 5');
+    });
+  });
+
+  describe('decimal', () => {
+    it('should pass when decimal places are within limit', () => {
+      expect(numberValidator(3.14).decimal(2).getError()).toBe('');
+    });
+
+    it('should pass for integer when decimal places allowed', () => {
+      expect(numberValidator(5).decimal(2).getError()).toBe('');
+    });
+
+    it('should pass for fewer decimal places than limit', () => {
+      expect(numberValidator(3.1).decimal(2).getError()).toBe('');
+    });
+
+    it('should fail when decimal places exceed limit', () => {
+      expect(numberValidator(3.141_59).decimal(2).getError()).toBe('Maximum 2 decimal places');
+    });
+
+    it('should pass for zero decimal places with integer', () => {
+      expect(numberValidator(5).decimal(0).getError()).toBe('');
+    });
+
+    it('should fail for any decimal when zero places allowed', () => {
+      expect(numberValidator(5.1).decimal(0).getError()).toBe('Maximum 0 decimal places');
+    });
+  });
+
+  describe('percentage', () => {
+    it('should pass for value at 0', () => {
+      expect(numberValidator(0).percentage().getError()).toBe('');
+    });
+
+    it('should pass for value at 100', () => {
+      expect(numberValidator(100).percentage().getError()).toBe('');
+    });
+
+    it('should pass for value in range', () => {
+      expect(numberValidator(50).percentage().getError()).toBe('');
+    });
+
+    it('should fail for value below 0', () => {
+      expect(numberValidator(-1).percentage().getError()).toBe('Must be between 0 and 100');
+    });
+
+    it('should fail for value above 100', () => {
+      expect(numberValidator(101).percentage().getError()).toBe('Must be between 0 and 100');
     });
   });
 
@@ -581,6 +814,82 @@ describe('dateValidator', () => {
 
     it('should fail for past date', () => {
       expect(dateValidator(pastDate).future().getError()).toBe('Must be in the future');
+    });
+  });
+
+  describe('weekday', () => {
+    it('should pass for Monday', () => {
+      expect(dateValidator(new Date('2024-01-08')).weekday().getError()).toBe(''); // Monday
+    });
+
+    it('should pass for Friday', () => {
+      expect(dateValidator(new Date('2024-01-12')).weekday().getError()).toBe(''); // Friday
+    });
+
+    it('should fail for Saturday', () => {
+      expect(dateValidator(new Date('2024-01-13')).weekday().getError()).toBe('Must be a weekday'); // Saturday
+    });
+
+    it('should fail for Sunday', () => {
+      expect(dateValidator(new Date('2024-01-14')).weekday().getError()).toBe('Must be a weekday'); // Sunday
+    });
+  });
+
+  describe('weekend', () => {
+    it('should pass for Saturday', () => {
+      expect(dateValidator(new Date('2024-01-13')).weekend().getError()).toBe(''); // Saturday
+    });
+
+    it('should pass for Sunday', () => {
+      expect(dateValidator(new Date('2024-01-14')).weekend().getError()).toBe(''); // Sunday
+    });
+
+    it('should fail for Monday', () => {
+      expect(dateValidator(new Date('2024-01-08')).weekend().getError()).toBe('Must be a weekend'); // Monday
+    });
+
+    it('should fail for Friday', () => {
+      expect(dateValidator(new Date('2024-01-12')).weekend().getError()).toBe('Must be a weekend'); // Friday
+    });
+  });
+
+  describe('minAge', () => {
+    it('should pass when date is old enough', () => {
+      const twentyYearsAgo = new Date();
+      twentyYearsAgo.setFullYear(twentyYearsAgo.getFullYear() - 20);
+      expect(dateValidator(twentyYearsAgo).minAge(18).getError()).toBe('');
+    });
+
+    it('should pass when date is exactly at minimum age', () => {
+      const eighteenYearsAgo = new Date();
+      eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+      expect(dateValidator(eighteenYearsAgo).minAge(18).getError()).toBe('');
+    });
+
+    it('should fail when date is too recent', () => {
+      const tenYearsAgo = new Date();
+      tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
+      expect(dateValidator(tenYearsAgo).minAge(18).getError()).toBe('Must be at least 18 years ago');
+    });
+  });
+
+  describe('maxAge', () => {
+    it('should pass when date is recent enough', () => {
+      const tenYearsAgo = new Date();
+      tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
+      expect(dateValidator(tenYearsAgo).maxAge(18).getError()).toBe('');
+    });
+
+    it('should pass when date is exactly at maximum age', () => {
+      const eighteenYearsAgo = new Date();
+      eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+      expect(dateValidator(eighteenYearsAgo).maxAge(18).getError()).toBe('');
+    });
+
+    it('should fail when date is too old', () => {
+      const thirtyYearsAgo = new Date();
+      thirtyYearsAgo.setFullYear(thirtyYearsAgo.getFullYear() - 30);
+      expect(dateValidator(thirtyYearsAgo).maxAge(18).getError()).toBe('Must be at most 18 years ago');
     });
   });
 

@@ -25,13 +25,10 @@
 				.maxLength(20)
 				.noSpace()
 				.getError(),
-			email: stringValidator(source.email, 'trim')
-				.required()
-				.regexp(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email format')
-				.getError(),
+			email: stringValidator(source.email, 'trim').required().email().getError(),
 			age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
 			bio: stringValidator(source.bio).maxLength(200).getError(),
-			website: stringValidator(source.website, 'trim').startsWith(['http://', 'https://']).getError()
+			website: stringValidator(source.website, 'trim').website('required').getError()
 		})
 	});
 

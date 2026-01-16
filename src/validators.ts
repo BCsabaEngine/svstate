@@ -71,6 +71,43 @@ export function stringValidator(input: string, ...prepares: PrepareOption[]): St
       return builder;
     },
 
+    email() {
+      if (!error && processedInput && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(processedInput))
+        setError('Invalid email format');
+      return builder;
+    },
+
+    website(prefix: 'required' | 'forbidden' | 'optional' = 'optional') {
+      if (error || !processedInput || prefix === 'optional') return builder;
+      const hasPrefix = /^https?:\/\//.test(processedInput);
+      if (prefix === 'required' && !hasPrefix) setError('Must start with http:// or https://');
+      else if (prefix === 'forbidden' && hasPrefix) setError('Must not start with http:// or https://');
+      return builder;
+    },
+
+    endsWith(suffix: string | string[]) {
+      if (error || !processedInput) return builder;
+      const suffixes = Array.isArray(suffix) ? suffix : [suffix];
+      if (!suffixes.some((s) => processedInput.endsWith(s))) setError(`Must end with ${suffixes.join(', ')}`);
+      return builder;
+    },
+
+    contains(substring: string) {
+      if (!error && processedInput && !processedInput.includes(substring)) setError(`Must contain "${substring}"`);
+      return builder;
+    },
+
+    alphanumeric() {
+      if (!error && processedInput && !/^[\dA-Za-z]+$/.test(processedInput))
+        setError('Only letters and numbers allowed');
+      return builder;
+    },
+
+    numeric() {
+      if (!error && processedInput && !/^\d+$/.test(processedInput)) setError('Only numbers allowed');
+      return builder;
+    },
+
     getError() {
       return error;
     }
@@ -89,6 +126,12 @@ type StringValidatorBuilder = {
   startsWith(prefix: string | string[]): StringValidatorBuilder;
   regexp(regexp: RegExp, message?: string): StringValidatorBuilder;
   inArray(values: string[] | Record<string, unknown>): StringValidatorBuilder;
+  email(): StringValidatorBuilder;
+  website(prefix?: 'required' | 'forbidden' | 'optional'): StringValidatorBuilder;
+  endsWith(suffix: string | string[]): StringValidatorBuilder;
+  contains(substring: string): StringValidatorBuilder;
+  alphanumeric(): StringValidatorBuilder;
+  numeric(): StringValidatorBuilder;
   getError(): string;
 };
 
@@ -145,6 +188,19 @@ export function numberValidator(input: number): NumberValidatorBuilder {
       return builder;
     },
 
+    decimal(places: number) {
+      if (error || Number.isNaN(input)) return builder;
+      const parts = String(input).split('.');
+      const actualPlaces = parts[1]?.length ?? 0;
+      if (actualPlaces > places) setError(`Maximum ${places} decimal places`);
+      return builder;
+    },
+
+    percentage() {
+      if (!error && (input < 0 || input > 100)) setError('Must be between 0 and 100');
+      return builder;
+    },
+
     getError() {
       return error;
     }
@@ -163,6 +219,8 @@ type NumberValidatorBuilder = {
   negative(): NumberValidatorBuilder;
   nonNegative(): NumberValidatorBuilder;
   multipleOf(n: number): NumberValidatorBuilder;
+  decimal(places: number): NumberValidatorBuilder;
+  percentage(): NumberValidatorBuilder;
   getError(): string;
 };
 
@@ -271,6 +329,40 @@ export function dateValidator(input: Date | string | number): DateValidatorBuild
       return builder;
     },
 
+    weekday() {
+      if (!error && isValid) {
+        const day = date.getDay();
+        if (day === 0 || day === 6) setError('Must be a weekday');
+      }
+      return builder;
+    },
+
+    weekend() {
+      if (!error && isValid) {
+        const day = date.getDay();
+        if (day !== 0 && day !== 6) setError('Must be a weekend');
+      }
+      return builder;
+    },
+
+    minAge(years: number) {
+      if (!error && isValid) {
+        const minDate = new Date();
+        minDate.setFullYear(minDate.getFullYear() - years);
+        if (date > minDate) setError(`Must be at least ${years} years ago`);
+      }
+      return builder;
+    },
+
+    maxAge(years: number) {
+      if (!error && isValid) {
+        const maxDate = new Date();
+        maxDate.setFullYear(maxDate.getFullYear() - years);
+        if (date < maxDate) setError(`Must be at most ${years} years ago`);
+      }
+      return builder;
+    },
+
     getError() {
       return error;
     }
@@ -286,5 +378,9 @@ type DateValidatorBuilder = {
   between(start: Date | string | number, end: Date | string | number): DateValidatorBuilder;
   past(): DateValidatorBuilder;
   future(): DateValidatorBuilder;
+  weekday(): DateValidatorBuilder;
+  weekend(): DateValidatorBuilder;
+  minAge(years: number): DateValidatorBuilder;
+  maxAge(years: number): DateValidatorBuilder;
   getError(): string;
 };
