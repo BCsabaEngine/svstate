@@ -32,7 +32,7 @@ npm run clean           # Clean TypeScript build artifacts
 
 ```bash
 npm run fix             # Run format → lint → format (recommended)
-npm run all             # Run fix → build → test (full validation)
+npm run all             # Run fix → build → test → demo:build (full validation)
 npm run lint:check      # Check for linting errors
 npm run lint:fix        # Auto-fix linting errors
 npm run format:check    # Check code formatting
@@ -44,6 +44,31 @@ npm run format:fix      # Auto-fix formatting issues
 ```bash
 npm run demo            # Start Vite dev server with demo app (in demo/ directory)
 ```
+
+## Demo Subproject
+
+The `demo/` directory is a separate npm project for interactive testing of the library.
+
+**Structure:**
+
+- `demo/src/App.svelte` - Root component
+- `demo/src/pages/` - Demo pages (e.g., `BasicValidation.svelte`)
+- `demo/src/components/` - Shared UI components (e.g., `ErrorText.svelte`)
+
+**Stack:** Vite + Svelte 5 + Tailwind CSS 4
+
+**Working directly in demo:**
+
+```bash
+cd demo
+npm install             # Install demo dependencies (separate from root)
+npm run dev             # Start dev server
+npm run build           # Production build
+npm run ts:check        # TypeScript check
+npm run all             # format → lint → ts:check → build
+```
+
+Note: The demo has its own `node_modules` and uses Zod for some validation examples.
 
 ## Architecture
 
