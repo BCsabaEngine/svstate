@@ -8,11 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+**Requires Node >=20, npm >=9**
+
 ### Testing
 
 ```bash
-npm test                 # Run all tests once
-npm run test:coverage    # Run tests with coverage report
+npm test                              # Run all tests once
+npm run test:coverage                 # Run tests with coverage report
+npx vitest run test/validators.test.ts  # Run a single test file
+npx vitest run -t "should trim"       # Run tests matching pattern
 ```
 
 Coverage thresholds are set at 60% for lines, functions, branches, and statements.
@@ -77,7 +81,7 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 - `validator?: (source: T) => V` - Validation function returning error structure
 - `effect?: (context: EffectContext<T>) => void` - Side effect receiving context object with `snapshot` function
 - `action?: (params?: P) => Promise<void> | void` - Async action to execute
-- `actionCompleted?: (error?: unknown) => void` - Callback after action completes
+- `actionCompleted?: (error?: unknown) => void | Promise<void>` - Callback after action completes (can be async)
 
 **Options:**
 
@@ -144,7 +148,12 @@ Four chainable validator builders with `getError()` to extract the first error:
 
 ## Testing
 
-Tests go in `test/**/*.test.ts`. Vitest is configured with:
+Test files go in `test/` directory:
+
+- `*.test.ts` - Pure TypeScript tests (validators, proxy)
+- `*.test.svelte.ts` - Tests using Svelte 5 features ($state runes)
+
+Vitest is configured with:
 
 - Globals enabled (no imports needed for `describe`, `it`, `expect`)
 - Node environment
