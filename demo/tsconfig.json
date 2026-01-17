@@ -8,11 +8,9 @@
 		"noEmit": true,
 		"isolatedModules": true,
 		"paths": {
+			"svstate": ["../src/index.ts"],
 			"$components/*": ["./src/components/*"],
-			"$lib/*": ["./src/lib/*"],
-			"$stores/*": ["./src/stores/*"],
-			"$types/*": ["./src/types/*"],
-			"svstate": ["../src/stateManager.ts"]
+			"$lib/*": ["./src/lib/*"]
 		}
 	},
 	"include": ["src/**/*.ts", "src/**/*.svelte"],

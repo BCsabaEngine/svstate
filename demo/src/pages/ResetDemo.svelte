@@ -1,12 +1,14 @@
 <script lang="ts">
-	import { createSvState, stringValidator } from '../../../src/index';
-	import CodeBlock from '../components/CodeBlock.svelte';
-	import DemoSidebar from '../components/DemoSidebar.svelte';
-	import FormField from '../components/FormField.svelte';
-	import FormTextarea from '../components/FormTextarea.svelte';
-	import PageLayout from '../components/PageLayout.svelte';
-	import SourceCodeSection from '../components/SourceCodeSection.svelte';
-	import StatusBadges from '../components/StatusBadges.svelte';
+	import { createSvState, stringValidator } from 'svstate';
+
+	import CodeBlock from '$components/CodeBlock.svelte';
+	import DemoSidebar from '$components/DemoSidebar.svelte';
+	import FormField from '$components/FormField.svelte';
+	import FormTextarea from '$components/FormTextarea.svelte';
+	import PageLayout from '$components/PageLayout.svelte';
+	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import StatusBadges from '$components/StatusBadges.svelte';
+	import { randomId } from '$lib/utilities';
 
 	const sourceData = {
 		firstName: 'Alice',
@@ -15,8 +17,6 @@
 		phone: '',
 		bio: ''
 	};
-
-	const randomId = () => Math.random().toString(36).slice(2, 8);
 
 	const {
 		data,

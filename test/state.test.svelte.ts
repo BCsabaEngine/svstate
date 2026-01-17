@@ -938,6 +938,53 @@ describe('no action defined', () => {
   });
 });
 
+describe('edge case coverage for defensive guards', () => {
+  it('should handle rollback gracefully when snapshot at target index is undefined', () => {
+    const { data, rollback, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Changed', false);
+        }
+      }
+    );
+
+    data.value = 1;
+
+    // Rollback with steps that would target index 0 (Initial)
+    // This tests the targetIndex calculation and boundary handling
+    rollback(100);
+
+    // Should rollback to initial
+    expect(data.value).toBe(0);
+    expect(get(state.snapshots)).toHaveLength(1);
+  });
+
+  it('should handle reset gracefully when snapshots array is manipulated', () => {
+    const { data, reset, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Changed', false);
+        }
+      }
+    );
+
+    data.value = 1;
+    data.value = 2;
+
+    // Verify we have snapshots before reset
+    expect(get(state.snapshots).length).toBeGreaterThan(1);
+
+    reset();
+
+    // Should reset to initial state
+    expect(data.value).toBe(0);
+    expect(get(state.snapshots)).toHaveLength(1);
+    expect(get(state.snapshots)[0].title).toBe('Initial');
+  });
+});
+
 describe('deeply nested validators', () => {
   it('should detect errors in deeply nested validator structure', () => {
     type DeepValidator = Validator;

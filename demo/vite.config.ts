@@ -18,16 +18,14 @@ export default defineConfig({
 		emptyOutDir: true,
 		outDir: '../docs',
 		chunkSizeWarningLimit: 1500,
-		assetsInlineLimit: 0
+		assetsInlineLimit: 4096
 	},
 	base: process.env.NODE_ENV === 'production' ? '/svstate' : '',
 	resolve: {
 		alias: {
 			svstate: path.resolve(__dirname, '../src/index.ts'),
 			$components: path.resolve(__dirname, './src/components'),
-			$lib: path.resolve(__dirname, './src/lib'),
-			$stores: path.resolve(__dirname, './src/stores'),
-			$types: path.resolve(__dirname, './src/types')
+			$lib: path.resolve(__dirname, './src/lib')
 		}
 	},
 	define: {

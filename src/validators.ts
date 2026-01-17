@@ -4,8 +4,8 @@ type PrepareOption = BaseOption | 'upper' | 'lower';
 const prepareOps: Record<PrepareOption, (s: string) => string> = {
   trim: (s) => s.trim(),
   normalize: (s) => s.replaceAll(/\s{2,}/g, ' '),
-  upper: (s) => s.toLocaleUpperCase(),
-  lower: (s) => s.toLocaleLowerCase()
+  upper: (s) => s.toUpperCase(),
+  lower: (s) => s.toLowerCase()
 };
 
 // Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
@@ -42,12 +42,12 @@ export function stringValidator(input: string, ...prepares: PrepareOption[]): St
     },
 
     uppercase() {
-      if (!error && processedInput !== processedInput.toLocaleUpperCase()) setError('Uppercase only');
+      if (!error && processedInput !== processedInput.toUpperCase()) setError('Uppercase only');
       return builder;
     },
 
     lowercase() {
-      if (!error && processedInput !== processedInput.toLocaleLowerCase()) setError('Lowercase only');
+      if (!error && processedInput !== processedInput.toLowerCase()) setError('Lowercase only');
       return builder;
     },
 

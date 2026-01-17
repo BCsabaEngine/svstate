@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { arrayValidator, createSvState, stringValidator } from '../../../src/index';
-	import ArrayItemCard from '../components/ArrayItemCard.svelte';
-	import CodeBlock from '../components/CodeBlock.svelte';
-	import DemoSidebar from '../components/DemoSidebar.svelte';
-	import EmptyState from '../components/EmptyState.svelte';
-	import ErrorText from '../components/ErrorText.svelte';
-	import FormField from '../components/FormField.svelte';
-	import PageLayout from '../components/PageLayout.svelte';
-	import SourceCodeSection from '../components/SourceCodeSection.svelte';
-	import StatusBadges from '../components/StatusBadges.svelte';
+	import { arrayValidator, createSvState, stringValidator } from 'svstate';
+
+	import ArrayItemCard from '$components/ArrayItemCard.svelte';
+	import CodeBlock from '$components/CodeBlock.svelte';
+	import DemoSidebar from '$components/DemoSidebar.svelte';
+	import EmptyState from '$components/EmptyState.svelte';
+	import ErrorText from '$components/ErrorText.svelte';
+	import FormField from '$components/FormField.svelte';
+	import PageLayout from '$components/PageLayout.svelte';
+	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import StatusBadges from '$components/StatusBadges.svelte';
+	import { randomId } from '$lib/utilities';
 
 	type ItemErrors = Record<string, { name?: string; email?: string }>;
 
@@ -43,8 +45,6 @@
 	const removeItem = (index: number) => {
 		data.items = data.items.filter((_, index_) => index_ !== index);
 	};
-
-	const randomId = () => Math.random().toString(36).slice(2, 8);
 
 	const fillWithValidData = () => {
 		data.listName = `Contact List ${randomId()}`;

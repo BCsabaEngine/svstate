@@ -551,6 +551,10 @@ describe('numberValidator', () => {
     it('should fail for any decimal when zero places allowed', () => {
       expect(numberValidator(5.1).decimal(0).getError()).toBe('Maximum 0 decimal places');
     });
+
+    it('should skip decimal validation for NaN input', () => {
+      expect(numberValidator(Number.NaN).decimal(2).getError()).toBe('');
+    });
   });
 
   describe('percentage', () => {
@@ -680,6 +684,24 @@ describe('arrayValidator', () => {
 
     it('should chain multiple validations successfully', () => {
       expect(arrayValidator([1, 2, 3]).required().minLength(2).maxLength(5).unique().getError()).toBe('');
+    });
+
+    it('should not override first error in arrayValidator chain', () => {
+      expect(
+        arrayValidator([])
+          .required() // Sets 'Required'
+          .minLength(5) // Would set 'Minimum 5 items' but shouldn't override
+          .getError()
+      ).toBe('Required');
+    });
+
+    it('should skip unique validation when prior error exists', () => {
+      expect(
+        arrayValidator([])
+          .required() // Sets 'Required'
+          .unique() // Should skip
+          .getError()
+      ).toBe('Required');
     });
   });
 });
@@ -946,6 +968,15 @@ describe('dateValidator', () => {
 
     it('should not run maxAge if required already failed', () => {
       expect(dateValidator('invalid').required().maxAge(65).getError()).toBe('Required');
+    });
+
+    it('should not override first error in dateValidator chain', () => {
+      expect(
+        dateValidator('invalid')
+          .required() // Sets 'Required'
+          .past() // Would set error but shouldn't override
+          .getError()
+      ).toBe('Required');
     });
   });
 
