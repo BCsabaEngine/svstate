@@ -48,7 +48,7 @@ const deepClone = <T>(object: T): T => {
   if (object instanceof Date) return new Date(object) as T;
   if (Array.isArray(object)) return object.map((item) => deepClone(item)) as T;
   const cloned = {} as T;
-  for (const key in object) if (Object.prototype.hasOwnProperty.call(object, key)) cloned[key] = deepClone(object[key]);
+  for (const key of Object.keys(object)) cloned[key as keyof T] = deepClone(object[key as keyof T]);
   return cloned;
 };
 

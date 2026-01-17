@@ -20,8 +20,8 @@ const isProxiable = (value: unknown): boolean =>
 export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T>): T => {
   const createProxy = (target: object, parentPath: string): object =>
     new Proxy(target, {
-      get(object, property, receiver) {
-        const value = Reflect.get(object, property, receiver);
+      get(object, property) {
+        const value = (object as Record<string, unknown>)[property as string];
         if (isProxiable(value)) {
           const pathSegment = Number.isInteger(Number(property)) ? '' : String(property);
           const childPath = pathSegment ? (parentPath ? `${parentPath}.${pathSegment}` : pathSegment) : parentPath;
@@ -29,10 +29,10 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
         }
         return value;
       },
-      set(object, property, incomingValue, receiver) {
-        const oldValue = Reflect.get(object, property, receiver);
+      set(object, property, incomingValue) {
+        const oldValue = (object as Record<string, unknown>)[property as string];
         if (oldValue !== incomingValue) {
-          Reflect.set(object, property, incomingValue, receiver);
+          (object as Record<string, unknown>)[property as string] = incomingValue;
           const pathSegment = Number.isInteger(Number(property)) ? '' : String(property);
           const fullPath = pathSegment ? (parentPath ? `${parentPath}.${pathSegment}` : pathSegment) : parentPath;
           changed(data as T, fullPath, incomingValue, oldValue);
