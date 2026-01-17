@@ -12,7 +12,7 @@ const THRESHOLDS = {
   stateWithEffect: 5,
 
   // Property Changes
-  singleChange: 0.1,
+  singleChange: 0.5,
   hundredChanges: 10,
   thousandChanges: 100,
   nestedChanges: 10,
