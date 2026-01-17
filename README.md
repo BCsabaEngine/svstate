@@ -9,6 +9,10 @@
 > **Deep reactive proxy with validation, snapshot/undo, and side effects — built for complex, real-world applications.**
 
 <p align="center">
+  <img src="svstate.png" alt="svstate" />
+</p>
+
+<p align="center">
   <a href="https://bcsabaengine.github.io/svstate/"><strong>🎮 Live Demo</strong></a> ·
   <a href="#-installation">Installation</a> ·
   <a href="#-core-features">Features</a> ·
@@ -701,7 +705,11 @@ Creates a supercharged state object.
 | `state.actionError` | `Readable<Error>` | Last action error |
 | `state.snapshots` | `Readable<Snapshot[]>` | Undo history |
 
-### Validators
+### Built-in Validators
+
+svstate ships with four fluent validator builders that cover the most common validation scenarios. Each validator uses a chainable API — call validation methods in sequence and finish with `getError()` to retrieve the first error message (or an empty string if valid).
+
+String validators support optional preprocessing (`'trim'`, `'normalize'`, `'upper'`, `'lower'`) applied before validation. All validators return descriptive error messages that you can customize or use as-is.
 
 | Validator                             | Methods                                                                                                                                                                                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -709,6 +717,57 @@ Creates a supercharged state object.
 | `numberValidator(input)`              | `required()`, `min(n)`, `max(n)`, `between(min, max)`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `multipleOf(n)`, `decimal(places)`, `percentage()`                                                             |
 | `arrayValidator(input)`               | `required()`, `minLength(n)`, `maxLength(n)`, `unique()`                                                                                                                                                                        |
 | `dateValidator(input)`                | `required()`, `before(date)`, `after(date)`, `between(start, end)`, `past()`, `future()`, `weekday()`, `weekend()`, `minAge(years)`, `maxAge(years)`                                                                            |
+
+### TypeScript Types
+
+svstate exports TypeScript types to help you write type-safe external validator and effect functions. This is useful when you want to define these functions outside the `createSvState` call or reuse them across multiple state instances.
+
+```typescript
+import type { Validator, EffectContext, Snapshot, SnapshotFunction, SvStateOptions } from 'svstate';
+```
+
+| Type               | Description                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `Validator`        | Nested object type for validation errors — leaf values are error strings (empty = valid)            |
+| `EffectContext<T>` | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }` |
+| `SnapshotFunction` | Type for the `snapshot(title, replace?)` function used in effects                                   |
+| `Snapshot<T>`      | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
+| `SvStateOptions`   | Configuration options type for `createSvState`                                                      |
+
+**Example: External validator and effect functions**
+
+```typescript
+import { createSvState, stringValidator, type Validator, type EffectContext } from 'svstate';
+
+// Define types for your data
+type UserData = {
+  name: string;
+  email: string;
+};
+
+type UserErrors = {
+  name: string;
+  email: string;
+};
+
+// External validator function with proper typing
+const validateUser = (source: UserData): UserErrors => ({
+  name: stringValidator(source.name, 'trim').required().minLength(2).getError(),
+  email: stringValidator(source.email, 'trim').required().email().getError()
+});
+
+// External effect function with proper typing
+const userEffect = ({ snapshot, property, currentValue }: EffectContext<UserData>) => {
+  console.log(`${property} changed to ${currentValue}`);
+  snapshot(`Updated ${property}`);
+};
+
+// Use the external functions
+const { data, state } = createSvState<UserData, UserErrors, object>(
+  { name: '', email: '' },
+  { validator: validateUser, effect: userEffect }
+);
+```
 
 ---
 
