@@ -5,6 +5,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-orange.svg)](https://svelte.dev/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+[![Tests](https://img.shields.io/badge/tests-300%2B-brightgreen.svg)]()
+[![Coverage](https://img.shields.io/badge/coverage-%3E98%25-brightgreen.svg)]()
 
 > **Deep reactive proxy with validation, snapshot/undo, and side effects — built for complex, real-world applications.**
 
