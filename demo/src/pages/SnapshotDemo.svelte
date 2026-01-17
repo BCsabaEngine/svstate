@@ -156,14 +156,14 @@ rollback(3);  // Undo 3 changes
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-96 flex-shrink-0 space-y-4">
+		<div class="w-full flex-shrink-0 space-y-4 xl:w-96">
 			<DemoSidebar
 				{data}
 				errors={$errors}
 				hasErrors={$hasErrors}
 				isDirty={$isDirty}
 				onFill={fillWithValidData}
-				width="w-96"
+				width="xl:w-96"
 			/>
 
 			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">

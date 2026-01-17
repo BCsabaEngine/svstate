@@ -244,7 +244,7 @@ data.name = 'new value';
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-80 flex-shrink-0 space-y-4">
+		<div class="w-full flex-shrink-0 space-y-4 xl:w-80">
 			<DemoSidebar
 				data={stateInstance.data}
 				errors={$errors}

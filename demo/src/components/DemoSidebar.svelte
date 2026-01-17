@@ -5,13 +5,13 @@
 		isDirty: boolean;
 		hasErrors: boolean;
 		onFill: () => void;
-		width?: 'w-80' | 'w-96';
+		width?: 'xl:w-80' | 'xl:w-96';
 	}
 
-	let { data, errors, isDirty, hasErrors, onFill, width = 'w-80' }: Properties = $props();
+	let { data, errors, isDirty, hasErrors, onFill, width = 'xl:w-80' }: Properties = $props();
 </script>
 
-<div class="{width} flex-shrink-0 space-y-4">
+<div class="w-full {width} flex-shrink-0 space-y-4">
 	<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
 		<h6 class="mb-2 text-sm font-medium text-gray-700">State Object</h6>
 		<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify(data, undefined, 2)}</pre>

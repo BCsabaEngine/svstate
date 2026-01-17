@@ -137,7 +137,7 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 					<div class="space-y-3">
 						{#each data.items as item, index}
 							<ArrayItemCard {index} label="Contact" onRemove={() => removeItem(index)}>
-								<div class="grid grid-cols-2 gap-3">
+								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 									<div>
 										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-name-{index}">Name</label>
 										<input
@@ -182,7 +182,7 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 			hasErrors={$hasErrors}
 			isDirty={$isDirty}
 			onFill={fillWithValidData}
-			width="w-96"
+			width="xl:w-96"
 		/>
 	{/snippet}
 

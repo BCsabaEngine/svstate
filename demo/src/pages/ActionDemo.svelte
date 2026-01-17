@@ -200,7 +200,7 @@ execute({ userId: 123 });`;
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-80 flex-shrink-0 space-y-4">
+		<div class="w-full flex-shrink-0 space-y-4 xl:w-80">
 			<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData} />
 
 			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">

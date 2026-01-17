@@ -132,7 +132,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 						placeholder="Enter street address"
 						bind:value={data.address.street}
 					/>
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<FormField
 							id="city"
 							error={$errors?.address?.city}
@@ -154,7 +154,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			<div>
 				<SectionHeader subtitle="3-level nested" title="Company" />
 				<div class="space-y-4">
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<FormField
 							id="company-name"
 							error={$errors?.company?.name}
@@ -205,7 +205,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			hasErrors={$hasErrors}
 			isDirty={$isDirty}
 			onFill={fillWithValidData}
-			width="w-96"
+			width="xl:w-96"
 		/>
 	{/snippet}
 

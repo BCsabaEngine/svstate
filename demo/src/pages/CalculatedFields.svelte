@@ -106,7 +106,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 
 			<div>
 				<SectionHeader subtitle="nested object" title="Item Details" />
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<FormField
 						id="unitPrice"
 						error={$errors?.item?.unitPrice}
