@@ -1,15 +1,15 @@
 <script lang="ts">
-	import { createSvState, numberValidator, stringValidator } from '../../../src/index';
-	import CodeBlock from '../components/CodeBlock.svelte';
-	import DemoSidebar from '../components/DemoSidebar.svelte';
-	import FormField from '../components/FormField.svelte';
-	import PageLayout from '../components/PageLayout.svelte';
-	import SectionHeader from '../components/SectionHeader.svelte';
-	import SourceCodeSection from '../components/SourceCodeSection.svelte';
-	import StatusBadges from '../components/StatusBadges.svelte';
+	import { createSvState, numberValidator, stringValidator } from 'svstate';
 
-	const randomId = () => Math.random().toString(36).slice(2, 8);
-	const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+	import CodeBlock from '$components/CodeBlock.svelte';
+	import DemoSidebar from '$components/DemoSidebar.svelte';
+	import FormField from '$components/FormField.svelte';
+	import PageLayout from '$components/PageLayout.svelte';
+	import SectionHeader from '$components/SectionHeader.svelte';
+	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import StatusBadges from '$components/StatusBadges.svelte';
+	import { randomId, randomInt } from '$lib/utilities';
+
 	const TAX_RATE = 0.08;
 
 	const sourceData = {

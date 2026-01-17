@@ -1,13 +1,15 @@
 <script lang="ts">
-	import { createSvState, stringValidator } from '../../../src/index';
-	import CodeBlock from '../components/CodeBlock.svelte';
-	import DemoSidebar from '../components/DemoSidebar.svelte';
-	import FormField from '../components/FormField.svelte';
-	import NestedSection from '../components/NestedSection.svelte';
-	import PageLayout from '../components/PageLayout.svelte';
-	import SectionHeader from '../components/SectionHeader.svelte';
-	import SourceCodeSection from '../components/SourceCodeSection.svelte';
-	import StatusBadges from '../components/StatusBadges.svelte';
+	import { createSvState, stringValidator } from 'svstate';
+
+	import CodeBlock from '$components/CodeBlock.svelte';
+	import DemoSidebar from '$components/DemoSidebar.svelte';
+	import FormField from '$components/FormField.svelte';
+	import NestedSection from '$components/NestedSection.svelte';
+	import PageLayout from '$components/PageLayout.svelte';
+	import SectionHeader from '$components/SectionHeader.svelte';
+	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import StatusBadges from '$components/StatusBadges.svelte';
+	import { randomId, randomInt } from '$lib/utilities';
 
 	const sourceData = {
 		name: '',
@@ -25,9 +27,6 @@
 			}
 		}
 	};
-
-	const randomId = () => Math.random().toString(36).slice(2, 8);
-	const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 	const {
 		data,
