@@ -1,8 +1,13 @@
 <script lang="ts">
 	import { createSvState, stringValidator } from '../../../src/index';
-	import ErrorText from '../components/ErrorText.svelte';
-
-	let showSourceCode = $state(false);
+	import CodeBlock from '../components/CodeBlock.svelte';
+	import DemoSidebar from '../components/DemoSidebar.svelte';
+	import FormField from '../components/FormField.svelte';
+	import NestedSection from '../components/NestedSection.svelte';
+	import PageLayout from '../components/PageLayout.svelte';
+	import SectionHeader from '../components/SectionHeader.svelte';
+	import SourceCodeSection from '../components/SourceCodeSection.svelte';
+	import StatusBadges from '../components/StatusBadges.svelte';
 
 	const stateSourceCode = `const sourceData = {
   name: '',
@@ -139,238 +144,113 @@ const {
 	};
 </script>
 
-<div class="flex gap-6">
-	<div class="max-w-xl flex-1 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-		<h5 class="mb-4 text-xl font-medium text-gray-900">Nested Objects Demo</h5>
-
-		<div class="mb-4 flex gap-2">
-			<span
-				class="rounded px-2.5 py-0.5 text-xs font-medium {$hasErrors
-					? 'bg-red-100 text-red-800'
-					: 'bg-green-100 text-green-800'}"
-			>
-				{$hasErrors ? 'Has Errors' : 'Valid'}
-			</span>
-			<span
-				class="rounded px-2.5 py-0.5 text-xs font-medium {$isDirty
-					? 'bg-yellow-100 text-yellow-800'
-					: 'bg-gray-100 text-gray-800'}"
-			>
-				{$isDirty ? 'Modified' : 'Clean'}
-			</span>
-		</div>
+<PageLayout title="Nested Objects Demo">
+	{#snippet main()}
+		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 
 		<div class="space-y-6">
-			<!-- Top-level field -->
 			<div>
-				<h6 class="mb-3 border-b border-gray-200 pb-2 text-sm font-semibold text-gray-700">
-					Personal Info
-				</h6>
-				<div>
-					<label class="mb-2 block text-sm font-bold text-gray-900" for="name">Full Name</label>
-					<input
-						id="name"
-						class="block w-full rounded-lg border p-2.5 text-sm {$errors?.name
-							? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-							: 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-						placeholder="Enter your full name"
-						type="text"
-						bind:value={data.name}
+				<SectionHeader title="Personal Info" />
+				<FormField
+					id="name"
+					error={$errors?.name}
+					label="Full Name"
+					placeholder="Enter your full name"
+					bind:value={data.name}
+				/>
+			</div>
+
+			<div>
+				<SectionHeader subtitle="2-level nested" title="Address" />
+				<div class="space-y-4">
+					<FormField
+						id="street"
+						error={$errors?.address?.street}
+						label="Street"
+						placeholder="Enter street address"
+						bind:value={data.address.street}
 					/>
-					<ErrorText error={$errors?.name ?? ''} />
-				</div>
-			</div>
-
-			<!-- 2-level nested: Address -->
-			<div>
-				<h6 class="mb-3 border-b border-gray-200 pb-2 text-sm font-semibold text-gray-700">
-					Address <span class="font-normal text-gray-500">(2-level nested)</span>
-				</h6>
-				<div class="space-y-4">
-					<div>
-						<label class="mb-2 block text-sm font-bold text-gray-900" for="street">Street</label>
-						<input
-							id="street"
-							class="block w-full rounded-lg border p-2.5 text-sm {$errors?.address?.street
-								? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-								: 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-							placeholder="Enter street address"
-							type="text"
-							bind:value={data.address.street}
+					<div class="grid grid-cols-2 gap-4">
+						<FormField
+							id="city"
+							error={$errors?.address?.city}
+							label="City"
+							placeholder="Enter city"
+							bind:value={data.address.city}
 						/>
-						<ErrorText error={$errors?.address?.street ?? ''} />
-					</div>
-					<div class="grid grid-cols-2 gap-4">
-						<div>
-							<label class="mb-2 block text-sm font-bold text-gray-900" for="city">City</label>
-							<input
-								id="city"
-								class="block w-full rounded-lg border p-2.5 text-sm {$errors?.address?.city
-									? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-									: 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-								placeholder="Enter city"
-								type="text"
-								bind:value={data.address.city}
-							/>
-							<ErrorText error={$errors?.address?.city ?? ''} />
-						</div>
-						<div>
-							<label class="mb-2 block text-sm font-bold text-gray-900" for="zip">ZIP Code</label>
-							<input
-								id="zip"
-								class="block w-full rounded-lg border p-2.5 text-sm {$errors?.address?.zip
-									? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-									: 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-								placeholder="Enter ZIP"
-								type="text"
-								bind:value={data.address.zip}
-							/>
-							<ErrorText error={$errors?.address?.zip ?? ''} />
-						</div>
+						<FormField
+							id="zip"
+							error={$errors?.address?.zip}
+							label="ZIP Code"
+							placeholder="Enter ZIP"
+							bind:value={data.address.zip}
+						/>
 					</div>
 				</div>
 			</div>
 
-			<!-- 3-level nested: Company -->
 			<div>
-				<h6 class="mb-3 border-b border-gray-200 pb-2 text-sm font-semibold text-gray-700">
-					Company <span class="font-normal text-gray-500">(3-level nested)</span>
-				</h6>
+				<SectionHeader subtitle="3-level nested" title="Company" />
 				<div class="space-y-4">
 					<div class="grid grid-cols-2 gap-4">
-						<div>
-							<label class="mb-2 block text-sm font-bold text-gray-900" for="company-name"
-								>Company Name</label
-							>
-							<input
-								id="company-name"
-								class="block w-full rounded-lg border p-2.5 text-sm {$errors?.company?.name
-									? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-									: 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-								placeholder="Enter company name"
-								type="text"
-								bind:value={data.company.name}
-							/>
-							<ErrorText error={$errors?.company?.name ?? ''} />
-						</div>
-						<div>
-							<label class="mb-2 block text-sm text-gray-900" for="department">Department</label>
-							<input
-								id="department"
-								class="block w-full rounded-lg border p-2.5 text-sm {$errors?.company?.department
-									? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-									: 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-								placeholder="Enter department"
-								type="text"
-								bind:value={data.company.department}
-							/>
-							<ErrorText error={$errors?.company?.department ?? ''} />
-						</div>
+						<FormField
+							id="company-name"
+							error={$errors?.company?.name}
+							label="Company Name"
+							placeholder="Enter company name"
+							bind:value={data.company.name}
+						/>
+						<FormField
+							id="department"
+							error={$errors?.company?.department}
+							label="Department"
+							placeholder="Enter department"
+							required={false}
+							bind:value={data.company.department}
+						/>
 					</div>
 
-					<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-						<h6 class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-							Contact Info <span class="font-normal normal-case">(3rd level)</span>
-						</h6>
+					<NestedSection subtitle="3rd level" title="Contact Info">
 						<div class="space-y-4">
-							<div>
-								<label class="mb-2 block text-sm font-bold text-gray-900" for="contact-phone"
-									>Phone</label
-								>
-								<input
-									id="contact-phone"
-									class="block w-full rounded-lg border p-2.5 text-sm {$errors?.company?.contact
-										?.phone
-										? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-										: 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-									placeholder="Enter phone number"
-									type="text"
-									bind:value={data.company.contact.phone}
-								/>
-								<ErrorText error={$errors?.company?.contact?.phone ?? ''} />
-							</div>
-							<div>
-								<label class="mb-2 block text-sm font-bold text-gray-900" for="contact-email"
-									>Email</label
-								>
-								<input
-									id="contact-email"
-									class="block w-full rounded-lg border p-2.5 text-sm {$errors?.company?.contact
-										?.email
-										? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-										: 'border-gray-300 bg-white text-gray-900 focus:border-blue-500 focus:ring-blue-500'}"
-									placeholder="Enter email address"
-									type="email"
-									bind:value={data.company.contact.email}
-								/>
-								<ErrorText error={$errors?.company?.contact?.email ?? ''} />
-							</div>
+							<FormField
+								id="contact-phone"
+								error={$errors?.company?.contact?.phone}
+								label="Phone"
+								placeholder="Enter phone number"
+								variant="nested"
+								bind:value={data.company.contact.phone}
+							/>
+							<FormField
+								id="contact-email"
+								error={$errors?.company?.contact?.email}
+								label="Email"
+								placeholder="Enter email address"
+								type="email"
+								variant="nested"
+								bind:value={data.company.contact.email}
+							/>
 						</div>
-					</div>
+					</NestedSection>
 				</div>
 			</div>
 		</div>
-	</div>
+	{/snippet}
 
-	<div class="w-96 flex-shrink-0 space-y-4">
-		<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-			<h6 class="mb-2 text-sm font-medium text-gray-700">State Object</h6>
-			<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify(data, undefined, 2)}</pre>
-		</div>
+	{#snippet sidebar()}
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+			width="w-96"
+		/>
+	{/snippet}
 
-		<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-			<h6 class="mb-2 text-sm font-medium text-gray-700">State Info</h6>
-			<div class="space-y-1 text-xs text-gray-600">
-				<div><span class="font-medium">isDirty:</span> {$isDirty}</div>
-				<div><span class="font-medium">hasErrors:</span> {$hasErrors}</div>
-			</div>
-		</div>
-
-		<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-			<h6 class="mb-2 text-sm font-medium text-gray-700">Errors</h6>
-			<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify($errors, undefined, 2)}</pre>
-		</div>
-		<button
-			class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-			onclick={fillWithValidData}
-			type="button"
-		>
-			Fill with Valid Data
-		</button>
-	</div>
-</div>
-
-<div class="mt-6 rounded-lg border border-gray-200 bg-white shadow-sm">
-	<button
-		class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 {showSourceCode
-			? 'border-b border-gray-200'
-			: ''}"
-		onclick={() => (showSourceCode = !showSourceCode)}
-		type="button"
-	>
-		<span>Source Code</span>
-		<svg
-			class="h-5 w-5 transform transition-transform {showSourceCode ? 'rotate-180' : ''}"
-			fill="none"
-			stroke="currentColor"
-			viewBox="0 0 24 24"
-		>
-			<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
-		</svg>
-	</button>
-
-	{#if showSourceCode}
-		<div class="space-y-4 p-4">
-			<div>
-				<h6 class="mb-2 text-sm font-medium text-gray-700">State Setup with Nested Validation</h6>
-				<pre
-					class="overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100">{stateSourceCode}</pre>
-			</div>
-			<div>
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Nested Form Binding Examples</h6>
-				<pre
-					class="overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100">{formSourceCode}</pre>
-			</div>
-		</div>
-	{/if}
-</div>
+	{#snippet sourceCode()}
+		<SourceCodeSection>
+			<CodeBlock code={stateSourceCode} title="State Setup with Nested Validation" />
+			<CodeBlock code={formSourceCode} title="Nested Form Binding Examples" />
+		</SourceCodeSection>
+	{/snippet}
+</PageLayout>
