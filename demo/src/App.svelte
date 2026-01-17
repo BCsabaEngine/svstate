@@ -5,14 +5,24 @@
 	import BasicValidation from './pages/BasicValidation.svelte';
 	import CalculatedFields from './pages/CalculatedFields.svelte';
 	import NestedObjects from './pages/NestedObjects.svelte';
+	import ResetDemo from './pages/ResetDemo.svelte';
+	import SnapshotDemo from './pages/SnapshotDemo.svelte';
 
-	type DemoMode = 'basic-validation' | 'nested-objects' | 'array-property' | 'calculated-fields';
+	type DemoMode =
+		| 'basic-validation'
+		| 'nested-objects'
+		| 'array-property'
+		| 'calculated-fields'
+		| 'reset-demo'
+		| 'snapshot-demo';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
 		{ value: 'nested-objects', name: 'Nested Objects' },
 		{ value: 'array-property', name: 'Array Property' },
-		{ value: 'calculated-fields', name: 'Calculated Fields' }
+		{ value: 'calculated-fields', name: 'Calculated Fields' },
+		{ value: 'reset-demo', name: 'Reset' },
+		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -69,6 +79,10 @@
 				<ArrayProperty />
 			{:else if selectedMode === 'calculated-fields'}
 				<CalculatedFields />
+			{:else if selectedMode === 'reset-demo'}
+				<ResetDemo />
+			{:else if selectedMode === 'snapshot-demo'}
+				<SnapshotDemo />
 			{/if}
 		</main>
 	</div>
