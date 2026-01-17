@@ -134,7 +134,7 @@ effect: ({ snapshot, property }) => {
 
 - `ChangeProxy<T>()` wraps objects with recursive Proxy handlers
 - Tracks property paths via dot notation (e.g., `"address.zip"`)
-- **Loop Prevention**: Uses strict equality (`!==`) to skip unchanged values (line 34)
+- **Loop Prevention**: Uses strict equality (`!==`) to skip unchanged values
 - Excludes non-proxiable types: Date, Map, Set, WeakMap, WeakSet, RegExp, Error, Promise
 - Array indices are collapsed in paths (only named properties tracked)
 
@@ -148,14 +148,10 @@ The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf
 
 Four chainable validator builders with `getError()` to extract the first error:
 
-- **stringValidator(input, ...prepares)** - Preprocessing options: `trim`, `normalize`, `upper`, `lower`
-  - Methods: `required()`, `noSpace()`, `minLength()`, `maxLength()`, `uppercase()`, `lowercase()`, `startsWith()`, `endsWith()`, `contains()`, `regexp()`, `inArray()`, `email()`, `website(prefix?)`, `alphanumeric()`, `numeric()`
-- **numberValidator(input)**
-  - Methods: `required()`, `min()`, `max()`, `between()`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `multipleOf()`, `decimal()`, `percentage()`
-- **arrayValidator(input)**
-  - Methods: `required()`, `minLength()`, `maxLength()`, `unique()`
-- **dateValidator(input)**
-  - Methods: `required()`, `before()`, `after()`, `between()`, `past()`, `future()`, `weekday()`, `weekend()`, `minAge()`, `maxAge()`
+- **stringValidator(input, ...prepares)** - String validation with optional preprocessing (`trim`, `normalize`, `upper`, `lower`)
+- **numberValidator(input)** - Numeric validation (range, integer, positive, etc.)
+- **arrayValidator(input)** - Array validation (length, uniqueness)
+- **dateValidator(input)** - Date validation (range, past/future, age checks)
 
 ## Code Style
 

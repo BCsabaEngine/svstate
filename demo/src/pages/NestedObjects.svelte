@@ -9,80 +9,6 @@
 	import SourceCodeSection from '../components/SourceCodeSection.svelte';
 	import StatusBadges from '../components/StatusBadges.svelte';
 
-	const stateSourceCode = `const sourceData = {
-  name: '',
-  // 2-level nested object
-  address: {
-    street: '',
-    city: '',
-    zip: ''
-  },
-  // 3-level nested object
-  company: {
-    name: '',
-    department: '',
-    contact: {
-      phone: '',
-      email: ''
-    }
-  }
-};
-
-const {
-  data,
-  state: { errors, hasErrors, isDirty }
-} = createSvState(sourceData, {
-  validator: (source) => ({
-    name: stringValidator(source.name, 'trim')
-      .required()
-      .minLength(2)
-      .maxLength(50)
-      .getError(),
-    address: {
-      street: stringValidator(source.address.street, 'trim')
-        .required()
-        .minLength(5)
-        .getError(),
-      city: stringValidator(source.address.city, 'trim')
-        .required()
-        .minLength(2)
-        .getError(),
-      zip: stringValidator(source.address.zip, 'trim')
-        .required()
-        .minLength(5)
-        .maxLength(10)
-        .getError()
-    },
-    company: {
-      name: stringValidator(source.company.name, 'trim')
-        .required()
-        .minLength(2)
-        .getError(),
-      department: stringValidator(source.company.department, 'trim')
-        .maxLength(50)
-        .getError(),
-      contact: {
-        phone: stringValidator(source.company.contact.phone, 'trim')
-          .required()
-          .minLength(10)
-          .getError(),
-        email: stringValidator(source.company.contact.email, 'trim')
-          .required()
-          .email()
-          .getError()
-      }
-    }
-  })
-});`;
-
-	const formSourceCode = `<!-- 2-level nested binding -->
-<input bind:value={data.address.street} />
-<ErrorText error={$errors?.address?.street ?? ''} />
-
-<!-- 3-level nested binding -->
-<input bind:value={data.company.contact.phone} />
-<ErrorText error={$errors?.company?.contact?.phone ?? ''} />`;
-
 	const sourceData = {
 		name: '',
 		address: {
@@ -112,20 +38,13 @@ const {
 			address: {
 				street: stringValidator(source.address.street, 'trim').required().minLength(5).getError(),
 				city: stringValidator(source.address.city, 'trim').required().minLength(2).getError(),
-				zip: stringValidator(source.address.zip, 'trim')
-					.required()
-					.minLength(5)
-					.maxLength(10)
-					.getError()
+				zip: stringValidator(source.address.zip, 'trim').required().minLength(5).maxLength(10).getError()
 			},
 			company: {
 				name: stringValidator(source.company.name, 'trim').required().minLength(2).getError(),
 				department: stringValidator(source.company.department, 'trim').maxLength(50).getError(),
 				contact: {
-					phone: stringValidator(source.company.contact.phone, 'trim')
-						.required()
-						.minLength(10)
-						.getError(),
+					phone: stringValidator(source.company.contact.phone, 'trim').required().minLength(10).getError(),
 					email: stringValidator(source.company.contact.email, 'trim').required().email().getError()
 				}
 			}
@@ -142,6 +61,46 @@ const {
 		data.company.contact.phone = `555-${randomInt(100, 999)}-${randomInt(1000, 9999)}`;
 		data.company.contact.email = `contact@${randomId()}.com`;
 	};
+
+	// ─────────────────────────────────────────────
+	// Source code examples for the collapsible section
+	// ─────────────────────────────────────────────
+	const stateSourceCode = `const sourceData = {
+  name: '',
+  address: { street: '', city: '', zip: '' },       // 2-level nested
+  company: {                                         // 3-level nested
+    name: '',
+    department: '',
+    contact: { phone: '', email: '' }
+  }
+};
+
+const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+  validator: (source) => ({
+    name: stringValidator(source.name, 'trim').required().minLength(2).maxLength(50).getError(),
+    address: {
+      street: stringValidator(source.address.street, 'trim').required().minLength(5).getError(),
+      city: stringValidator(source.address.city, 'trim').required().minLength(2).getError(),
+      zip: stringValidator(source.address.zip, 'trim').required().minLength(5).maxLength(10).getError()
+    },
+    company: {
+      name: stringValidator(source.company.name, 'trim').required().minLength(2).getError(),
+      department: stringValidator(source.company.department, 'trim').maxLength(50).getError(),
+      contact: {
+        phone: stringValidator(source.company.contact.phone, 'trim').required().minLength(10).getError(),
+        email: stringValidator(source.company.contact.email, 'trim').required().email().getError()
+      }
+    }
+  })
+});`;
+
+	const formSourceCode = `<!-- 2-level nested binding -->
+<input bind:value={data.address.street} />
+<ErrorText error={$errors?.address?.street ?? ''} />
+
+<!-- 3-level nested binding -->
+<input bind:value={data.company.contact.phone} />
+<ErrorText error={$errors?.company?.contact?.phone ?? ''} />`;
 </script>
 
 <PageLayout title="Nested Objects Demo">

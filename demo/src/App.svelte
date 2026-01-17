@@ -35,8 +35,8 @@
 				</span>
 			</h1>
 			<p class="mt-2 max-w-2xl text-gray-600">
-				A Svelte 5 library that provides a supercharged $state() with deep reactive proxies,
-				validation, snapshot/undo, and side effects.
+				A Svelte 5 library that provides a supercharged $state() with deep reactive proxies, validation, snapshot/undo,
+				and side effects.
 			</p>
 		</div>
 	</header>
@@ -46,9 +46,7 @@
 		<!-- Left sidebar -->
 		<aside class="w-64 flex-shrink-0">
 			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-				<label class="mb-2 block text-sm font-medium text-gray-900" for="demo-select"
-					>Demo Mode</label
-				>
+				<label class="mb-2 block text-sm font-medium text-gray-900" for="demo-select">Demo Mode</label>
 				<select
 					id="demo-select"
 					class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"

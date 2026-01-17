@@ -8,53 +8,6 @@
 	import SourceCodeSection from '../components/SourceCodeSection.svelte';
 	import StatusBadges from '../components/StatusBadges.svelte';
 
-	const stateSourceCode = `const sourceData = {
-  username: '',
-  email: '',
-  age: 0,
-  bio: '',
-  website: ''
-};
-
-const {
-  data,
-  state: { errors, hasErrors, isDirty }
-} = createSvState(sourceData, {
-  validator: (source) => ({
-    username: stringValidator(source.username, 'trim')
-      .required()
-      .minLength(3)
-      .maxLength(20)
-      .noSpace()
-      .getError(),
-    email: stringValidator(source.email, 'trim')
-      .required()
-      .email()
-      .getError(),
-    age: numberValidator(source.age)
-      .required()
-      .min(18)
-      .max(120)
-      .integer()
-      .getError(),
-    bio: stringValidator(source.bio)
-      .maxLength(200)
-      .getError(),
-    website: stringValidator(source.website, 'trim')
-      .website('required')
-      .getError()
-  })
-});`;
-
-	const formSourceCode = `<input
-  id="username"
-  type="text"
-  placeholder="Enter username"
-  class="... {$errors?.username ? 'error-styles' : 'normal-styles'}"
-  bind:value={data.username}
-/>
-<ErrorText error={$errors?.username ?? ''} />`;
-
 	const sourceData = {
 		username: '',
 		email: '',
@@ -71,12 +24,7 @@ const {
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			username: stringValidator(source.username, 'trim')
-				.required()
-				.minLength(3)
-				.maxLength(20)
-				.noSpace()
-				.getError(),
+			username: stringValidator(source.username, 'trim').required().minLength(3).maxLength(20).noSpace().getError(),
 			email: stringValidator(source.email, 'trim').required().email().getError(),
 			age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
 			bio: stringValidator(source.bio).maxLength(200).getError(),
@@ -91,6 +39,36 @@ const {
 		data.bio = 'Hello, I am a demo user!';
 		data.website = `https://${randomId()}.com`;
 	};
+
+	// ─────────────────────────────────────────────
+	// Source code examples for the collapsible section
+	// ─────────────────────────────────────────────
+	const stateSourceCode = `const sourceData = {
+  username: '',
+  email: '',
+  age: 0,
+  bio: '',
+  website: ''
+};
+
+const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+  validator: (source) => ({
+    username: stringValidator(source.username, 'trim').required().minLength(3).maxLength(20).noSpace().getError(),
+    email: stringValidator(source.email, 'trim').required().email().getError(),
+    age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
+    bio: stringValidator(source.bio).maxLength(200).getError(),
+    website: stringValidator(source.website, 'trim').website('required').getError()
+  })
+});`;
+
+	const formSourceCode = `<input
+  id="username"
+  type="text"
+  placeholder="Enter username"
+  class="... {$errors?.username ? 'error-styles' : 'normal-styles'}"
+  bind:value={data.username}
+/>
+<ErrorText error={$errors?.username ?? ''} />`;
 </script>
 
 <PageLayout title="Basic Validation Demo">
@@ -144,13 +122,7 @@ const {
 	{/snippet}
 
 	{#snippet sidebar()}
-		<DemoSidebar
-			{data}
-			errors={$errors}
-			hasErrors={$hasErrors}
-			isDirty={$isDirty}
-			onFill={fillWithValidData}
-		/>
+		<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData} />
 	{/snippet}
 
 	{#snippet sourceCode()}

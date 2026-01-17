@@ -8,64 +8,6 @@
 	import SourceCodeSection from '../components/SourceCodeSection.svelte';
 	import StatusBadges from '../components/StatusBadges.svelte';
 
-	const stateSourceCode = `const sourceData = {
-  productName: '',
-  item: {
-    unitPrice: 0,
-    quantity: 1
-  },
-  // Calculated fields (set by effect)
-  subtotal: 0,
-  tax: 0,
-  total: 0
-};
-
-const TAX_RATE = 0.08; // 8% tax
-
-const {
-  data,
-  state: { errors, hasErrors, isDirty }
-} = createSvState(sourceData, {
-  validator: (source) => ({
-    productName: stringValidator(source.productName, 'trim')
-      .required()
-      .minLength(2)
-      .getError(),
-    item: {
-      unitPrice: numberValidator(source.item.unitPrice)
-        .required()
-        .positive()
-        .getError(),
-      quantity: numberValidator(source.item.quantity)
-        .required()
-        .integer()
-        .min(1)
-        .max(100)
-        .getError()
-    },
-    subtotal: '',
-    tax: '',
-    total: ''
-  }),
-  effect: ({ property }) => {
-    // Recalculate when price or quantity changes
-    if (property === 'item.unitPrice' || property === 'item.quantity') {
-      data.subtotal = data.item.unitPrice * data.item.quantity;
-      data.tax = data.subtotal * TAX_RATE;
-      data.total = data.subtotal + data.tax;
-    }
-  }
-});`;
-
-	const effectSourceCode = `effect: ({ property }) => {
-  // Recalculate when price or quantity changes
-  if (property === 'item.unitPrice' || property === 'item.quantity') {
-    data.subtotal = data.item.unitPrice * data.item.quantity;
-    data.tax = data.subtotal * TAX_RATE;
-    data.total = data.subtotal + data.tax;
-  }
-}`;
-
 	const randomId = () => Math.random().toString(36).slice(2, 8);
 	const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 	const TAX_RATE = 0.08;
@@ -89,16 +31,8 @@ const {
 			productName: stringValidator(source.productName, 'trim').required().minLength(2).getError(),
 			item: {
 				unitPrice: numberValidator(source.item.unitPrice).required().positive().getError(),
-				quantity: numberValidator(source.item.quantity)
-					.required()
-					.integer()
-					.min(1)
-					.max(100)
-					.getError()
-			},
-			subtotal: '',
-			tax: '',
-			total: ''
+				quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
+			}
 		}),
 		effect: ({ property }) => {
 			if (property === 'item.unitPrice' || property === 'item.quantity') {
@@ -116,6 +50,42 @@ const {
 	};
 
 	const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
+
+	// ─────────────────────────────────────────────
+	// Source code examples for the collapsible section
+	// ─────────────────────────────────────────────
+	const stateSourceCode = `const sourceData = {
+  productName: '',
+  item: { unitPrice: 0, quantity: 1 },
+  subtotal: 0, tax: 0, total: 0  // Calculated fields (set by effect)
+};
+
+const TAX_RATE = 0.08;
+
+const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+  validator: (source) => ({
+    productName: stringValidator(source.productName, 'trim').required().minLength(2).getError(),
+    item: {
+      unitPrice: numberValidator(source.item.unitPrice).required().positive().getError(),
+      quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
+    }
+  }),
+  effect: ({ property }) => {
+    if (property === 'item.unitPrice' || property === 'item.quantity') {
+      data.subtotal = data.item.unitPrice * data.item.quantity;
+      data.tax = data.subtotal * TAX_RATE;
+      data.total = data.subtotal + data.tax;
+    }
+  }
+});`;
+
+	const effectSourceCode = `effect: ({ property }) => {
+  if (property === 'item.unitPrice' || property === 'item.quantity') {
+    data.subtotal = data.item.unitPrice * data.item.quantity;
+    data.tax = data.subtotal * TAX_RATE;
+    data.total = data.subtotal + data.tax;
+  }
+}`;
 </script>
 
 <PageLayout title="Calculated Fields Demo">
@@ -180,13 +150,7 @@ const {
 	{/snippet}
 
 	{#snippet sidebar()}
-		<DemoSidebar
-			{data}
-			errors={$errors}
-			hasErrors={$hasErrors}
-			isDirty={$isDirty}
-			onFill={fillWithValidData}
-		/>
+		<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData} />
 	{/snippet}
 
 	{#snippet sourceCode()}

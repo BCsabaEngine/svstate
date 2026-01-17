@@ -12,54 +12,6 @@
 
 	type ItemErrors = Record<string, { name?: string; email?: string }>;
 
-	const stateSourceCode = `const sourceData = {
-  listName: '',
-  items: [] as { name: string; email: string }[]
-};
-
-const {
-  data,
-  state: { errors, hasErrors, isDirty }
-} = createSvState(sourceData, {
-  validator: (source) => ({
-    listName: stringValidator(source.listName, 'trim')
-      .required()
-      .minLength(2)
-      .getError(),
-    items: arrayValidator(source.items)
-      .required()
-      .minLength(1)
-      .getError(),
-    // Per-item validation using indexed keys
-    ...Object.fromEntries(
-      source.items.map((item, index) => [
-        \`item_\${index}\`,
-        {
-          name: stringValidator(item.name, 'trim')
-            .required()
-            .minLength(2)
-            .getError(),
-          email: stringValidator(item.email, 'trim')
-            .required()
-            .email()
-            .getError()
-        }
-      ])
-    )
-  })
-});`;
-
-	const formSourceCode = `// Define type for item errors
-type ItemErrors = Record<string, { name?: string; email?: string }>;
-
-{#each data.items as item, index}
-  <input bind:value={item.name} />
-  <ErrorText error={($errors as ItemErrors)?.[...\`item_\${index}\`]?.name ?? ''} />
-
-  <input bind:value={item.email} />
-  <ErrorText error={($errors as ItemErrors)?.[...\`item_\${index}\`]?.email ?? ''} />
-{/each}`;
-
 	const sourceData = {
 		listName: '',
 		items: [] as { name: string; email: string }[]
@@ -102,6 +54,42 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 			{ name: 'Bob Wilson', email: 'bob@example.com' }
 		];
 	};
+
+	// ─────────────────────────────────────────────
+	// Source code examples for the collapsible section
+	// ─────────────────────────────────────────────
+	const stateSourceCode = `const sourceData = {
+  listName: '',
+  items: [] as { name: string; email: string }[]
+};
+
+const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+  validator: (source) => ({
+    listName: stringValidator(source.listName, 'trim').required().minLength(2).getError(),
+    items: arrayValidator(source.items).required().minLength(1).getError(),
+    // Per-item validation using indexed keys
+    ...Object.fromEntries(
+      source.items.map((item, index) => [
+        \`item_\${index}\`,
+        {
+          name: stringValidator(item.name, 'trim').required().minLength(2).getError(),
+          email: stringValidator(item.email, 'trim').required().email().getError()
+        }
+      ])
+    )
+  })
+});`;
+
+	const formSourceCode = `// Define type for item errors
+type ItemErrors = Record<string, { name?: string; email?: string }>;
+
+{#each data.items as item, index}
+  <input bind:value={item.name} />
+  <ErrorText error={($errors as ItemErrors)?.[...\`item_\${index}\`]?.name ?? ''} />
+
+  <input bind:value={item.email} />
+  <ErrorText error={($errors as ItemErrors)?.[...\`item_\${index}\`]?.email ?? ''} />
+{/each}`;
 </script>
 
 <PageLayout title="Array Property Demo">
@@ -148,15 +136,11 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 							<ArrayItemCard {index} label="Contact" onRemove={() => removeItem(index)}>
 								<div class="grid grid-cols-2 gap-3">
 									<div>
-										<label
-											class="mb-1 block text-xs font-bold text-gray-700"
-											for="item-name-{index}">Name</label
-										>
+										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-name-{index}">Name</label>
 										<input
 											id="item-name-{index}"
-											class="block w-full rounded-lg border p-2 text-sm {($errors as ItemErrors)?.[
-												`item_${index}`
-											]?.name
+											class="block w-full rounded-lg border p-2 text-sm {($errors as ItemErrors)?.[`item_${index}`]
+												?.name
 												? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400'
 												: 'border-gray-300 bg-white text-gray-900'}"
 											placeholder="Enter name"
@@ -166,15 +150,11 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 										<ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.name ?? ''} />
 									</div>
 									<div>
-										<label
-											class="mb-1 block text-xs font-bold text-gray-700"
-											for="item-email-{index}">Email</label
-										>
+										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-email-{index}">Email</label>
 										<input
 											id="item-email-{index}"
-											class="block w-full rounded-lg border p-2 text-sm {($errors as ItemErrors)?.[
-												`item_${index}`
-											]?.email
+											class="block w-full rounded-lg border p-2 text-sm {($errors as ItemErrors)?.[`item_${index}`]
+												?.email
 												? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400'
 												: 'border-gray-300 bg-white text-gray-900'}"
 											placeholder="Enter email"
