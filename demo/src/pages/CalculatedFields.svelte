@@ -88,7 +88,10 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 }`;
 </script>
 
-<PageLayout title="Calculated Fields Demo">
+<PageLayout
+	description="Uses the effect callback to automatically compute derived values like subtotals, taxes, and totals."
+	title="Calculated Fields Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

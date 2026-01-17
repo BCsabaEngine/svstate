@@ -71,7 +71,10 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 <ErrorText error={$errors?.username ?? ''} />`;
 </script>
 
-<PageLayout title="Basic Validation Demo">
+<PageLayout
+	description="Demonstrates form validation with string, number, and email validators using the fluent API."
+	title="Basic Validation Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

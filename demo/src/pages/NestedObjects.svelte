@@ -103,7 +103,10 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 <ErrorText error={$errors?.company?.contact?.phone ?? ''} />`;
 </script>
 
-<PageLayout title="Nested Objects Demo">
+<PageLayout
+	description="Illustrates validating deeply nested object structures with multi-level property paths."
+	title="Nested Objects Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

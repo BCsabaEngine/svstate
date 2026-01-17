@@ -92,7 +92,10 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 {/each}`;
 </script>
 
-<PageLayout title="Array Property Demo">
+<PageLayout
+	description="Shows how to validate dynamic arrays with per-item validation using indexed error keys."
+	title="Array Property Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

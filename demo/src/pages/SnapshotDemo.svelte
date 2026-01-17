@@ -82,7 +82,10 @@ rollback(3);  // Undo 3 changes
 <button onclick={reset}>Reset All</button>`;
 </script>
 
-<PageLayout title="Snapshot & Rollback Demo">
+<PageLayout
+	description="Shows snapshot creation for undo functionality with rollback() support."
+	title="Snapshot & Rollback Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

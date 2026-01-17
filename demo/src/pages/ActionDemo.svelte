@@ -95,7 +95,10 @@ execute({ userId: 123 });`;
 {/if}`;
 </script>
 
-<PageLayout title="Action Demo">
+<PageLayout
+	description="Demonstrates async action execution with loading states and error handling."
+	title="Action Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

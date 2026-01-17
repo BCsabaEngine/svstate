@@ -138,7 +138,10 @@ data.name = 'new value';
 // actionError remains until next execute() call`;
 </script>
 
-<PageLayout title="Options Demo">
+<PageLayout
+	description="Interactive playground for configuring createSvState options like debouncing and error persistence."
+	title="Options Demo"
+>
 	{#snippet main()}
 		{#key optionsKey}
 			<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />

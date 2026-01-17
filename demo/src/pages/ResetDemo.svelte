@@ -72,7 +72,10 @@ const { data, reset, state: { errors, hasErrors, isDirty } } = createSvState(sou
 <!-- reset() restores to initial snapshot and clears history -->`;
 </script>
 
-<PageLayout title="Reset Demo">
+<PageLayout
+	description="Demonstrates the reset() function to restore state back to its initial values."
+	title="Reset Demo"
+>
 	{#snippet main()}
 		<StatusBadges hasErrors={$hasErrors} isDirty={$isDirty} />
 

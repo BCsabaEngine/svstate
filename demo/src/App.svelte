@@ -50,7 +50,7 @@
 					v{APP_VERSION}
 				</span>
 			</h1>
-			<p class="mt-2 max-w-2xl text-gray-600">
+			<p class="mt-2 text-gray-600">
 				A Svelte 5 library that provides a supercharged $state() with deep reactive proxies, validation, snapshot/undo,
 				and side effects.
 			</p>
