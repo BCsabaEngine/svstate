@@ -11,7 +11,7 @@
 
 <div class="mt-6 rounded-lg border border-gray-200 bg-white shadow-sm">
 	<button
-		class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 {showSourceCode
+		class="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 {showSourceCode
 			? 'border-b border-gray-200'
 			: ''}"
 		onclick={() => (showSourceCode = !showSourceCode)}

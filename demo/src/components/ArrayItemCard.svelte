@@ -15,7 +15,7 @@
 	<div class="mb-3 flex items-center justify-between">
 		<span class="text-xs font-medium text-gray-500">{label} #{index + 1}</span>
 		<button
-			class="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+			class="cursor-pointer rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
 			onclick={onRemove}
 			type="button"
 		>
