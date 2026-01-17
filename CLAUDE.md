@@ -74,7 +74,7 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, and snapshot types
+- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`)
 - `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
@@ -117,13 +117,20 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 
 ### Snapshot/Undo System
 
-The effect callback receives `EffectContext<T>` with a `snapshot` function for creating undo points:
+The effect callback receives `EffectContext<T>` with:
+
+- `snapshot` - Function to create undo points
+- `target` - The state object
+- `property` - Dot-notation path of changed property
+- `currentValue` / `oldValue` - The new and previous values
 
 ```typescript
 effect: ({ snapshot, property }) => {
   snapshot(`Changed ${property}`); // Creates snapshot with title
 };
 ```
+
+**Important:** The effect callback must be synchronous. Returning a Promise throws an error.
 
 - `snapshot(title, replace = true)` - Creates a snapshot; if `replace=true` and last snapshot has same title, replaces it (debouncing)
 - Initial state is saved as first snapshot with title `"Initial"`
@@ -134,7 +141,7 @@ effect: ({ snapshot, property }) => {
 
 - `ChangeProxy<T>()` wraps objects with recursive Proxy handlers
 - Tracks property paths via dot notation (e.g., `"address.zip"`)
-- **Loop Prevention**: Uses strict equality (`!==`) to skip unchanged values (line 34)
+- **Loop Prevention**: Uses strict equality (`!==`) to skip unchanged values
 - Excludes non-proxiable types: Date, Map, Set, WeakMap, WeakSet, RegExp, Error, Promise
 - Array indices are collapsed in paths (only named properties tracked)
 
@@ -148,14 +155,10 @@ The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf
 
 Four chainable validator builders with `getError()` to extract the first error:
 
-- **stringValidator(input, ...prepares)** - Preprocessing options: `trim`, `normalize`, `upper`, `lower`
-  - Methods: `required()`, `noSpace()`, `minLength()`, `maxLength()`, `uppercase()`, `lowercase()`, `startsWith()`, `endsWith()`, `contains()`, `regexp()`, `inArray()`, `email()`, `website(prefix?)`, `alphanumeric()`, `numeric()`
-- **numberValidator(input)**
-  - Methods: `required()`, `min()`, `max()`, `between()`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `multipleOf()`, `decimal()`, `percentage()`
-- **arrayValidator(input)**
-  - Methods: `required()`, `minLength()`, `maxLength()`, `unique()`
-- **dateValidator(input)**
-  - Methods: `required()`, `before()`, `after()`, `between()`, `past()`, `future()`, `weekday()`, `weekend()`, `minAge()`, `maxAge()`
+- **stringValidator(input, ...prepares)** - String validation with optional preprocessing (`trim`, `normalize`, `upper`, `lower`)
+- **numberValidator(input)** - Numeric validation (range, integer, positive, etc.)
+- **arrayValidator(input)** - Array validation (length, uniqueness)
+- **dateValidator(input)** - Date validation (range, past/future, age checks)
 
 ## Code Style
 
