@@ -74,7 +74,7 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, and snapshot types
+- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`)
 - `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
@@ -117,13 +117,20 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 
 ### Snapshot/Undo System
 
-The effect callback receives `EffectContext<T>` with a `snapshot` function for creating undo points:
+The effect callback receives `EffectContext<T>` with:
+
+- `snapshot` - Function to create undo points
+- `target` - The state object
+- `property` - Dot-notation path of changed property
+- `currentValue` / `oldValue` - The new and previous values
 
 ```typescript
 effect: ({ snapshot, property }) => {
   snapshot(`Changed ${property}`); // Creates snapshot with title
 };
 ```
+
+**Important:** The effect callback must be synchronous. Returning a Promise throws an error.
 
 - `snapshot(title, replace = true)` - Creates a snapshot; if `replace=true` and last snapshot has same title, replaces it (debouncing)
 - Initial state is saved as first snapshot with title `"Initial"`
