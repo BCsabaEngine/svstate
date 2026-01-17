@@ -6,6 +6,7 @@
 	import BasicValidation from './pages/BasicValidation.svelte';
 	import CalculatedFields from './pages/CalculatedFields.svelte';
 	import NestedObjects from './pages/NestedObjects.svelte';
+	import OptionsDemo from './pages/OptionsDemo.svelte';
 	import ResetDemo from './pages/ResetDemo.svelte';
 	import SnapshotDemo from './pages/SnapshotDemo.svelte';
 
@@ -16,7 +17,8 @@
 		| 'calculated-fields'
 		| 'reset-demo'
 		| 'snapshot-demo'
-		| 'action-demo';
+		| 'action-demo'
+		| 'options-demo';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
@@ -25,7 +27,8 @@
 		{ value: 'calculated-fields', name: 'Calculated Fields' },
 		{ value: 'reset-demo', name: 'Reset' },
 		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' },
-		{ value: 'action-demo', name: 'Action & Error' }
+		{ value: 'action-demo', name: 'Action & Error' },
+		{ value: 'options-demo', name: 'Options' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -88,6 +91,8 @@
 				<SnapshotDemo />
 			{:else if selectedMode === 'action-demo'}
 				<ActionDemo />
+			{:else if selectedMode === 'options-demo'}
+				<OptionsDemo />
 			{/if}
 		</main>
 	</div>
