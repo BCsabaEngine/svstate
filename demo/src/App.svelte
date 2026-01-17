@@ -1,6 +1,7 @@
 <script lang="ts">
 	import './app.postcss';
 
+	import ActionDemo from './pages/ActionDemo.svelte';
 	import ArrayProperty from './pages/ArrayProperty.svelte';
 	import BasicValidation from './pages/BasicValidation.svelte';
 	import CalculatedFields from './pages/CalculatedFields.svelte';
@@ -14,7 +15,8 @@
 		| 'array-property'
 		| 'calculated-fields'
 		| 'reset-demo'
-		| 'snapshot-demo';
+		| 'snapshot-demo'
+		| 'action-demo';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
@@ -22,7 +24,8 @@
 		{ value: 'array-property', name: 'Array Property' },
 		{ value: 'calculated-fields', name: 'Calculated Fields' },
 		{ value: 'reset-demo', name: 'Reset' },
-		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' }
+		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' },
+		{ value: 'action-demo', name: 'Action & Error' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -83,6 +86,8 @@
 				<ResetDemo />
 			{:else if selectedMode === 'snapshot-demo'}
 				<SnapshotDemo />
+			{:else if selectedMode === 'action-demo'}
+				<ActionDemo />
 			{/if}
 		</main>
 	</div>

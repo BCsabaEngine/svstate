@@ -9,6 +9,7 @@
 		value: string | number;
 		error?: string;
 		required?: boolean;
+		disabled?: boolean;
 		min?: number;
 		max?: number;
 		step?: number;
@@ -23,6 +24,7 @@
 		value = $bindable(),
 		error = '',
 		required = true,
+		disabled = false,
 		min,
 		max,
 		step,
@@ -40,7 +42,10 @@
 		{id}
 		class="block w-full rounded-lg border p-2.5 text-sm {error
 			? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400 focus:border-red-500 focus:ring-red-500'
-			: `border-gray-300 ${bgClass} text-gray-900 focus:border-blue-500 focus:ring-blue-500`}"
+			: `border-gray-300 ${bgClass} text-gray-900 focus:border-blue-500 focus:ring-blue-500`} {disabled
+			? 'cursor-not-allowed opacity-50'
+			: ''}"
+		{disabled}
 		{max}
 		{min}
 		{placeholder}
