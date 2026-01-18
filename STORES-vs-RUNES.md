@@ -3,14 +3,15 @@
 ## Current Architecture
 
 The library already uses a **hybrid approach**:
+
 - `$state<T>()` for the reactive data object (line 86)
 - Svelte stores (`writable`, `derived`) for metadata: errors, hasErrors, isDirty, actionInProgress, actionError, snapshots
 
 ```typescript
 // Current pattern in src/state.svelte.ts
-const errors = writable<V | undefined>();           // Store
-const hasErrors = derived(errors, hasAnyErrors);    // Derived store
-const stateObject = $state<T>(init);                // Rune for data
+const errors = writable<V | undefined>(); // Store
+const hasErrors = derived(errors, hasAnyErrors); // Derived store
+const stateObject = $state<T>(init); // Rune for data
 ```
 
 ## Can You Migrate Stores to Runes?
@@ -40,12 +41,12 @@ const { state: { errors } } = createSvState(...);  // BREAKS - loses reactivity
 
 ### What Would Break
 
-| Feature | Current (Stores) | After Migration (Runes) |
-|---------|-----------------|-------------------------|
-| Destructuring | `const { errors } = state` works | Breaks reactivity |
-| Template syntax | `{$errors?.name}` | `{state.errors?.name}` |
-| Test reads | `get(state.errors)` | No equivalent |
-| Cross-module reactivity | Works | Compiler-dependent |
+| Feature                 | Current (Stores)                 | After Migration (Runes) |
+| ----------------------- | -------------------------------- | ----------------------- |
+| Destructuring           | `const { errors } = state` works | Breaks reactivity       |
+| Template syntax         | `{$errors?.name}`                | `{state.errors?.name}`  |
+| Test reads              | `get(state.errors)`              | No equivalent           |
+| Cross-module reactivity | Works                            | Compiler-dependent      |
 
 ## Advantages of Runes (Limited for Libraries)
 
