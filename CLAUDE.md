@@ -17,6 +17,7 @@ npm test                              # Run all tests once
 npm run test:coverage                 # Run tests with coverage report
 npx vitest run test/validators.test.ts  # Run a single test file
 npx vitest run -t "should trim"       # Run tests matching pattern
+npx vitest                            # Watch mode (re-runs on file changes)
 ```
 
 Coverage thresholds are set at 60% for lines, functions, branches, and statements.
@@ -179,10 +180,14 @@ Four chainable validator builders with `getError()` to extract the first error:
 Test files go in `test/` directory:
 
 - `*.test.ts` - Pure TypeScript tests (validators, proxy)
-- `*.test.svelte.ts` - Tests using Svelte 5 features ($state runes)
+- `*.test.svelte.ts` - Tests using Svelte 5 runes (`$state`, `$derived`, etc.)
 
 Vitest is configured with:
 
 - Globals enabled (no imports needed for `describe`, `it`, `expect`)
 - Node environment
 - Console output suppressed
+
+## Svelte 5 Runes Mode
+
+Files with `.svelte.ts` extension use Svelte 5 runes mode, allowing `$state()`, `$derived()`, and other runes outside of `.svelte` components. The main state logic in `src/state.svelte.ts` uses this pattern.
