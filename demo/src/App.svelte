@@ -65,7 +65,7 @@
 			</h1>
 			<p class="mt-2 text-sm text-gray-600 sm:text-base">
 				A Svelte 5 library that provides a supercharged $state() with deep reactive proxies, validation, snapshot/undo,
-				and side effects.
+				and side effects — built for complex, real-world applications.
 			</p>
 			<div
 				class="mt-2 inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-1.5 font-mono text-xs text-white"
