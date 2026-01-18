@@ -43,7 +43,7 @@
 	<!-- Header -->
 	<header class="mb-6 flex flex-col items-center gap-4 text-center sm:mb-8 sm:flex-row sm:text-left">
 		<img class="h-20 w-20 sm:h-32 sm:w-32" alt="svstate logo" src={`${BASE_URL}/favicon.png`} />
-		<div>
+		<div class="flex-1">
 			<h1 class="text-2xl font-bold text-gray-900 sm:text-4xl">
 				<a
 					class="ml-1 inline-flex items-center text-gray-500 transition-colors hover:text-gray-900"
@@ -88,6 +88,13 @@
 					</svg>
 				</button>
 			</div>
+			<a
+				class="hidden items-center px-2 py-2 font-mono text-xs text-gray-700 transition-colors hover:bg-gray-300 sm:inline-flex"
+				href={`${BASE_URL}/llms.txt`}
+				title="AI-readable documentation"
+			>
+				llms.txt
+			</a>
 		</div>
 	</header>
 

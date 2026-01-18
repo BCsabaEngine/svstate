@@ -1,0 +1,385 @@
+# svstate Demo
+
+Interactive demo app showcasing svstate features - a Svelte 5 library for deep reactive state with validation, snapshot/undo, and side effects.
+
+## Demo Pages
+
+### BasicValidation
+
+Demonstrates form validation with string, number, and email validators using the fluent API.
+
+**APIs:** createSvState(), stringValidator(), numberValidator(), getError()
+**Stores:** errors, hasErrors, isDirty
+
+```typescript
+const sourceData = {
+  username: '',
+  email: '',
+  age: 0,
+  bio: '',
+  website: ''
+};
+
+const {
+  data,
+  state: { errors, hasErrors, isDirty }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    username: stringValidator(source.username, 'trim').required().minLength(3).maxLength(20).noSpace().getError(),
+    email: stringValidator(source.email, 'trim').required().email().getError(),
+    age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
+    bio: stringValidator(source.bio).maxLength(200).getError(),
+    website: stringValidator(source.website, 'trim').website('required').getError()
+  })
+});
+```
+
+```svelte
+<input
+  type="text"
+  class="{$errors?.username ? 'error-styles' : 'normal-styles'}"
+  bind:value={data.username}
+/>
+<ErrorText error={$errors?.username ?? ''} />
+```
+
+---
+
+### NestedObjects
+
+Illustrates validating deeply nested object structures with multi-level property paths.
+
+**APIs:** createSvState(), stringValidator()
+**Stores:** errors, hasErrors, isDirty
+
+```typescript
+const sourceData = {
+  name: '',
+  address: { street: '', city: '', zip: '' },
+  company: {
+    name: '',
+    department: '',
+    contact: { phone: '', email: '' }
+  }
+};
+
+const {
+  data,
+  state: { errors, hasErrors, isDirty }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    name: stringValidator(source.name, 'trim').required().minLength(2).maxLength(50).getError(),
+    address: {
+      street: stringValidator(source.address.street, 'trim').required().minLength(5).getError(),
+      city: stringValidator(source.address.city, 'trim').required().minLength(2).getError(),
+      zip: stringValidator(source.address.zip, 'trim').required().minLength(5).maxLength(10).getError()
+    },
+    company: {
+      name: stringValidator(source.company.name, 'trim').required().minLength(2).getError(),
+      department: stringValidator(source.company.department, 'trim').maxLength(50).getError(),
+      contact: {
+        phone: stringValidator(source.company.contact.phone, 'trim').required().minLength(10).getError(),
+        email: stringValidator(source.company.contact.email, 'trim').required().email().getError()
+      }
+    }
+  })
+});
+```
+
+```svelte
+<!-- 2-level nested binding -->
+<input bind:value={data.address.street} />
+<ErrorText error={$errors?.address?.street ?? ''} />
+
+<!-- 3-level nested binding -->
+<input bind:value={data.company.contact.phone} />
+<ErrorText error={$errors?.company?.contact?.phone ?? ''} />
+```
+
+---
+
+### ArrayProperty
+
+Shows how to validate dynamic arrays with per-item validation using indexed error keys.
+
+**APIs:** createSvState(), arrayValidator(), stringValidator()
+**Stores:** errors, hasErrors, isDirty
+
+```typescript
+type ItemErrors = Record<string, { name?: string; email?: string }>;
+
+const sourceData = {
+  listName: '',
+  items: [] as { name: string; email: string }[]
+};
+
+const {
+  data,
+  state: { errors, hasErrors, isDirty }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    listName: stringValidator(source.listName, 'trim').required().minLength(2).getError(),
+    items: arrayValidator(source.items).required().minLength(1).getError(),
+    ...Object.fromEntries(
+      source.items.map((item, index) => [
+        `item_${index}`,
+        {
+          name: stringValidator(item.name, 'trim').required().minLength(2).getError(),
+          email: stringValidator(item.email, 'trim').required().email().getError()
+        }
+      ])
+    )
+  })
+});
+
+const addItem = () => {
+  data.items = [...data.items, { name: '', email: '' }];
+};
+
+const removeItem = (index: number) => {
+  data.items = data.items.filter((_, i) => i !== index);
+};
+```
+
+```svelte
+{#each data.items as item, index}
+  <input bind:value={item.name} />
+  <ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.name ?? ''} />
+
+  <input bind:value={item.email} />
+  <ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.email ?? ''} />
+{/each}
+```
+
+---
+
+### CalculatedFields
+
+Uses the effect callback to automatically compute derived values like subtotals, taxes, and totals.
+
+**APIs:** createSvState(), effect callback
+**Stores:** errors, hasErrors, isDirty
+
+```typescript
+const TAX_RATE = 0.08;
+
+const sourceData = {
+  productName: '',
+  item: { unitPrice: 0, quantity: 1 },
+  subtotal: 0,
+  tax: 0,
+  total: 0
+};
+
+const {
+  data,
+  state: { errors, hasErrors, isDirty }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    productName: stringValidator(source.productName, 'trim').required().minLength(2).getError(),
+    item: {
+      unitPrice: numberValidator(source.item.unitPrice).required().positive().getError(),
+      quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
+    }
+  }),
+  effect: ({ property }) => {
+    if (property === 'item.unitPrice' || property === 'item.quantity') {
+      data.subtotal = data.item.unitPrice * data.item.quantity;
+      data.tax = data.subtotal * TAX_RATE;
+      data.total = data.subtotal + data.tax;
+    }
+  }
+});
+```
+
+---
+
+### SnapshotDemo
+
+Shows snapshot creation for undo functionality with rollback() support.
+
+**APIs:** createSvState(), snapshot(), rollback(), reset()
+**Stores:** errors, hasErrors, isDirty, snapshots
+
+```typescript
+const sourceData = {
+  firstName: 'Alice',
+  lastName: 'Smith',
+  email: 'alice.smith@example.com',
+  phone: '',
+  bio: ''
+};
+
+const {
+  data,
+  reset,
+  rollback,
+  state: { errors, hasErrors, isDirty, snapshots }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    firstName: stringValidator(source.firstName, 'trim').required().minLength(2).maxLength(30).getError(),
+    lastName: stringValidator(source.lastName, 'trim').required().minLength(2).maxLength(30).getError(),
+    email: stringValidator(source.email, 'trim').required().email().getError(),
+    phone: stringValidator(source.phone, 'trim').required().minLength(10).getError(),
+    bio: stringValidator(source.bio).maxLength(200).getError()
+  }),
+  effect: ({ snapshot, property }) => {
+    snapshot(`Changed ${property}`);
+  }
+});
+```
+
+```svelte
+<!-- Undo last change (disabled if only initial snapshot) -->
+<button onclick={() => rollback()} disabled={$snapshots.length <= 1}>
+  Undo Last Change
+</button>
+
+<!-- Rollback multiple steps -->
+<button onclick={() => rollback(3)}>Undo 3 Changes</button>
+
+<!-- Reset to initial state -->
+<button onclick={reset}>Reset All</button>
+
+<!-- Display snapshot history -->
+{#each $snapshots as snap, index}
+  <li>{index + 1}. {snap.title}</li>
+{/each}
+```
+
+---
+
+### ResetDemo
+
+Demonstrates the reset() function to restore state back to its initial values.
+
+**APIs:** createSvState(), reset()
+**Stores:** errors, hasErrors, isDirty
+
+```typescript
+const sourceData = {
+  firstName: 'Alice',
+  lastName: 'Smith',
+  email: 'alice.smith@example.com',
+  phone: '',
+  bio: ''
+};
+
+const {
+  data,
+  reset,
+  state: { errors, hasErrors, isDirty }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    firstName: stringValidator(source.firstName, 'trim').required().minLength(2).maxLength(30).getError(),
+    lastName: stringValidator(source.lastName, 'trim').required().minLength(2).maxLength(30).getError(),
+    email: stringValidator(source.email, 'trim').required().email().getError(),
+    phone: stringValidator(source.phone, 'trim').required().minLength(10).getError(),
+    bio: stringValidator(source.bio).maxLength(200).getError()
+  })
+});
+```
+
+```svelte
+<!-- Reset button only appears when form is dirty -->
+{#if $isDirty}
+  <button onclick={reset}>Reset to Initial Values</button>
+{/if}
+```
+
+---
+
+### ActionDemo
+
+Demonstrates async action execution with loading states and error handling.
+
+**APIs:** createSvState(), execute(), action, actionCompleted
+**Stores:** errors, hasErrors, isDirty, actionInProgress, actionError
+
+```typescript
+const sourceData = {
+  title: '',
+  description: ''
+};
+
+const {
+  data,
+  execute,
+  state: { errors, hasErrors, isDirty, actionInProgress, actionError }
+} = createSvState(sourceData, {
+  validator: (source) => ({
+    title: stringValidator(source.title, 'trim').required().minLength(3).maxLength(50).getError(),
+    description: stringValidator(source.description, 'trim').required().minLength(10).maxLength(200).getError()
+  }),
+  action: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Perform API call here
+    if (shouldFail) throw new Error('Server error');
+  },
+  actionCompleted: (error) => {
+    if (error) console.log('Action failed:', error);
+    else console.log('Action succeeded');
+  }
+});
+```
+
+```svelte
+<!-- Submit button with loading state -->
+<button onclick={() => execute()} disabled={$hasErrors || $actionInProgress}>
+  {$actionInProgress ? 'Submitting...' : 'Submit'}
+</button>
+
+<!-- Display action error -->
+{#if $actionError}
+  <div class="error">{$actionError.message}</div>
+{/if}
+
+<!-- Loading indicator -->
+{#if $actionInProgress}
+  <div class="loading">Submitting...</div>
+{/if}
+```
+
+---
+
+### OptionsDemo
+
+Interactive playground for configuring createSvState options like debouncing and error persistence.
+
+**APIs:** createSvState() with options parameter
+**Options:** resetDirtyOnAction, debounceValidation, persistActionError
+
+```typescript
+const { data, execute, state } = createSvState(
+  sourceData,
+  {
+    validator: (source) => ({ /* ... */ }),
+    effect: ({ property }) => { /* ... */ },
+    action: async () => { /* ... */ }
+  },
+  {
+    // Reset isDirty to false after successful action
+    resetDirtyOnAction: true,    // default: true
+
+    // Debounce validation by N milliseconds
+    debounceValidation: 0,       // default: 0 (uses queueMicrotask)
+
+    // Keep action errors until next action (not cleared on data change)
+    persistActionError: false    // default: false
+  }
+);
+```
+
+```typescript
+// resetDirtyOnAction behavior
+// With true (default): isDirty becomes false after successful execute()
+// With false: isDirty remains true after execute()
+
+// debounceValidation behavior
+// With 0 (default): Validation runs via queueMicrotask after each change
+// With 500: Validation runs 500ms after the last change (useful for rapid typing)
+
+// persistActionError behavior
+// With false (default): actionError clears when data changes
+// With true: actionError remains until next execute() call
+```
