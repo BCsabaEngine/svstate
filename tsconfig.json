@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "esnext",
     "lib": ["esnext", "DOM"],
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "sourceMap": false,
     "removeComments": true,
     "importHelpers": false,

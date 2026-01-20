@@ -1,15 +1,16 @@
 {
   "name": "svstate",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
   "author": "BCsabaEngine",
   "license": "ISC",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     }
   },
   "engines": {
@@ -54,8 +55,8 @@
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@types/node": "^25.0.9",
-    "@typescript-eslint/eslint-plugin": "^8.53.0",
-    "@typescript-eslint/parser": "^8.53.0",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
     "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
@@ -63,7 +64,7 @@
     "eslint-plugin-unicorn": "^62.0.0",
     "nodemon": "^3.1.11",
     "prettier": "^3.8.0",
-    "svelte": "^5.46.4",
+    "svelte": "^5.47.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
