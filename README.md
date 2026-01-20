@@ -800,6 +800,7 @@ const { data, state } = createSvState<UserData, UserErrors, object>(
 ## 📚 Resources
 
 - 🎮 [Live Demo](https://bcsabaengine.github.io/svstate/) — Try it in your browser
+- 🛠️ [SvelteKit Example](https://github.com/BCsabaEngine/svstate-kit) — Example SvelteKit application using svstate
 - 📖 [Documentation](https://github.com/BCsabaEngine/svstate)
 - 🐛 [Report Issues](https://github.com/BCsabaEngine/svstate/issues)
 - 💬 [Discussions](https://github.com/BCsabaEngine/svstate/discussions)
