@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **svstate** is a Svelte 5 library that provides a supercharged `$state()` with deep reactive proxies, validation, snapshot/undo, and side effects. It's designed as a peer dependency for Svelte 5 projects.
 
+**Module Format:** ESM (ES Modules) only — no CommonJS build is provided.
+
 ## Development Commands
 
 **Requires Node >=20, npm >=9**
@@ -172,7 +174,7 @@ Four chainable validator builders with `getError()` to extract the first error:
 
 ### TypeScript
 
-- Target: ESNext with CommonJS modules
+- Target: ESNext with ESM (ES Modules)
 - Strict mode with: `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`, `noUncheckedIndexedAccess`
 
 ## Testing

@@ -104,6 +104,8 @@ npm install svstate
 
 **Requirements:** Node.js ≥20, Svelte 5
 
+**Note:** This package is distributed as ESM (ES Modules) only.
+
 ---
 
 ## 🎯 Core Features
