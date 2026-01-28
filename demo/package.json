@@ -23,8 +23,8 @@
 		"@tailwindcss/postcss": "^4.1.18",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tsconfig/svelte": "^5.0.6",
-		"@typescript-eslint/eslint-plugin": "^8.53.1",
-		"@typescript-eslint/parser": "^8.53.1",
+		"@typescript-eslint/eslint-plugin": "^8.54.0",
+		"@typescript-eslint/parser": "^8.54.0",
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-simple-import-sort": "^12.1.1",
@@ -42,6 +42,6 @@
 		"vite": "^7.3.1"
 	},
 	"dependencies": {
-		"svelte": "^5.48.2"
+		"svelte": "^5.48.5"
 	}
 }
