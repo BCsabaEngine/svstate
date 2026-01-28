@@ -92,7 +92,7 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 
 **Returns:**
 
-- `data` - Deep reactive proxy around the state object
+- `data` - Deep reactive proxy around the state object (methods on the object are preserved and callable)
 - `execute(params)` - Async function to run the configured action
 - `rollback(steps?)` - Undo N steps (default 1), restores state and triggers validation
 - `reset()` - Return to initial snapshot, triggers validation
@@ -139,6 +139,24 @@ effect: ({ snapshot, property }) => {
 - Initial state is saved as first snapshot with title `"Initial"`
 - Successful action execution resets snapshots with current state as new initial
 - `rollback()` and `reset()` trigger validation after restoring state
+
+### Deep Clone System (src/state.svelte.ts)
+
+The `deepClone` function preserves object prototypes using `Object.create(Object.getPrototypeOf(object))`. This allows state objects to include methods that operate on `this`:
+
+```typescript
+const createState = () => ({
+  value: 0,
+  format() {
+    return `$${this.value.toFixed(2)}`;
+  }
+});
+
+const { data } = createSvState(createState());
+data.format(); // Works — method preserved
+```
+
+Methods are preserved through snapshots, rollback, and reset operations.
 
 ### Deep Proxy System (src/proxy.ts)
 
