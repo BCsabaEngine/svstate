@@ -73,6 +73,7 @@ const customer = $state({
 - ⚡ **Fires effects** when any property changes (with full context)
 - ⏪ **Snapshots & undo** for complex editing workflows
 - 🎯 **Tracks dirty state** automatically
+- 🔧 **Supports methods** on state objects for computed values and formatting
 
 ```typescript
 import { createSvState, stringValidator, numberValidator } from 'svstate';
@@ -331,6 +332,70 @@ const { data } = createSvState(formData, actuators, {
 | `debounceValidation`     | `0`     | Delay validation (0 = next microtask)    |
 | `allowConcurrentActions` | `false` | Block execute() while action runs        |
 | `persistActionError`     | `false` | Clear error on next change or action     |
+
+---
+
+### 6️⃣ State Objects with Methods
+
+State objects can include methods that operate on `this`. Methods are preserved through snapshots and undo operations, making it easy to encapsulate computed values and formatting logic:
+
+```typescript
+import { createSvState, numberValidator } from 'svstate';
+
+// Define state with methods
+type InvoiceData = {
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  calculateTotals: (taxRate?: number) => void;
+  formatCurrency: (value: number) => string;
+};
+
+const createInvoice = (): InvoiceData => ({
+  unitPrice: 0,
+  quantity: 1,
+  subtotal: 0,
+  tax: 0,
+  total: 0,
+  calculateTotals(taxRate = 0.08) {
+    this.subtotal = this.unitPrice * this.quantity;
+    this.tax = this.subtotal * taxRate;
+    this.total = this.subtotal + this.tax;
+  },
+  formatCurrency(value: number) {
+    return `$${value.toFixed(2)}`;
+  }
+});
+
+const {
+  data,
+  state: { errors }
+} = createSvState(createInvoice(), {
+  validator: (source) => ({
+    unitPrice: numberValidator(source.unitPrice).required().positive().getError(),
+    quantity: numberValidator(source.quantity).required().integer().min(1).getError()
+  }),
+  effect: ({ property }) => {
+    // Call method directly on state when inputs change
+    if (property === 'unitPrice' || property === 'quantity') {
+      data.calculateTotals();
+    }
+  }
+});
+
+// In template: use methods for formatting
+// {data.formatCurrency(data.subtotal)} → "$99.00"
+// {data.formatCurrency(data.total)} → "$106.92"
+```
+
+**Key features:**
+
+- 🔧 Methods can modify `this` properties (triggers validation/effects)
+- 📸 Methods preserved through `rollback()` and `reset()`
+- 🎯 Call methods from effects to compute derived values
+- 📐 Encapsulate formatting and business logic in state object
 
 ---
 
@@ -698,7 +763,7 @@ Creates a supercharged state object.
 **Returns:**
 | Property | Type | Description |
 |----------|------|-------------|
-| `data` | `T` | Deep reactive proxy — bind directly |
+| `data` | `T` | Deep reactive proxy — bind directly, methods preserved |
 | `execute(params?)` | `(P?) => Promise<void>` | Run the configured action |
 | `rollback(steps?)` | `(n?: number) => void` | Undo N changes (default: 1) |
 | `reset()` | `() => void` | Return to initial state |
@@ -786,6 +851,7 @@ const { data, state } = createSvState<UserData, UserErrors, object>(
 | Undo/Redo              | ❌ DIY             | ✅ Built-in     |
 | Dirty tracking         | ❌ DIY             | ✅ Automatic    |
 | Action loading states  | ❌ DIY             | ✅ Built-in     |
+| State with methods     | ⚠️ Manual cloning  | ✅ Automatic    |
 
 **svstate is for:**
 

@@ -4,6 +4,7 @@
 	import ActionDemo from './pages/ActionDemo.svelte';
 	import ArrayProperty from './pages/ArrayProperty.svelte';
 	import BasicValidation from './pages/BasicValidation.svelte';
+	import CalculatedClass from './pages/CalculatedClass.svelte';
 	import CalculatedFields from './pages/CalculatedFields.svelte';
 	import NestedObjects from './pages/NestedObjects.svelte';
 	import OptionsDemo from './pages/OptionsDemo.svelte';
@@ -15,6 +16,7 @@
 		| 'nested-objects'
 		| 'array-property'
 		| 'calculated-fields'
+		| 'calculated-class'
 		| 'reset-demo'
 		| 'snapshot-demo'
 		| 'action-demo'
@@ -25,6 +27,7 @@
 		{ value: 'nested-objects', name: 'Nested Objects' },
 		{ value: 'array-property', name: 'Array Property' },
 		{ value: 'calculated-fields', name: 'Calculated Fields' },
+		{ value: 'calculated-class', name: 'State with Methods' },
 		{ value: 'reset-demo', name: 'Reset' },
 		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' },
 		{ value: 'action-demo', name: 'Action & Error' },
@@ -126,6 +129,8 @@
 				<ArrayProperty />
 			{:else if selectedMode === 'calculated-fields'}
 				<CalculatedFields />
+			{:else if selectedMode === 'calculated-class'}
+				<CalculatedClass />
 			{:else if selectedMode === 'reset-demo'}
 				<ResetDemo />
 			{:else if selectedMode === 'snapshot-demo'}

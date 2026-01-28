@@ -2,6 +2,53 @@ import { get } from 'svelte/store';
 
 import { createSvState, type Validator } from '../src/index';
 
+// Test classes for class instance support tests
+class TestClass {
+  name: string;
+  count: number;
+
+  constructor(name = 'test', count = 0) {
+    this.name = name;
+    this.count = count;
+  }
+
+  increment(): void {
+    this.count++;
+  }
+
+  formatName(): string {
+    return `Name: ${this.name}`;
+  }
+
+  getInfo(): string {
+    return `${this.name} (${this.count})`;
+  }
+}
+
+class NestedClass {
+  value: string;
+
+  constructor(value = 'nested') {
+    this.value = value;
+  }
+
+  getValue(): string {
+    return this.value;
+  }
+}
+
+class ParentClass {
+  nested: NestedClass;
+
+  constructor() {
+    this.nested = new NestedClass('initial');
+  }
+
+  getNestedValue(): string {
+    return this.nested.getValue();
+  }
+}
+
 describe('createSvState basic functionality', () => {
   it('should create state with initial data', () => {
     const { data } = createSvState({ name: 'test', count: 5 });
@@ -982,6 +1029,127 @@ describe('edge case coverage for defensive guards', () => {
     expect(data.value).toBe(0);
     expect(get(state.snapshots)).toHaveLength(1);
     expect(get(state.snapshots)[0].title).toBe('Initial');
+  });
+});
+
+describe('class instance support', () => {
+  it('should preserve class prototype when cloning', () => {
+    const { state } = createSvState(new TestClass('original', 5), {
+      effect: ({ snapshot }) => {
+        snapshot('Changed', false);
+      }
+    });
+
+    const snaps = get(state.snapshots);
+    expect(snaps[0].data).toBeInstanceOf(TestClass);
+  });
+
+  it('should call methods through proxy', () => {
+    const { data } = createSvState(new TestClass('test', 0));
+
+    expect(data.formatName()).toBe('Name: test');
+    expect(data.getInfo()).toBe('test (0)');
+  });
+
+  it('should preserve methods after rollback', () => {
+    const { data, rollback } = createSvState(new TestClass('initial', 0), {
+      effect: ({ snapshot }) => {
+        snapshot('Changed');
+      }
+    });
+
+    data.name = 'changed';
+    rollback();
+
+    expect(data.name).toBe('initial');
+    expect(typeof data.formatName).toBe('function');
+    expect(data.formatName()).toBe('Name: initial');
+  });
+
+  it('should preserve methods after reset', () => {
+    const { data, reset } = createSvState(new TestClass('initial', 5), {
+      effect: ({ snapshot }) => {
+        snapshot('Changed', false);
+      }
+    });
+
+    data.name = 'modified';
+    data.count = 100;
+    reset();
+
+    expect(data.name).toBe('initial');
+    expect(data.count).toBe(5);
+    expect(typeof data.formatName).toBe('function');
+    expect(data.formatName()).toBe('Name: initial');
+    expect(data.getInfo()).toBe('initial (5)');
+  });
+
+  it('should handle nested class instances', () => {
+    const { data, state } = createSvState(new ParentClass(), {
+      effect: ({ snapshot }) => {
+        snapshot('Changed', false);
+      }
+    });
+
+    expect(data.getNestedValue()).toBe('initial');
+
+    data.nested.value = 'updated';
+
+    const snaps = get(state.snapshots);
+    expect(snaps[0].data).toBeInstanceOf(ParentClass);
+    expect(snaps[0].data.getNestedValue()).toBe('initial');
+    expect(data.getNestedValue()).toBe('updated');
+  });
+
+  it('should trigger change callback when method mutates state', () => {
+    let changeCount = 0;
+    let lastProperty = '';
+
+    const { data } = createSvState(new TestClass('test', 0), {
+      effect: ({ property }) => {
+        changeCount++;
+        lastProperty = property;
+      }
+    });
+
+    data.increment();
+
+    expect(changeCount).toBe(1);
+    expect(lastProperty).toBe('count');
+    expect(data.count).toBe(1);
+  });
+
+  it('should clone class instances correctly in snapshots', () => {
+    const { data, state } = createSvState(new TestClass('original', 10), {
+      effect: ({ snapshot }) => {
+        snapshot('Changed', false);
+      }
+    });
+
+    data.name = 'modified';
+
+    const snaps = get(state.snapshots);
+    expect(snaps).toHaveLength(2);
+    expect(snaps[0].data.name).toBe('original');
+    expect(snaps[0].data.count).toBe(10);
+    expect(snaps[1].data.name).toBe('modified');
+
+    // Verify snapshots are independent
+    expect(snaps[0].data).not.toBe(snaps[1].data);
+    expect(snaps[0].data.formatName()).toBe('Name: original');
+    expect(snaps[1].data.formatName()).toBe('Name: modified');
+  });
+
+  it('should preserve methods after successful action', async () => {
+    const { data, execute } = createSvState(new TestClass('initial', 0), {
+      action: async () => {}
+    });
+
+    data.name = 'after-action';
+    await execute();
+
+    expect(typeof data.formatName).toBe('function');
+    expect(data.formatName()).toBe('Name: after-action');
   });
 });
 
