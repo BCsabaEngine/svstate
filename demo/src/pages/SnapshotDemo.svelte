@@ -31,10 +31,10 @@
 		state: { errors, hasErrors, isDirty, snapshots }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			firstName: stringValidator(source.firstName, 'trim').required().minLength(2).maxLength(30).getError(),
-			lastName: stringValidator(source.lastName, 'trim').required().minLength(2).maxLength(30).getError(),
-			email: stringValidator(source.email, 'trim').required().email().getError(),
-			phone: stringValidator(source.phone, 'trim').required().minLength(10).getError(),
+			firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+			lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+			email: stringValidator(source.email).prepare('trim').required().email().getError(),
+			phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
 			bio: stringValidator(source.bio).maxLength(200).getError()
 		}),
 		effect: ({ snapshot, property }) => {

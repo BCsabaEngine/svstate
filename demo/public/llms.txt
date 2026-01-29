@@ -25,11 +25,11 @@ const {
   state: { errors, hasErrors, isDirty }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    username: stringValidator(source.username, 'trim').required().minLength(3).maxLength(20).noSpace().getError(),
-    email: stringValidator(source.email, 'trim').required().email().getError(),
+    username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
+    email: stringValidator(source.email).prepare('trim').required().email().getError(),
     age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
     bio: stringValidator(source.bio).maxLength(200).getError(),
-    website: stringValidator(source.website, 'trim').website('required').getError()
+    website: stringValidator(source.website).prepare('trim').website('required').getError()
   })
 });
 ```
@@ -68,18 +68,18 @@ const {
   state: { errors, hasErrors, isDirty }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    name: stringValidator(source.name, 'trim').required().minLength(2).maxLength(50).getError(),
+    name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
     address: {
-      street: stringValidator(source.address.street, 'trim').required().minLength(5).getError(),
-      city: stringValidator(source.address.city, 'trim').required().minLength(2).getError(),
-      zip: stringValidator(source.address.zip, 'trim').required().minLength(5).maxLength(10).getError()
+      street: stringValidator(source.address.street).prepare('trim').required().minLength(5).getError(),
+      city: stringValidator(source.address.city).prepare('trim').required().minLength(2).getError(),
+      zip: stringValidator(source.address.zip).prepare('trim').required().minLength(5).maxLength(10).getError()
     },
     company: {
-      name: stringValidator(source.company.name, 'trim').required().minLength(2).getError(),
-      department: stringValidator(source.company.department, 'trim').maxLength(50).getError(),
+      name: stringValidator(source.company.name).prepare('trim').required().minLength(2).getError(),
+      department: stringValidator(source.company.department).prepare('trim').maxLength(50).getError(),
       contact: {
-        phone: stringValidator(source.company.contact.phone, 'trim').required().minLength(10).getError(),
-        email: stringValidator(source.company.contact.email, 'trim').required().email().getError()
+        phone: stringValidator(source.company.contact.phone).prepare('trim').required().minLength(10).getError(),
+        email: stringValidator(source.company.contact.email).prepare('trim').required().email().getError()
       }
     }
   })
@@ -118,14 +118,14 @@ const {
   state: { errors, hasErrors, isDirty }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    listName: stringValidator(source.listName, 'trim').required().minLength(2).getError(),
+    listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
     items: arrayValidator(source.items).required().minLength(1).getError(),
     ...Object.fromEntries(
       source.items.map((item, index) => [
         `item_${index}`,
         {
-          name: stringValidator(item.name, 'trim').required().minLength(2).getError(),
-          email: stringValidator(item.email, 'trim').required().email().getError()
+          name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
+          email: stringValidator(item.email).prepare('trim').required().email().getError()
         }
       ])
     )
@@ -176,7 +176,7 @@ const {
   state: { errors, hasErrors, isDirty }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    productName: stringValidator(source.productName, 'trim').required().minLength(2).getError(),
+    productName: stringValidator(source.productName).prepare('trim').required().minLength(2).getError(),
     item: {
       unitPrice: numberValidator(source.item.unitPrice).required().positive().getError(),
       quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
@@ -217,10 +217,10 @@ const {
   state: { errors, hasErrors, isDirty, snapshots }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    firstName: stringValidator(source.firstName, 'trim').required().minLength(2).maxLength(30).getError(),
-    lastName: stringValidator(source.lastName, 'trim').required().minLength(2).maxLength(30).getError(),
-    email: stringValidator(source.email, 'trim').required().email().getError(),
-    phone: stringValidator(source.phone, 'trim').required().minLength(10).getError(),
+    firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+    lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+    email: stringValidator(source.email).prepare('trim').required().email().getError(),
+    phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
     bio: stringValidator(source.bio).maxLength(200).getError()
   }),
   effect: ({ snapshot, property }) => {
@@ -271,10 +271,10 @@ const {
   state: { errors, hasErrors, isDirty }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    firstName: stringValidator(source.firstName, 'trim').required().minLength(2).maxLength(30).getError(),
-    lastName: stringValidator(source.lastName, 'trim').required().minLength(2).maxLength(30).getError(),
-    email: stringValidator(source.email, 'trim').required().email().getError(),
-    phone: stringValidator(source.phone, 'trim').required().minLength(10).getError(),
+    firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+    lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+    email: stringValidator(source.email).prepare('trim').required().email().getError(),
+    phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
     bio: stringValidator(source.bio).maxLength(200).getError()
   })
 });
@@ -308,8 +308,8 @@ const {
   state: { errors, hasErrors, isDirty, actionInProgress, actionError }
 } = createSvState(sourceData, {
   validator: (source) => ({
-    title: stringValidator(source.title, 'trim').required().minLength(3).maxLength(50).getError(),
-    description: stringValidator(source.description, 'trim').required().minLength(10).maxLength(200).getError()
+    title: stringValidator(source.title).prepare('trim').required().minLength(3).maxLength(50).getError(),
+    description: stringValidator(source.description).prepare('trim').required().minLength(10).maxLength(200).getError()
   }),
   action: async () => {
     await new Promise((resolve) => setTimeout(resolve, 500));

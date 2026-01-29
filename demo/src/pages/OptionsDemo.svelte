@@ -35,8 +35,8 @@
 			getInitialData(),
 			{
 				validator: (source) => ({
-					name: stringValidator(source.name, 'trim').required().minLength(2).maxLength(50).getError(),
-					email: stringValidator(source.email, 'trim').required().email().getError()
+					name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
+					email: stringValidator(source.email).prepare('trim').required().email().getError()
 				}),
 				effect: ({ property }) => {
 					lastChangedProperty = property;

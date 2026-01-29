@@ -35,18 +35,18 @@
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			name: stringValidator(source.name, 'trim').required().minLength(2).maxLength(50).getError(),
+			name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
 			address: {
-				street: stringValidator(source.address.street, 'trim').required().minLength(5).getError(),
-				city: stringValidator(source.address.city, 'trim').required().minLength(2).getError(),
-				zip: stringValidator(source.address.zip, 'trim').required().minLength(5).maxLength(10).getError()
+				street: stringValidator(source.address.street).prepare('trim').required().minLength(5).getError(),
+				city: stringValidator(source.address.city).prepare('trim').required().minLength(2).getError(),
+				zip: stringValidator(source.address.zip).prepare('trim').required().minLength(5).maxLength(10).getError()
 			},
 			company: {
-				name: stringValidator(source.company.name, 'trim').required().minLength(2).getError(),
-				department: stringValidator(source.company.department, 'trim').maxLength(50).getError(),
+				name: stringValidator(source.company.name).prepare('trim').required().minLength(2).getError(),
+				department: stringValidator(source.company.department).prepare('trim').maxLength(50).getError(),
 				contact: {
-					phone: stringValidator(source.company.contact.phone, 'trim').required().minLength(10).getError(),
-					email: stringValidator(source.company.contact.email, 'trim').required().email().getError()
+					phone: stringValidator(source.company.contact.phone).prepare('trim').required().minLength(10).getError(),
+					email: stringValidator(source.company.contact.email).prepare('trim').required().email().getError()
 				}
 			}
 		})
@@ -78,18 +78,18 @@
 
 const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
   validator: (source) => ({
-    name: stringValidator(source.name, 'trim').required().minLength(2).maxLength(50).getError(),
+    name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
     address: {
-      street: stringValidator(source.address.street, 'trim').required().minLength(5).getError(),
-      city: stringValidator(source.address.city, 'trim').required().minLength(2).getError(),
-      zip: stringValidator(source.address.zip, 'trim').required().minLength(5).maxLength(10).getError()
+      street: stringValidator(source.address.street).prepare('trim').required().minLength(5).getError(),
+      city: stringValidator(source.address.city).prepare('trim').required().minLength(2).getError(),
+      zip: stringValidator(source.address.zip).prepare('trim').required().minLength(5).maxLength(10).getError()
     },
     company: {
-      name: stringValidator(source.company.name, 'trim').required().minLength(2).getError(),
-      department: stringValidator(source.company.department, 'trim').maxLength(50).getError(),
+      name: stringValidator(source.company.name).prepare('trim').required().minLength(2).getError(),
+      department: stringValidator(source.company.department).prepare('trim').maxLength(50).getError(),
       contact: {
-        phone: stringValidator(source.company.contact.phone, 'trim').required().minLength(10).getError(),
-        email: stringValidator(source.company.contact.email, 'trim').required().email().getError()
+        phone: stringValidator(source.company.contact.phone).prepare('trim').required().minLength(10).getError(),
+        email: stringValidator(source.company.contact.email).prepare('trim').required().email().getError()
       }
     }
   })

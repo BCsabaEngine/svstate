@@ -23,8 +23,13 @@
 		state: { errors, hasErrors, isDirty, actionInProgress, actionError }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			title: stringValidator(source.title, 'trim').required().minLength(3).maxLength(50).getError(),
-			description: stringValidator(source.description, 'trim').required().minLength(10).maxLength(200).getError()
+			title: stringValidator(source.title).prepare('trim').required().minLength(3).maxLength(50).getError(),
+			description: stringValidator(source.description)
+				.prepare('trim')
+				.required()
+				.minLength(10)
+				.maxLength(200)
+				.getError()
 		}),
 		action: async () => {
 			const delay = randomInt(100, 1000);
@@ -55,8 +60,8 @@
 	const stateSourceCode = `const { data, execute, state: { errors, hasErrors, isDirty, actionInProgress, actionError } } =
   createSvState(sourceData, {
     validator: (source) => ({
-      title: stringValidator(source.title, 'trim').required().minLength(3).maxLength(50).getError(),
-      description: stringValidator(source.description, 'trim').required().minLength(10).getError()
+      title: stringValidator(source.title).prepare('trim').required().minLength(3).maxLength(50).getError(),
+      description: stringValidator(source.description).prepare('trim').required().minLength(10).getError()
     }),
     action: async () => {
       // Simulate API call with 100-1000ms delay
