@@ -8,19 +8,20 @@ const prepareOps: Record<PrepareOption, (s: string) => string> = {
   lower: (s) => s.toLowerCase()
 };
 
-// Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
-export function stringValidator(input: string, ...prepares: (BaseOption | 'upper')[]): StringValidatorBuilder;
-export function stringValidator(input: string, ...prepares: (BaseOption | 'lower')[]): StringValidatorBuilder;
-export function stringValidator(input: string, ...prepares: BaseOption[]): StringValidatorBuilder;
-export function stringValidator(input: string, ...prepares: PrepareOption[]): StringValidatorBuilder {
+export function stringValidator(input: string): StringValidatorBuilder {
   let error = '';
+  let processedInput = input;
+
   const setError = (message: string) => {
     if (!error) error = message;
   };
 
-  const processedInput = prepares.reduce((s, op) => prepareOps[op](s), input);
-
   const builder: StringValidatorBuilder = {
+    prepare(...prepares: PrepareOption[]) {
+      processedInput = prepares.reduce((s, op) => prepareOps[op](s), processedInput);
+      return builder;
+    },
+
     required() {
       if (!error && !processedInput) setError('Required');
       return builder;
@@ -116,7 +117,11 @@ export function stringValidator(input: string, ...prepares: PrepareOption[]): St
   return builder;
 }
 
+// Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
 type StringValidatorBuilder = {
+  prepare(...prepares: (BaseOption | 'upper')[]): StringValidatorBuilder;
+  prepare(...prepares: (BaseOption | 'lower')[]): StringValidatorBuilder;
+  prepare(...prepares: BaseOption[]): StringValidatorBuilder;
   required(): StringValidatorBuilder;
   noSpace(): StringValidatorBuilder;
   minLength(length: number): StringValidatorBuilder;

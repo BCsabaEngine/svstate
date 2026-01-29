@@ -3,28 +3,28 @@ import { arrayValidator, dateValidator, numberValidator, stringValidator } from 
 describe('stringValidator', () => {
   describe('prepare options', () => {
     it('should trim whitespace', () => {
-      expect(stringValidator('  hello  ', 'trim').required().getError()).toBe('');
-      expect(stringValidator('  hello  ', 'trim').minLength(6).getError()).toBe('Min length 6');
+      expect(stringValidator('  hello  ').prepare('trim').required().getError()).toBe('');
+      expect(stringValidator('  hello  ').prepare('trim').minLength(6).getError()).toBe('Min length 6');
     });
 
     it('should normalize multiple spaces', () => {
-      expect(stringValidator('hello   world', 'normalize').noSpace().getError()).toBe('No space allowed');
-      expect(stringValidator('hello   world', 'normalize').minLength(12).getError()).toBe('Min length 12');
+      expect(stringValidator('hello   world').prepare('normalize').noSpace().getError()).toBe('No space allowed');
+      expect(stringValidator('hello   world').prepare('normalize').minLength(12).getError()).toBe('Min length 12');
     });
 
     it('should convert to uppercase', () => {
-      expect(stringValidator('hello', 'upper').uppercase().getError()).toBe('');
-      expect(stringValidator('hello', 'upper').lowercase().getError()).toBe('Lowercase only');
+      expect(stringValidator('hello').prepare('upper').uppercase().getError()).toBe('');
+      expect(stringValidator('hello').prepare('upper').lowercase().getError()).toBe('Lowercase only');
     });
 
     it('should convert to lowercase', () => {
-      expect(stringValidator('HELLO', 'lower').lowercase().getError()).toBe('');
-      expect(stringValidator('HELLO', 'lower').uppercase().getError()).toBe('Uppercase only');
+      expect(stringValidator('HELLO').prepare('lower').lowercase().getError()).toBe('');
+      expect(stringValidator('HELLO').prepare('lower').uppercase().getError()).toBe('Uppercase only');
     });
 
     it('should chain multiple prepare options', () => {
-      expect(stringValidator('  HELLO  ', 'trim', 'lower').getError()).toBe('');
-      expect(stringValidator('  HELLO  ', 'trim', 'lower').uppercase().getError()).toBe('Uppercase only');
+      expect(stringValidator('  HELLO  ').prepare('trim', 'lower').getError()).toBe('');
+      expect(stringValidator('  HELLO  ').prepare('trim', 'lower').uppercase().getError()).toBe('Uppercase only');
     });
   });
 
@@ -38,7 +38,7 @@ describe('stringValidator', () => {
     });
 
     it('should fail for whitespace-only when trimmed', () => {
-      expect(stringValidator('   ', 'trim').required().getError()).toBe('Required');
+      expect(stringValidator('   ').prepare('trim').required().getError()).toBe('Required');
     });
   });
 
