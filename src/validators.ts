@@ -1,11 +1,13 @@
 type BaseOption = 'trim' | 'normalize';
-type PrepareOption = BaseOption | 'upper' | 'lower';
+type PrepareOption = BaseOption | 'upper' | 'lower' | 'localeUpper' | 'localeLower';
 
 const prepareOps: Record<PrepareOption, (s: string) => string> = {
   trim: (s) => s.trim(),
   normalize: (s) => s.replaceAll(/\s{2,}/g, ' '),
   upper: (s) => s.toUpperCase(),
-  lower: (s) => s.toLowerCase()
+  lower: (s) => s.toLowerCase(),
+  localeUpper: (s) => s.toLocaleUpperCase(),
+  localeLower: (s) => s.toLocaleLowerCase()
 };
 
 export function stringValidator(input: string | null | undefined): StringValidatorBuilder {
@@ -31,6 +33,12 @@ export function stringValidator(input: string | null | undefined): StringValidat
     noSpace() {
       if (isNullish) return builder;
       if (!error && processedInput.includes(' ')) setError('No space allowed');
+      return builder;
+    },
+
+    notBlank() {
+      if (isNullish) return builder;
+      if (!error && processedInput.length > 0 && processedInput.trim().length === 0) setError('Must not be blank');
       return builder;
     },
 
@@ -71,10 +79,18 @@ export function stringValidator(input: string | null | undefined): StringValidat
       return builder;
     },
 
-    inArray(values: string[] | Record<string, unknown>) {
+    in(values: string[] | Record<string, unknown>) {
       if (error) return builder;
       const allowed = Array.isArray(values) ? values : Object.keys(values);
       if (processedInput && !allowed.includes(processedInput)) setError(`Must be one of: ${allowed.join(', ')}`);
+      return builder;
+    },
+
+    notIn(values: string[] | Record<string, unknown>) {
+      if (error) return builder;
+      const disallowed = Array.isArray(values) ? values : Object.keys(values);
+      if (processedInput && disallowed.includes(processedInput))
+        setError(`Must not be one of: ${disallowed.join(', ')}`);
       return builder;
     },
 
@@ -115,6 +131,16 @@ export function stringValidator(input: string | null | undefined): StringValidat
       return builder;
     },
 
+    slug() {
+      if (!error && processedInput && !/^[\da-z-]+$/.test(processedInput)) setError('Invalid slug format');
+      return builder;
+    },
+
+    identifier() {
+      if (!error && processedInput && !/^[A-Z_a-z]\w*$/.test(processedInput)) setError('Invalid identifier format');
+      return builder;
+    },
+
     getError() {
       return error;
     }
@@ -123,26 +149,32 @@ export function stringValidator(input: string | null | undefined): StringValidat
   return builder;
 }
 
-// Overloads enforce XOR: only 'upper' OR 'lower' allowed, not both
+// Overloads enforce XOR: only one case variant allowed at a time
 type StringValidatorBuilder = {
   prepare(...prepares: (BaseOption | 'upper')[]): StringValidatorBuilder;
   prepare(...prepares: (BaseOption | 'lower')[]): StringValidatorBuilder;
+  prepare(...prepares: (BaseOption | 'localeUpper')[]): StringValidatorBuilder;
+  prepare(...prepares: (BaseOption | 'localeLower')[]): StringValidatorBuilder;
   prepare(...prepares: BaseOption[]): StringValidatorBuilder;
   required(): StringValidatorBuilder;
   noSpace(): StringValidatorBuilder;
+  notBlank(): StringValidatorBuilder;
   minLength(length: number): StringValidatorBuilder;
   maxLength(length: number): StringValidatorBuilder;
   uppercase(): StringValidatorBuilder;
   lowercase(): StringValidatorBuilder;
   startsWith(prefix: string | string[]): StringValidatorBuilder;
   regexp(regexp: RegExp, message?: string): StringValidatorBuilder;
-  inArray(values: string[] | Record<string, unknown>): StringValidatorBuilder;
+  in(values: string[] | Record<string, unknown>): StringValidatorBuilder;
+  notIn(values: string[] | Record<string, unknown>): StringValidatorBuilder;
   email(): StringValidatorBuilder;
   website(prefix?: 'required' | 'forbidden' | 'optional'): StringValidatorBuilder;
   endsWith(suffix: string | string[]): StringValidatorBuilder;
   contains(substring: string): StringValidatorBuilder;
   alphanumeric(): StringValidatorBuilder;
   numeric(): StringValidatorBuilder;
+  slug(): StringValidatorBuilder;
+  identifier(): StringValidatorBuilder;
   getError(): string;
 };
 

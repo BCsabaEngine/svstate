@@ -25,7 +25,13 @@
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
+			username: stringValidator(source.username)
+				.prepare('trim')
+				.required()
+				.minLength(3)
+				.maxLength(20)
+				.noSpace()
+				.getError(),
 			email: stringValidator(source.email).prepare('trim').required().email().getError(),
 			age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
 			bio: stringValidator(source.bio).maxLength(200).getError(),
