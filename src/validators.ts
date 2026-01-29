@@ -8,9 +8,10 @@ const prepareOps: Record<PrepareOption, (s: string) => string> = {
   lower: (s) => s.toLowerCase()
 };
 
-export function stringValidator(input: string): StringValidatorBuilder {
+export function stringValidator(input: string | null | undefined): StringValidatorBuilder {
   let error = '';
-  let processedInput = input;
+  const isNullish = input === null || input === undefined;
+  let processedInput = input ?? '';
 
   const setError = (message: string) => {
     if (!error) error = message;
@@ -23,31 +24,36 @@ export function stringValidator(input: string): StringValidatorBuilder {
     },
 
     required() {
-      if (!error && !processedInput) setError('Required');
+      if (!error && (isNullish || !processedInput)) setError('Required');
       return builder;
     },
 
     noSpace() {
+      if (isNullish) return builder;
       if (!error && processedInput.includes(' ')) setError('No space allowed');
       return builder;
     },
 
     minLength(length: number) {
+      if (isNullish) return builder;
       if (!error && processedInput.length < length) setError(`Min length ${length}`);
       return builder;
     },
 
     maxLength(length: number) {
+      if (isNullish) return builder;
       if (!error && processedInput.length > length) setError(`Max length ${length}`);
       return builder;
     },
 
     uppercase() {
+      if (isNullish) return builder;
       if (!error && processedInput !== processedInput.toUpperCase()) setError('Uppercase only');
       return builder;
     },
 
     lowercase() {
+      if (isNullish) return builder;
       if (!error && processedInput !== processedInput.toLowerCase()) setError('Lowercase only');
       return builder;
     },
@@ -141,59 +147,69 @@ type StringValidatorBuilder = {
 };
 
 // Number Validator
-export function numberValidator(input: number): NumberValidatorBuilder {
+export function numberValidator(input: number | null | undefined): NumberValidatorBuilder {
   let error = '';
+  const isNullish = input === null || input === undefined;
   const setError = (message: string) => {
     if (!error) error = message;
   };
 
   const builder: NumberValidatorBuilder = {
     required() {
-      if (!error && Number.isNaN(input)) setError('Required');
+      if (!error && (isNullish || Number.isNaN(input))) setError('Required');
       return builder;
     },
 
     min(n: number) {
+      if (isNullish) return builder;
       if (!error && input < n) setError(`Minimum ${n}`);
       return builder;
     },
 
     max(n: number) {
+      if (isNullish) return builder;
       if (!error && input > n) setError(`Maximum ${n}`);
       return builder;
     },
 
     between(min: number, max: number) {
+      if (isNullish) return builder;
       if (!error && (input < min || input > max)) setError(`Must be between ${min} and ${max}`);
       return builder;
     },
 
     integer() {
+      if (isNullish) return builder;
       if (!error && !Number.isInteger(input)) setError('Must be an integer');
       return builder;
     },
 
     positive() {
+      if (isNullish) return builder;
       if (!error && input <= 0) setError('Must be positive');
       return builder;
     },
 
     negative() {
+      if (isNullish) return builder;
       if (!error && input >= 0) setError('Must be negative');
       return builder;
     },
 
     nonNegative() {
+      if (isNullish) return builder;
       if (!error && input < 0) setError('Must be non-negative');
       return builder;
     },
 
     multipleOf(n: number) {
+      if (isNullish) return builder;
       if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
       return builder;
     },
 
     decimal(places: number) {
+      if (isNullish) return builder;
       if (error || Number.isNaN(input)) return builder;
       const parts = String(input).split('.');
       const actualPlaces = parts[1]?.length ?? 0;
@@ -202,6 +218,7 @@ export function numberValidator(input: number): NumberValidatorBuilder {
     },
 
     percentage() {
+      if (isNullish) return builder;
       if (!error && (input < 0 || input > 100)) setError('Must be between 0 and 100');
       return builder;
     },
@@ -230,32 +247,37 @@ type NumberValidatorBuilder = {
 };
 
 // Array Validator
-export function arrayValidator<T>(input: T[]): ArrayValidatorBuilder {
+export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidatorBuilder {
   let error = '';
+  const isNullish = input === null || input === undefined;
+  const array = input ?? [];
   const setError = (message: string) => {
     if (!error) error = message;
   };
 
   const builder: ArrayValidatorBuilder = {
     required() {
-      if (!error && input.length === 0) setError('Required');
+      if (!error && (isNullish || array.length === 0)) setError('Required');
       return builder;
     },
 
     minLength(n: number) {
-      if (!error && input.length < n) setError(`Minimum ${n} items`);
+      if (isNullish) return builder;
+      if (!error && array.length < n) setError(`Minimum ${n} items`);
       return builder;
     },
 
     maxLength(n: number) {
-      if (!error && input.length > n) setError(`Maximum ${n} items`);
+      if (isNullish) return builder;
+      if (!error && array.length > n) setError(`Maximum ${n} items`);
       return builder;
     },
 
     unique() {
+      if (isNullish) return builder;
       if (error) return builder;
       const seen = new Set<string>();
-      for (const item of input) {
+      for (const item of array) {
         const key = typeof item === 'object' ? JSON.stringify(item) : String(item);
         if (seen.has(key)) {
           setError('Items must be unique');
@@ -283,14 +305,15 @@ type ArrayValidatorBuilder = {
 };
 
 // Date Validator
-export function dateValidator(input: Date | string | number): DateValidatorBuilder {
+export function dateValidator(input: Date | string | number | null | undefined): DateValidatorBuilder {
   let error = '';
+  const isNullish = input === null || input === undefined;
   const setError = (message: string) => {
     if (!error) error = message;
   };
 
-  const date = input instanceof Date ? input : new Date(input);
-  const isValid = !Number.isNaN(date.getTime());
+  const date = isNullish ? new Date(Number.NaN) : input instanceof Date ? input : new Date(input);
+  const isValid = !isNullish && !Number.isNaN(date.getTime());
 
   const builder: DateValidatorBuilder = {
     required() {

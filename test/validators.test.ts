@@ -386,6 +386,39 @@ describe('stringValidator', () => {
       expect(stringValidator('hi').minLength(5).maxLength(1).getError()).toBe('Min length 5');
     });
   });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(stringValidator(null).minLength(5).getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(stringValidator().minLength(5).getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(stringValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(stringValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(stringValidator(null).minLength(5).maxLength(10).email().getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(stringValidator().noSpace().uppercase().contains('test').getError()).toBe('');
+    });
+
+    it('should allow prepare on nullish values', () => {
+      expect(stringValidator(null).prepare('trim').required().getError()).toBe('Required');
+      expect(stringValidator().prepare('upper').required().getError()).toBe('Required');
+    });
+    /* eslint-enable unicorn/no-null */
+  });
 });
 
 describe('numberValidator', () => {
@@ -598,6 +631,34 @@ describe('numberValidator', () => {
       expect(numberValidator(10).required().min(5).max(15).integer().positive().getError()).toBe('');
     });
   });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(numberValidator(null).min(5).getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(numberValidator().min(5).getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(numberValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(numberValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(numberValidator(null).min(0).max(100).integer().positive().getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(numberValidator().between(1, 10).decimal(2).percentage().getError()).toBe('');
+    });
+    /* eslint-enable unicorn/no-null */
+  });
 });
 
 describe('arrayValidator', () => {
@@ -703,6 +764,34 @@ describe('arrayValidator', () => {
           .getError()
       ).toBe('Required');
     });
+  });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(arrayValidator(null).minLength(5).getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(arrayValidator().minLength(5).getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(arrayValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(arrayValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(arrayValidator(null).minLength(1).maxLength(10).unique().getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(arrayValidator().minLength(1).maxLength(10).unique().getError()).toBe('');
+    });
+    /* eslint-enable unicorn/no-null */
   });
 });
 
@@ -988,5 +1077,33 @@ describe('dateValidator', () => {
     it('should chain multiple validations successfully', () => {
       expect(dateValidator(pastDate).required().past().getError()).toBe('');
     });
+  });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(dateValidator(null).past().getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(dateValidator().past().getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(dateValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(dateValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(dateValidator(null).past().future().weekday().minAge(18).getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(dateValidator().before(new Date()).after(new Date()).weekend().getError()).toBe('');
+    });
+    /* eslint-enable unicorn/no-null */
   });
 });
