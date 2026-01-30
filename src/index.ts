@@ -1,4 +1,7 @@
 export {
+  type AsyncErrors,
+  type AsyncValidator,
+  type AsyncValidatorFunction,
   createSvState,
   type EffectContext,
   type Snapshot,
