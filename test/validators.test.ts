@@ -703,6 +703,27 @@ describe('numberValidator', () => {
     });
   });
 
+  describe('notZero', () => {
+    it('should pass for positive number', () => {
+      expect(numberValidator(5).notZero().getError()).toBe('');
+    });
+
+    it('should pass for negative number', () => {
+      expect(numberValidator(-5).notZero().getError()).toBe('');
+    });
+
+    it('should fail for zero', () => {
+      expect(numberValidator(0).notZero().getError()).toBe('Must not be zero');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).notZero().getError()).toBe('');
+      expect(numberValidator().notZero().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
   describe('multipleOf', () => {
     it('should pass when number is multiple', () => {
       expect(numberValidator(10).multipleOf(5).getError()).toBe('');
@@ -714,6 +735,27 @@ describe('numberValidator', () => {
 
     it('should fail when number is not multiple', () => {
       expect(numberValidator(7).multipleOf(5).getError()).toBe('Must be a multiple of 5');
+    });
+  });
+
+  describe('step', () => {
+    it('should pass when number is on step', () => {
+      expect(numberValidator(10).step(5).getError()).toBe('');
+    });
+
+    it('should pass for zero with any step', () => {
+      expect(numberValidator(0).step(5).getError()).toBe('');
+    });
+
+    it('should fail when number is not on step', () => {
+      expect(numberValidator(7).step(5).getError()).toBe('Must be a multiple of 5');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).step(5).getError()).toBe('');
+      expect(numberValidator().step(5).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 

@@ -234,7 +234,19 @@ export function numberValidator(input: number | null | undefined): NumberValidat
       return builder;
     },
 
+    notZero() {
+      if (isNullish) return builder;
+      if (!error && input === 0) setError('Must not be zero');
+      return builder;
+    },
+
     multipleOf(n: number) {
+      if (isNullish) return builder;
+      if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
+      return builder;
+    },
+
+    step(n: number) {
       if (isNullish) return builder;
       if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
       return builder;
@@ -272,7 +284,9 @@ type NumberValidatorBuilder = {
   positive(): NumberValidatorBuilder;
   negative(): NumberValidatorBuilder;
   nonNegative(): NumberValidatorBuilder;
+  notZero(): NumberValidatorBuilder;
   multipleOf(n: number): NumberValidatorBuilder;
+  step(n: number): NumberValidatorBuilder;
   decimal(places: number): NumberValidatorBuilder;
   percentage(): NumberValidatorBuilder;
   getError(): string;
