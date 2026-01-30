@@ -3,6 +3,7 @@
 
 	import ActionDemo from './pages/ActionDemo.svelte';
 	import ArrayProperty from './pages/ArrayProperty.svelte';
+	import AsyncValidation from './pages/AsyncValidation.svelte';
 	import BasicValidation from './pages/BasicValidation.svelte';
 	import CalculatedClass from './pages/CalculatedClass.svelte';
 	import CalculatedFields from './pages/CalculatedFields.svelte';
@@ -20,6 +21,7 @@
 		| 'reset-demo'
 		| 'snapshot-demo'
 		| 'action-demo'
+		| 'async-validation'
 		| 'options-demo';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
@@ -31,6 +33,7 @@
 		{ value: 'reset-demo', name: 'Reset' },
 		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' },
 		{ value: 'action-demo', name: 'Action & Error' },
+		{ value: 'async-validation', name: 'Async Validation' },
 		{ value: 'options-demo', name: 'Options' }
 	];
 
@@ -137,6 +140,8 @@
 				<SnapshotDemo />
 			{:else if selectedMode === 'action-demo'}
 				<ActionDemo />
+			{:else if selectedMode === 'async-validation'}
+				<AsyncValidation />
 			{:else if selectedMode === 'options-demo'}
 				<OptionsDemo />
 			{/if}
