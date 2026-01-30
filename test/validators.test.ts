@@ -937,6 +937,174 @@ describe('arrayValidator', () => {
     });
   });
 
+  describe('ofLength', () => {
+    it('should pass when array has exact length', () => {
+      expect(arrayValidator([1, 2, 3]).ofLength(3).getError()).toBe('');
+    });
+
+    it('should fail when array has fewer items', () => {
+      expect(arrayValidator([1, 2]).ofLength(3).getError()).toBe('Must have exactly 3 items');
+    });
+
+    it('should fail when array has more items', () => {
+      expect(arrayValidator([1, 2, 3, 4]).ofLength(3).getError()).toBe('Must have exactly 3 items');
+    });
+
+    it('should pass for empty array with ofLength(0)', () => {
+      expect(arrayValidator([]).ofLength(0).getError()).toBe('');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).ofLength(3).getError()).toBe('');
+      expect(arrayValidator().ofLength(3).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
+  describe('includes', () => {
+    it('should pass when array includes primitive item', () => {
+      expect(arrayValidator([1, 2, 3]).includes(2).getError()).toBe('');
+    });
+
+    it('should pass when array includes string item', () => {
+      expect(arrayValidator(['a', 'b', 'c']).includes('b').getError()).toBe('');
+    });
+
+    it('should fail when array does not include item', () => {
+      expect(arrayValidator([1, 2, 3]).includes(4).getError()).toBe('Must include 4');
+    });
+
+    it('should pass when array includes object', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includes({ a: 1 })
+          .getError()
+      ).toBe('');
+    });
+
+    it('should fail when array does not include object', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includes({ c: 3 })
+          .getError()
+      ).toBe('Must include {"c":3}');
+    });
+
+    it('should fail for empty array', () => {
+      expect(arrayValidator([]).includes(1).getError()).toBe('Must include 1');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).includes(1).getError()).toBe('');
+      expect(arrayValidator().includes(1).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should skip validation when prior error exists', () => {
+      expect(arrayValidator([]).required().includes(1).getError()).toBe('Required');
+    });
+  });
+
+  describe('includesAny', () => {
+    it('should pass when array includes at least one item', () => {
+      expect(arrayValidator([1, 2, 3]).includesAny([2, 5, 6]).getError()).toBe('');
+    });
+
+    it('should pass when array includes multiple matching items', () => {
+      expect(arrayValidator([1, 2, 3]).includesAny([1, 2]).getError()).toBe('');
+    });
+
+    it('should fail when array includes none of the items', () => {
+      expect(arrayValidator([1, 2, 3]).includesAny([4, 5, 6]).getError()).toBe('Must include at least one of: 4, 5, 6');
+    });
+
+    it('should pass when array includes object from list', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includesAny([{ a: 1 }, { c: 3 }])
+          .getError()
+      ).toBe('');
+    });
+
+    it('should fail when array includes none of the objects', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includesAny([{ c: 3 }, { d: 4 }])
+          .getError()
+      ).toBe('Must include at least one of: {"c":3}, {"d":4}');
+    });
+
+    it('should fail for empty array', () => {
+      expect(arrayValidator([]).includesAny([1, 2]).getError()).toBe('Must include at least one of: 1, 2');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).includesAny([1, 2]).getError()).toBe('');
+      expect(arrayValidator().includesAny([1, 2]).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should skip validation when prior error exists', () => {
+      expect(arrayValidator([]).required().includesAny([1, 2]).getError()).toBe('Required');
+    });
+  });
+
+  describe('includesAll', () => {
+    it('should pass when array includes all items', () => {
+      expect(arrayValidator([1, 2, 3, 4]).includesAll([1, 2]).getError()).toBe('');
+    });
+
+    it('should pass when array includes exactly all items', () => {
+      expect(arrayValidator([1, 2, 3]).includesAll([1, 2, 3]).getError()).toBe('');
+    });
+
+    it('should fail when array is missing some items', () => {
+      expect(arrayValidator([1, 2]).includesAll([1, 2, 3]).getError()).toBe('Missing required items: 3');
+    });
+
+    it('should fail when array is missing multiple items', () => {
+      expect(arrayValidator([1]).includesAll([1, 2, 3]).getError()).toBe('Missing required items: 2, 3');
+    });
+
+    it('should pass when array includes all objects', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }, { c: 3 }])
+          .includesAll([{ a: 1 }, { b: 2 }])
+          .getError()
+      ).toBe('');
+    });
+
+    it('should fail when array is missing objects', () => {
+      expect(
+        arrayValidator([{ a: 1 }])
+          .includesAll([{ a: 1 }, { b: 2 }])
+          .getError()
+      ).toBe('Missing required items: {"b":2}');
+    });
+
+    it('should fail for empty array', () => {
+      expect(arrayValidator([]).includesAll([1, 2]).getError()).toBe('Missing required items: 1, 2');
+    });
+
+    it('should pass for empty items array', () => {
+      expect(arrayValidator([1, 2, 3]).includesAll([]).getError()).toBe('');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).includesAll([1, 2]).getError()).toBe('');
+      expect(arrayValidator().includesAll([1, 2]).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should skip validation when prior error exists', () => {
+      expect(arrayValidator([]).required().includesAll([1, 2]).getError()).toBe('Required');
+    });
+  });
+
   describe('method chaining', () => {
     it('should return first error only', () => {
       expect(arrayValidator([]).required().minLength(3).getError()).toBe('Required');
@@ -962,6 +1130,10 @@ describe('arrayValidator', () => {
           .unique() // Should skip
           .getError()
       ).toBe('Required');
+    });
+
+    it('should chain new methods with existing methods', () => {
+      expect(arrayValidator([1, 2, 3]).required().ofLength(3).includes(2).unique().getError()).toBe('');
     });
   });
 

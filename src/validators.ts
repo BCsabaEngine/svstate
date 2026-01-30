@@ -293,7 +293,7 @@ type NumberValidatorBuilder = {
 };
 
 // Array Validator
-export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidatorBuilder {
+export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidatorBuilder<T> {
   let error = '';
   const isNullish = input === null || input === undefined;
   const array = input ?? [];
@@ -301,7 +301,7 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
     if (!error) error = message;
   };
 
-  const builder: ArrayValidatorBuilder = {
+  const builder: ArrayValidatorBuilder<T> = {
     required() {
       if (!error && (isNullish || array.length === 0)) setError('Required');
       return builder;
@@ -334,6 +334,53 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
       return builder;
     },
 
+    ofLength(n: number) {
+      if (isNullish) return builder;
+      if (!error && array.length !== n) setError(`Must have exactly ${n} items`);
+      return builder;
+    },
+
+    includes(item: T) {
+      if (isNullish) return builder;
+      if (error) return builder;
+      const itemKey = typeof item === 'object' ? JSON.stringify(item) : String(item);
+      const found = array.some((element) => {
+        const elementKey = typeof element === 'object' ? JSON.stringify(element) : String(element);
+        return elementKey === itemKey;
+      });
+      if (!found) setError(`Must include ${itemKey}`);
+      return builder;
+    },
+
+    includesAny(items: T[]) {
+      if (isNullish) return builder;
+      if (error) return builder;
+      const itemKeys = items.map((entry) => (typeof entry === 'object' ? JSON.stringify(entry) : String(entry)));
+      const found = array.some((element) => {
+        const elementKey = typeof element === 'object' ? JSON.stringify(element) : String(element);
+        return itemKeys.includes(elementKey);
+      });
+      if (!found) setError(`Must include at least one of: ${itemKeys.join(', ')}`);
+      return builder;
+    },
+
+    includesAll(items: T[]) {
+      if (isNullish) return builder;
+      if (error) return builder;
+      const arrayKeys = new Set(
+        array.map((element) => (typeof element === 'object' ? JSON.stringify(element) : String(element)))
+      );
+      const missing = items.filter((entry) => {
+        const entryKey = typeof entry === 'object' ? JSON.stringify(entry) : String(entry);
+        return !arrayKeys.has(entryKey);
+      });
+      if (missing.length > 0) {
+        const missingKeys = missing.map((entry) => (typeof entry === 'object' ? JSON.stringify(entry) : String(entry)));
+        setError(`Missing required items: ${missingKeys.join(', ')}`);
+      }
+      return builder;
+    },
+
     getError() {
       return error;
     }
@@ -342,11 +389,15 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
   return builder;
 }
 
-type ArrayValidatorBuilder = {
-  required(): ArrayValidatorBuilder;
-  minLength(n: number): ArrayValidatorBuilder;
-  maxLength(n: number): ArrayValidatorBuilder;
-  unique(): ArrayValidatorBuilder;
+type ArrayValidatorBuilder<T> = {
+  required(): ArrayValidatorBuilder<T>;
+  minLength(n: number): ArrayValidatorBuilder<T>;
+  maxLength(n: number): ArrayValidatorBuilder<T>;
+  unique(): ArrayValidatorBuilder<T>;
+  ofLength(n: number): ArrayValidatorBuilder<T>;
+  includes(item: T): ArrayValidatorBuilder<T>;
+  includesAny(items: T[]): ArrayValidatorBuilder<T>;
+  includesAll(items: T[]): ArrayValidatorBuilder<T>;
   getError(): string;
 };
 
