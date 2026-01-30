@@ -3,28 +3,43 @@ import { arrayValidator, dateValidator, numberValidator, stringValidator } from 
 describe('stringValidator', () => {
   describe('prepare options', () => {
     it('should trim whitespace', () => {
-      expect(stringValidator('  hello  ', 'trim').required().getError()).toBe('');
-      expect(stringValidator('  hello  ', 'trim').minLength(6).getError()).toBe('Min length 6');
+      expect(stringValidator('  hello  ').prepare('trim').required().getError()).toBe('');
+      expect(stringValidator('  hello  ').prepare('trim').minLength(6).getError()).toBe('Min length 6');
     });
 
     it('should normalize multiple spaces', () => {
-      expect(stringValidator('hello   world', 'normalize').noSpace().getError()).toBe('No space allowed');
-      expect(stringValidator('hello   world', 'normalize').minLength(12).getError()).toBe('Min length 12');
+      expect(stringValidator('hello   world').prepare('normalize').noSpace().getError()).toBe('No space allowed');
+      expect(stringValidator('hello   world').prepare('normalize').minLength(12).getError()).toBe('Min length 12');
     });
 
     it('should convert to uppercase', () => {
-      expect(stringValidator('hello', 'upper').uppercase().getError()).toBe('');
-      expect(stringValidator('hello', 'upper').lowercase().getError()).toBe('Lowercase only');
+      expect(stringValidator('hello').prepare('upper').uppercase().getError()).toBe('');
+      expect(stringValidator('hello').prepare('upper').lowercase().getError()).toBe('Lowercase only');
     });
 
     it('should convert to lowercase', () => {
-      expect(stringValidator('HELLO', 'lower').lowercase().getError()).toBe('');
-      expect(stringValidator('HELLO', 'lower').uppercase().getError()).toBe('Uppercase only');
+      expect(stringValidator('HELLO').prepare('lower').lowercase().getError()).toBe('');
+      expect(stringValidator('HELLO').prepare('lower').uppercase().getError()).toBe('Uppercase only');
     });
 
     it('should chain multiple prepare options', () => {
-      expect(stringValidator('  HELLO  ', 'trim', 'lower').getError()).toBe('');
-      expect(stringValidator('  HELLO  ', 'trim', 'lower').uppercase().getError()).toBe('Uppercase only');
+      expect(stringValidator('  HELLO  ').prepare('trim', 'lower').getError()).toBe('');
+      expect(stringValidator('  HELLO  ').prepare('trim', 'lower').uppercase().getError()).toBe('Uppercase only');
+    });
+
+    it('should convert to locale-aware uppercase', () => {
+      expect(stringValidator('hello').prepare('localeUpper').uppercase().getError()).toBe('');
+      expect(stringValidator('hello').prepare('localeUpper').lowercase().getError()).toBe('Lowercase only');
+    });
+
+    it('should convert to locale-aware lowercase', () => {
+      expect(stringValidator('HELLO').prepare('localeLower').lowercase().getError()).toBe('');
+      expect(stringValidator('HELLO').prepare('localeLower').uppercase().getError()).toBe('Uppercase only');
+    });
+
+    it('should chain locale prepare options with other options', () => {
+      expect(stringValidator('  HELLO  ').prepare('trim', 'localeLower').getError()).toBe('');
+      expect(stringValidator('  hello  ').prepare('trim', 'localeUpper').uppercase().getError()).toBe('');
     });
   });
 
@@ -38,7 +53,44 @@ describe('stringValidator', () => {
     });
 
     it('should fail for whitespace-only when trimmed', () => {
-      expect(stringValidator('   ', 'trim').required().getError()).toBe('Required');
+      expect(stringValidator('   ').prepare('trim').required().getError()).toBe('Required');
+    });
+  });
+
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for empty string when condition is true', () => {
+      expect(stringValidator('').requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for valid value when condition is true', () => {
+      expect(stringValidator('hello').requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for empty string when condition is false', () => {
+      expect(stringValidator('').requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for valid value when condition is false', () => {
+      expect(stringValidator('hello').requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(stringValidator('hi').requiredIf(true).minLength(5).getError()).toBe('Min length 5');
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).requiredIf(false).minLength(5).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 
@@ -49,6 +101,33 @@ describe('stringValidator', () => {
 
     it('should fail for string with spaces', () => {
       expect(stringValidator('hello world').noSpace().getError()).toBe('No space allowed');
+    });
+  });
+
+  describe('notBlank', () => {
+    it('should pass for non-empty, non-whitespace string', () => {
+      expect(stringValidator('hello').notBlank().getError()).toBe('');
+    });
+
+    it('should fail for whitespace-only string', () => {
+      expect(stringValidator('   ').notBlank().getError()).toBe('Must not be blank');
+      expect(stringValidator('\t\n').notBlank().getError()).toBe('Must not be blank');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').notBlank().getError()).toBe('');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).notBlank().getError()).toBe('');
+      expect(stringValidator().notBlank().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should differ from required - notBlank does not fail on empty string', () => {
+      expect(stringValidator('').required().getError()).toBe('Required');
+      expect(stringValidator('').notBlank().getError()).toBe('');
     });
   });
 
@@ -164,27 +243,63 @@ describe('stringValidator', () => {
     });
   });
 
-  describe('inArray', () => {
+  describe('in', () => {
     it('should pass when string is in array', () => {
-      expect(stringValidator('apple').inArray(['apple', 'banana']).getError()).toBe('');
+      expect(stringValidator('apple').in(['apple', 'banana']).getError()).toBe('');
     });
 
     it('should pass when string is a key in object', () => {
-      expect(stringValidator('apple').inArray({ apple: 1, banana: 2 }).getError()).toBe('');
+      expect(stringValidator('apple').in({ apple: 1, banana: 2 }).getError()).toBe('');
     });
 
     it('should fail when string is not in array', () => {
-      expect(stringValidator('orange').inArray(['apple', 'banana']).getError()).toBe('Must be one of: apple, banana');
+      expect(stringValidator('orange').in(['apple', 'banana']).getError()).toBe('Must be one of: apple, banana');
     });
 
     it('should fail when string is not a key in object', () => {
-      expect(stringValidator('orange').inArray({ apple: 1, banana: 2 }).getError()).toBe(
-        'Must be one of: apple, banana'
+      expect(stringValidator('orange').in({ apple: 1, banana: 2 }).getError()).toBe('Must be one of: apple, banana');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').in(['apple', 'banana']).getError()).toBe('');
+    });
+
+    it('should skip validation for nullish values', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).in(['apple', 'banana']).getError()).toBe('');
+      expect(stringValidator().in(['apple', 'banana']).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
+  describe('notIn', () => {
+    it('should pass when string is not in array', () => {
+      expect(stringValidator('orange').notIn(['apple', 'banana']).getError()).toBe('');
+    });
+
+    it('should pass when string is not a key in object', () => {
+      expect(stringValidator('orange').notIn({ apple: 1, banana: 2 }).getError()).toBe('');
+    });
+
+    it('should fail when string is in array', () => {
+      expect(stringValidator('apple').notIn(['apple', 'banana']).getError()).toBe('Must not be one of: apple, banana');
+    });
+
+    it('should fail when string is a key in object', () => {
+      expect(stringValidator('apple').notIn({ apple: 1, banana: 2 }).getError()).toBe(
+        'Must not be one of: apple, banana'
       );
     });
 
     it('should skip validation for empty string', () => {
-      expect(stringValidator('').inArray(['apple', 'banana']).getError()).toBe('');
+      expect(stringValidator('').notIn(['apple', 'banana']).getError()).toBe('');
+    });
+
+    it('should skip validation for nullish values', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).notIn(['apple', 'banana']).getError()).toBe('');
+      expect(stringValidator().notIn(['apple', 'banana']).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 
@@ -373,6 +488,85 @@ describe('stringValidator', () => {
     });
   });
 
+  describe('slug', () => {
+    it('should pass for valid slugs', () => {
+      expect(stringValidator('my-slug').slug().getError()).toBe('');
+      expect(stringValidator('test123').slug().getError()).toBe('');
+      expect(stringValidator('a-b-c').slug().getError()).toBe('');
+      expect(stringValidator('hello').slug().getError()).toBe('');
+      expect(stringValidator('123').slug().getError()).toBe('');
+    });
+
+    it('should fail for uppercase', () => {
+      expect(stringValidator('My-Slug').slug().getError()).toBe('Invalid slug format');
+      expect(stringValidator('SLUG').slug().getError()).toBe('Invalid slug format');
+    });
+
+    it('should fail for special chars', () => {
+      expect(stringValidator('my_slug').slug().getError()).toBe('Invalid slug format');
+      expect(stringValidator('my.slug').slug().getError()).toBe('Invalid slug format');
+      expect(stringValidator('my@slug').slug().getError()).toBe('Invalid slug format');
+    });
+
+    it('should fail for spaces', () => {
+      expect(stringValidator('my slug').slug().getError()).toBe('Invalid slug format');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').slug().getError()).toBe('');
+    });
+
+    it('should skip validation for nullish values', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).slug().getError()).toBe('');
+      expect(stringValidator().slug().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
+  describe('identifier', () => {
+    it('should pass for valid identifiers', () => {
+      expect(stringValidator('myVar').identifier().getError()).toBe('');
+      expect(stringValidator('_private').identifier().getError()).toBe('');
+      expect(stringValidator('MAX_VALUE').identifier().getError()).toBe('');
+      expect(stringValidator('a1').identifier().getError()).toBe('');
+      expect(stringValidator('camelCase').identifier().getError()).toBe('');
+      expect(stringValidator('PascalCase').identifier().getError()).toBe('');
+      expect(stringValidator('_').identifier().getError()).toBe('');
+      expect(stringValidator('__init__').identifier().getError()).toBe('');
+    });
+
+    it('should fail for starting with number', () => {
+      expect(stringValidator('1variable').identifier().getError()).toBe('Invalid identifier format');
+      expect(stringValidator('123abc').identifier().getError()).toBe('Invalid identifier format');
+    });
+
+    it('should fail for hyphens', () => {
+      expect(stringValidator('my-var').identifier().getError()).toBe('Invalid identifier format');
+      expect(stringValidator('kebab-case').identifier().getError()).toBe('Invalid identifier format');
+    });
+
+    it('should fail for spaces', () => {
+      expect(stringValidator('my var').identifier().getError()).toBe('Invalid identifier format');
+    });
+
+    it('should fail for special characters', () => {
+      expect(stringValidator('my@var').identifier().getError()).toBe('Invalid identifier format');
+      expect(stringValidator('my.var').identifier().getError()).toBe('Invalid identifier format');
+    });
+
+    it('should skip validation for empty string', () => {
+      expect(stringValidator('').identifier().getError()).toBe('');
+    });
+
+    it('should skip validation for nullish values', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).identifier().getError()).toBe('');
+      expect(stringValidator().identifier().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
   describe('method chaining', () => {
     it('should return first error only', () => {
       expect(stringValidator('').required().minLength(5).getError()).toBe('Required');
@@ -385,6 +579,39 @@ describe('stringValidator', () => {
     it('should stop at first error in chain', () => {
       expect(stringValidator('hi').minLength(5).maxLength(1).getError()).toBe('Min length 5');
     });
+  });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(stringValidator(null).minLength(5).getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(stringValidator().minLength(5).getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(stringValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(stringValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(stringValidator(null).minLength(5).maxLength(10).email().getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(stringValidator().noSpace().uppercase().contains('test').getError()).toBe('');
+    });
+
+    it('should allow prepare on nullish values', () => {
+      expect(stringValidator(null).prepare('trim').required().getError()).toBe('Required');
+      expect(stringValidator().prepare('upper').required().getError()).toBe('Required');
+    });
+    /* eslint-enable unicorn/no-null */
   });
 });
 
@@ -400,6 +627,47 @@ describe('numberValidator', () => {
 
     it('should fail for NaN', () => {
       expect(numberValidator(Number.NaN).required().getError()).toBe('Required');
+    });
+  });
+
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for NaN when condition is true', () => {
+      expect(numberValidator(Number.NaN).requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for valid value when condition is true', () => {
+      expect(numberValidator(5).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for zero when condition is true', () => {
+      expect(numberValidator(0).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for NaN when condition is false', () => {
+      expect(numberValidator(Number.NaN).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for valid value when condition is false', () => {
+      expect(numberValidator(5).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(numberValidator(3).requiredIf(true).min(5).getError()).toBe('Minimum 5');
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).requiredIf(false).min(5).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 
@@ -513,6 +781,27 @@ describe('numberValidator', () => {
     });
   });
 
+  describe('notZero', () => {
+    it('should pass for positive number', () => {
+      expect(numberValidator(5).notZero().getError()).toBe('');
+    });
+
+    it('should pass for negative number', () => {
+      expect(numberValidator(-5).notZero().getError()).toBe('');
+    });
+
+    it('should fail for zero', () => {
+      expect(numberValidator(0).notZero().getError()).toBe('Must not be zero');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).notZero().getError()).toBe('');
+      expect(numberValidator().notZero().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
   describe('multipleOf', () => {
     it('should pass when number is multiple', () => {
       expect(numberValidator(10).multipleOf(5).getError()).toBe('');
@@ -524,6 +813,27 @@ describe('numberValidator', () => {
 
     it('should fail when number is not multiple', () => {
       expect(numberValidator(7).multipleOf(5).getError()).toBe('Must be a multiple of 5');
+    });
+  });
+
+  describe('step', () => {
+    it('should pass when number is on step', () => {
+      expect(numberValidator(10).step(5).getError()).toBe('');
+    });
+
+    it('should pass for zero with any step', () => {
+      expect(numberValidator(0).step(5).getError()).toBe('');
+    });
+
+    it('should fail when number is not on step', () => {
+      expect(numberValidator(7).step(5).getError()).toBe('Must be a multiple of 5');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).step(5).getError()).toBe('');
+      expect(numberValidator().step(5).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 
@@ -598,6 +908,34 @@ describe('numberValidator', () => {
       expect(numberValidator(10).required().min(5).max(15).integer().positive().getError()).toBe('');
     });
   });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(numberValidator(null).min(5).getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(numberValidator().min(5).getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(numberValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(numberValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(numberValidator(null).min(0).max(100).integer().positive().getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(numberValidator().between(1, 10).decimal(2).percentage().getError()).toBe('');
+    });
+    /* eslint-enable unicorn/no-null */
+  });
 });
 
 describe('arrayValidator', () => {
@@ -608,6 +946,43 @@ describe('arrayValidator', () => {
 
     it('should fail for empty array', () => {
       expect(arrayValidator([]).required().getError()).toBe('Required');
+    });
+  });
+
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for empty array when condition is true', () => {
+      expect(arrayValidator([]).requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for non-empty array when condition is true', () => {
+      expect(arrayValidator([1, 2, 3]).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for empty array when condition is false', () => {
+      expect(arrayValidator([]).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for non-empty array when condition is false', () => {
+      expect(arrayValidator([1, 2, 3]).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(arrayValidator([1, 2]).requiredIf(true).minLength(3).getError()).toBe('Minimum 3 items');
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).requiredIf(false).minLength(3).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 
@@ -677,6 +1052,174 @@ describe('arrayValidator', () => {
     });
   });
 
+  describe('ofLength', () => {
+    it('should pass when array has exact length', () => {
+      expect(arrayValidator([1, 2, 3]).ofLength(3).getError()).toBe('');
+    });
+
+    it('should fail when array has fewer items', () => {
+      expect(arrayValidator([1, 2]).ofLength(3).getError()).toBe('Must have exactly 3 items');
+    });
+
+    it('should fail when array has more items', () => {
+      expect(arrayValidator([1, 2, 3, 4]).ofLength(3).getError()).toBe('Must have exactly 3 items');
+    });
+
+    it('should pass for empty array with ofLength(0)', () => {
+      expect(arrayValidator([]).ofLength(0).getError()).toBe('');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).ofLength(3).getError()).toBe('');
+      expect(arrayValidator().ofLength(3).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
+  describe('includes', () => {
+    it('should pass when array includes primitive item', () => {
+      expect(arrayValidator([1, 2, 3]).includes(2).getError()).toBe('');
+    });
+
+    it('should pass when array includes string item', () => {
+      expect(arrayValidator(['a', 'b', 'c']).includes('b').getError()).toBe('');
+    });
+
+    it('should fail when array does not include item', () => {
+      expect(arrayValidator([1, 2, 3]).includes(4).getError()).toBe('Must include 4');
+    });
+
+    it('should pass when array includes object', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includes({ a: 1 })
+          .getError()
+      ).toBe('');
+    });
+
+    it('should fail when array does not include object', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includes({ c: 3 })
+          .getError()
+      ).toBe('Must include {"c":3}');
+    });
+
+    it('should fail for empty array', () => {
+      expect(arrayValidator([]).includes(1).getError()).toBe('Must include 1');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).includes(1).getError()).toBe('');
+      expect(arrayValidator().includes(1).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should skip validation when prior error exists', () => {
+      expect(arrayValidator([]).required().includes(1).getError()).toBe('Required');
+    });
+  });
+
+  describe('includesAny', () => {
+    it('should pass when array includes at least one item', () => {
+      expect(arrayValidator([1, 2, 3]).includesAny([2, 5, 6]).getError()).toBe('');
+    });
+
+    it('should pass when array includes multiple matching items', () => {
+      expect(arrayValidator([1, 2, 3]).includesAny([1, 2]).getError()).toBe('');
+    });
+
+    it('should fail when array includes none of the items', () => {
+      expect(arrayValidator([1, 2, 3]).includesAny([4, 5, 6]).getError()).toBe('Must include at least one of: 4, 5, 6');
+    });
+
+    it('should pass when array includes object from list', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includesAny([{ a: 1 }, { c: 3 }])
+          .getError()
+      ).toBe('');
+    });
+
+    it('should fail when array includes none of the objects', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }])
+          .includesAny([{ c: 3 }, { d: 4 }])
+          .getError()
+      ).toBe('Must include at least one of: {"c":3}, {"d":4}');
+    });
+
+    it('should fail for empty array', () => {
+      expect(arrayValidator([]).includesAny([1, 2]).getError()).toBe('Must include at least one of: 1, 2');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).includesAny([1, 2]).getError()).toBe('');
+      expect(arrayValidator().includesAny([1, 2]).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should skip validation when prior error exists', () => {
+      expect(arrayValidator([]).required().includesAny([1, 2]).getError()).toBe('Required');
+    });
+  });
+
+  describe('includesAll', () => {
+    it('should pass when array includes all items', () => {
+      expect(arrayValidator([1, 2, 3, 4]).includesAll([1, 2]).getError()).toBe('');
+    });
+
+    it('should pass when array includes exactly all items', () => {
+      expect(arrayValidator([1, 2, 3]).includesAll([1, 2, 3]).getError()).toBe('');
+    });
+
+    it('should fail when array is missing some items', () => {
+      expect(arrayValidator([1, 2]).includesAll([1, 2, 3]).getError()).toBe('Missing required items: 3');
+    });
+
+    it('should fail when array is missing multiple items', () => {
+      expect(arrayValidator([1]).includesAll([1, 2, 3]).getError()).toBe('Missing required items: 2, 3');
+    });
+
+    it('should pass when array includes all objects', () => {
+      expect(
+        arrayValidator([{ a: 1 }, { b: 2 }, { c: 3 }])
+          .includesAll([{ a: 1 }, { b: 2 }])
+          .getError()
+      ).toBe('');
+    });
+
+    it('should fail when array is missing objects', () => {
+      expect(
+        arrayValidator([{ a: 1 }])
+          .includesAll([{ a: 1 }, { b: 2 }])
+          .getError()
+      ).toBe('Missing required items: {"b":2}');
+    });
+
+    it('should fail for empty array', () => {
+      expect(arrayValidator([]).includesAll([1, 2]).getError()).toBe('Missing required items: 1, 2');
+    });
+
+    it('should pass for empty items array', () => {
+      expect(arrayValidator([1, 2, 3]).includesAll([]).getError()).toBe('');
+    });
+
+    it('should skip validation for null/undefined', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).includesAll([1, 2]).getError()).toBe('');
+      expect(arrayValidator().includesAll([1, 2]).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should skip validation when prior error exists', () => {
+      expect(arrayValidator([]).required().includesAll([1, 2]).getError()).toBe('Required');
+    });
+  });
+
   describe('method chaining', () => {
     it('should return first error only', () => {
       expect(arrayValidator([]).required().minLength(3).getError()).toBe('Required');
@@ -703,6 +1246,38 @@ describe('arrayValidator', () => {
           .getError()
       ).toBe('Required');
     });
+
+    it('should chain new methods with existing methods', () => {
+      expect(arrayValidator([1, 2, 3]).required().ofLength(3).includes(2).unique().getError()).toBe('');
+    });
+  });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(arrayValidator(null).minLength(5).getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(arrayValidator().minLength(5).getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(arrayValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(arrayValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(arrayValidator(null).minLength(1).maxLength(10).unique().getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(arrayValidator().minLength(1).maxLength(10).unique().getError()).toBe('');
+    });
+    /* eslint-enable unicorn/no-null */
   });
 });
 
@@ -736,6 +1311,41 @@ describe('dateValidator', () => {
 
     it('should fail for invalid string', () => {
       expect(dateValidator('not-a-date').required().getError()).toBe('Required');
+    });
+  });
+
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(dateValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for invalid date when condition is true', () => {
+      expect(dateValidator('invalid').requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for valid date when condition is true', () => {
+      expect(dateValidator(new Date()).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(dateValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for invalid date when condition is false', () => {
+      expect(dateValidator('invalid').requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for valid date when condition is false', () => {
+      expect(dateValidator(new Date()).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(dateValidator(futureDate).requiredIf(true).past().getError()).toBe('Must be in the past');
+      expect(dateValidator('invalid').requiredIf(false).past().getError()).toBe('');
     });
   });
 
@@ -988,5 +1598,33 @@ describe('dateValidator', () => {
     it('should chain multiple validations successfully', () => {
       expect(dateValidator(pastDate).required().past().getError()).toBe('');
     });
+  });
+
+  describe('null and undefined handling', () => {
+    /* eslint-disable unicorn/no-null */
+    it('should skip validation for null', () => {
+      expect(dateValidator(null).past().getError()).toBe('');
+    });
+
+    it('should skip validation for undefined', () => {
+      expect(dateValidator().past().getError()).toBe('');
+    });
+
+    it('should return error for required() with null', () => {
+      expect(dateValidator(null).required().getError()).toBe('Required');
+    });
+
+    it('should return error for required() with undefined', () => {
+      expect(dateValidator().required().getError()).toBe('Required');
+    });
+
+    it('should skip all validations except required for null', () => {
+      expect(dateValidator(null).past().future().weekday().minAge(18).getError()).toBe('');
+    });
+
+    it('should skip all validations except required for undefined', () => {
+      expect(dateValidator().before(new Date()).after(new Date()).weekend().getError()).toBe('');
+    });
+    /* eslint-enable unicorn/no-null */
   });
 });

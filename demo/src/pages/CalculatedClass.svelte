@@ -51,7 +51,7 @@
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(createSourceData(), {
 		validator: (source) => ({
-			productName: stringValidator(source.productName, 'trim').required().minLength(2).getError(),
+			productName: stringValidator(source.productName).prepare('trim').required().minLength(2).getError(),
 			item: {
 				unitPrice: numberValidator(source.item.unitPrice).required().positive().getError(),
 				quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
@@ -105,7 +105,7 @@ const createSourceData = (): SourceData => ({
 
 	const stateSourceCode = `const { data, state: { errors, hasErrors, isDirty } } = createSvState(createSourceData(), {
   validator: (source) => ({
-    productName: stringValidator(source.productName, 'trim').required().minLength(2).getError(),
+    productName: stringValidator(source.productName).prepare('trim').required().minLength(2).getError(),
     item: {
       unitPrice: numberValidator(source.item.unitPrice).required().positive().getError(),
       quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()

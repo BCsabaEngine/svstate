@@ -174,12 +174,40 @@ The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf
 
 ### Fluent Validator Builders (src/validators.ts)
 
-Four chainable validator builders with `getError()` to extract the first error:
+Four chainable validator builders with `getError()` to extract the first error. All validators accept `null` or `undefined` as input (nullish values skip most validations unless `required()` or `requiredIf()` is called).
 
-- **stringValidator(input, ...prepares)** - String validation with optional preprocessing (`trim`, `normalize`, `upper`, `lower`)
-- **numberValidator(input)** - Numeric validation (range, integer, positive, etc.)
-- **arrayValidator(input)** - Array validation (length, uniqueness)
-- **dateValidator(input)** - Date validation (range, past/future, age checks)
+- **stringValidator(input)** - String validation
+  - `.prepare(...ops)` - Preprocessing: `'trim'`, `'normalize'`, `'upper'`, `'lower'`, `'localeUpper'`, `'localeLower'`
+  - `.required()`, `.requiredIf(cond)` - Require non-empty value
+  - `.minLength(n)`, `.maxLength(n)` - Length constraints
+  - `.noSpace()`, `.notBlank()` - Whitespace rules
+  - `.uppercase()`, `.lowercase()` - Case enforcement
+  - `.startsWith(s)`, `.endsWith(s)`, `.contains(s)` - Content matching
+  - `.regexp(re, msg?)` - Custom regex validation
+  - `.in(values)`, `.notIn(values)` - Allowed/disallowed values (accepts array or object keys)
+  - `.email()`, `.website(mode?)` - Format validators
+  - `.alphanumeric()`, `.numeric()`, `.slug()`, `.identifier()` - Pattern validators
+
+- **numberValidator(input)** - Numeric validation
+  - `.required()`, `.requiredIf(cond)` - Require non-NaN value
+  - `.min(n)`, `.max(n)`, `.between(min, max)` - Range constraints
+  - `.integer()`, `.decimal(places)` - Type constraints
+  - `.positive()`, `.negative()`, `.nonNegative()`, `.notZero()` - Sign constraints
+  - `.multipleOf(n)`, `.step(n)` - Divisibility checks
+  - `.percentage()` - Must be 0-100
+
+- **arrayValidator(input)** - Array validation
+  - `.required()`, `.requiredIf(cond)` - Require non-empty array
+  - `.minLength(n)`, `.maxLength(n)`, `.ofLength(n)` - Length constraints
+  - `.unique()` - All items must be unique
+  - `.includes(item)`, `.includesAny(items)`, `.includesAll(items)` - Item presence
+
+- **dateValidator(input)** - Date validation (accepts Date, string, or number)
+  - `.required()`, `.requiredIf(cond)` - Require valid date
+  - `.before(date)`, `.after(date)`, `.between(start, end)` - Range constraints
+  - `.past()`, `.future()` - Relative to now
+  - `.weekday()`, `.weekend()` - Day of week
+  - `.minAge(years)`, `.maxAge(years)` - Age calculations
 
 ## Code Style
 

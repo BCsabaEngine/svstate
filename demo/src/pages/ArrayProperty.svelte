@@ -26,14 +26,14 @@
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			listName: stringValidator(source.listName, 'trim').required().minLength(2).getError(),
+			listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
 			items: arrayValidator(source.items).required().minLength(1).getError(),
 			...Object.fromEntries(
 				source.items.map((item, index) => [
 					`item_${index}`,
 					{
-						name: stringValidator(item.name, 'trim').required().minLength(2).getError(),
-						email: stringValidator(item.email, 'trim').required().email().getError()
+						name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
+						email: stringValidator(item.email).prepare('trim').required().email().getError()
 					}
 				])
 			)
@@ -67,15 +67,15 @@
 
 const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
   validator: (source) => ({
-    listName: stringValidator(source.listName, 'trim').required().minLength(2).getError(),
+    listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
     items: arrayValidator(source.items).required().minLength(1).getError(),
     // Per-item validation using indexed keys
     ...Object.fromEntries(
       source.items.map((item, index) => [
         \`item_\${index}\`,
         {
-          name: stringValidator(item.name, 'trim').required().minLength(2).getError(),
-          email: stringValidator(item.email, 'trim').required().email().getError()
+          name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
+          email: stringValidator(item.email).prepare('trim').required().email().getError()
         }
       ])
     )

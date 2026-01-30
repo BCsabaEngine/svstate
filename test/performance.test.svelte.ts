@@ -365,7 +365,13 @@ describe('Performance Tests', () => {
   describe('Validator Builders', () => {
     it('should execute string validator chain quickly', () => {
       const time = measureTime(() => {
-        stringValidator('  test@example.com  ', 'trim').required().minLength(5).maxLength(100).email().getError();
+        stringValidator('  test@example.com  ')
+          .prepare('trim')
+          .required()
+          .minLength(5)
+          .maxLength(100)
+          .email()
+          .getError();
       });
 
       expect(time).toBeLessThan(THRESHOLDS.stringChain);
@@ -401,7 +407,7 @@ describe('Performance Tests', () => {
     it('should handle 1000 validator calls within threshold', () => {
       const time = measureTime(() => {
         for (let index = 0; index < 1000; index++)
-          stringValidator(`test${index}`, 'trim').required().minLength(1).maxLength(100).getError();
+          stringValidator(`test${index}`).prepare('trim').required().minLength(1).maxLength(100).getError();
       });
 
       expect(time).toBeLessThan(THRESHOLDS.thousandValidatorCalls);

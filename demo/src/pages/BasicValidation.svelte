@@ -25,11 +25,17 @@
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			username: stringValidator(source.username, 'trim').required().minLength(3).maxLength(20).noSpace().getError(),
-			email: stringValidator(source.email, 'trim').required().email().getError(),
+			username: stringValidator(source.username)
+				.prepare('trim')
+				.required()
+				.minLength(3)
+				.maxLength(20)
+				.noSpace()
+				.getError(),
+			email: stringValidator(source.email).prepare('trim').required().email().getError(),
 			age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
 			bio: stringValidator(source.bio).maxLength(200).getError(),
-			website: stringValidator(source.website, 'trim').website('required').getError()
+			website: stringValidator(source.website).prepare('trim').website('required').getError()
 		})
 	});
 
@@ -54,11 +60,11 @@
 
 const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
   validator: (source) => ({
-    username: stringValidator(source.username, 'trim').required().minLength(3).maxLength(20).noSpace().getError(),
-    email: stringValidator(source.email, 'trim').required().email().getError(),
+    username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
+    email: stringValidator(source.email).prepare('trim').required().email().getError(),
     age: numberValidator(source.age).required().min(18).max(120).integer().getError(),
     bio: stringValidator(source.bio).maxLength(200).getError(),
-    website: stringValidator(source.website, 'trim').website('required').getError()
+    website: stringValidator(source.website).prepare('trim').website('required').getError()
   })
 });`;
 
