@@ -133,7 +133,8 @@ const {
   {
     validator: (source) => ({
       // Fluent API: chain validations, get first error
-      email: stringValidator(source.email, 'trim') // 'trim' preprocesses input
+      email: stringValidator(source.email)
+        .prepare('trim') // preprocessing applied before validation
         .required()
         .email()
         .maxLength(100)
@@ -157,8 +158,9 @@ const {
 
 - 🔄 Automatic re-validation on any change (debounced via microtask)
 - 📐 Error structure matches data structure exactly
-- 🧹 String preprocessing: `'trim'`, `'normalize'`, `'upper'`, `'lower'`
+- 🧹 String preprocessing via `.prepare()`: `'trim'`, `'normalize'`, `'upper'`, `'lower'`, `'localeUpper'`, `'localeLower'`
 - ⚡ First-error-wins: `getError()` returns the first failure
+- 🔀 Conditional validation: `requiredIf(condition)` on all validators
 
 ---
 
@@ -451,13 +453,15 @@ const {
 
   // ✅ Validator mirrors data structure exactly
   validator: (source) => ({
-    name: stringValidator(source.name, 'trim')
+    name: stringValidator(source.name)
+      .prepare('trim')
       .required()
       .minLength(2)
       .maxLength(100)
       .getError(),
 
-    taxId: stringValidator(source.taxId, 'trim', 'upper')
+    taxId: stringValidator(source.taxId)
+      .prepare('trim', 'upper')
       .required()
       .regexp(/^[A-Z]{2}-\d{8}$/, 'Format: XX-12345678')
       .getError(),
@@ -470,20 +474,23 @@ const {
 
     // 📍 Nested address validation
     address: {
-      street: stringValidator(source.address.street, 'trim')
+      street: stringValidator(source.address.street)
+        .prepare('trim')
         .required()
         .minLength(5)
         .getError(),
-      city: stringValidator(source.address.city, 'trim')
+      city: stringValidator(source.address.city)
+        .prepare('trim')
         .required()
         .getError(),
-      zip: stringValidator(source.address.zip, 'trim')
+      zip: stringValidator(source.address.zip)
+        .prepare('trim')
         .required()
         .minLength(5)
         .getError(),
       country: stringValidator(source.address.country)
         .required()
-        .inArray(['US', 'CA', 'UK', 'DE', 'FR'])
+        .in(['US', 'CA', 'UK', 'DE', 'FR'])
         .getError()
     },
 
@@ -497,19 +504,21 @@ const {
     billing: {
       paymentTerms: stringValidator(source.billing.paymentTerms)
         .required()
-        .inArray(['NET15', 'NET30', 'NET60', 'COD'])
+        .in(['NET15', 'NET30', 'NET60', 'COD'])
         .getError(),
       currency: stringValidator(source.billing.currency)
         .required()
-        .inArray(['USD', 'EUR', 'GBP'])
+        .in(['USD', 'EUR', 'GBP'])
         .getError(),
       bankAccount: {
-        iban: stringValidator(source.billing.bankAccount.iban, 'trim', 'upper')
+        iban: stringValidator(source.billing.bankAccount.iban)
+          .prepare('trim', 'upper')
           .required()
           .minLength(15)
           .maxLength(34)
           .getError(),
-        swift: stringValidator(source.billing.bankAccount.swift, 'trim', 'upper')
+        swift: stringValidator(source.billing.bankAccount.swift)
+          .prepare('trim', 'upper')
           .required()
           .minLength(8)
           .maxLength(11)
@@ -619,18 +628,21 @@ const {
 } = createSvState(initialProduct, {
 
   validator: (source) => ({
-    sku: stringValidator(source.sku, 'trim', 'upper')
+    sku: stringValidator(source.sku)
+      .prepare('trim', 'upper')
       .required()
       .regexp(/^[A-Z]{3}-\d{4}$/, 'Format: ABC-1234')
       .getError(),
 
-    name: stringValidator(source.name, 'trim')
+    name: stringValidator(source.name)
+      .prepare('trim')
       .required()
       .minLength(3)
       .maxLength(100)
       .getError(),
 
-    description: stringValidator(source.description, 'trim')
+    description: stringValidator(source.description)
+      .prepare('trim')
       .maxLength(500)
       .getError(),
 
@@ -780,12 +792,12 @@ svstate ships with four fluent validator builders that cover the most common val
 
 String validators support optional preprocessing (`'trim'`, `'normalize'`, `'upper'`, `'lower'`) applied before validation. All validators return descriptive error messages that you can customize or use as-is.
 
-| Validator                             | Methods                                                                                                                                                                                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stringValidator(input, ...prepares)` | `required()`, `minLength(n)`, `maxLength(n)`, `email()`, `regexp(re)`, `inArray(arr)`, `startsWith(s)`, `endsWith(s)`, `contains(s)`, `noSpace()`, `uppercase()`, `lowercase()`, `alphanumeric()`, `numeric()`, `website(mode)` |
-| `numberValidator(input)`              | `required()`, `min(n)`, `max(n)`, `between(min, max)`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `multipleOf(n)`, `decimal(places)`, `percentage()`                                                             |
-| `arrayValidator(input)`               | `required()`, `minLength(n)`, `maxLength(n)`, `unique()`                                                                                                                                                                        |
-| `dateValidator(input)`                | `required()`, `before(date)`, `after(date)`, `between(start, end)`, `past()`, `future()`, `weekday()`, `weekend()`, `minAge(years)`, `maxAge(years)`                                                                            |
+| Validator                | Methods                                                                                                                                                                                                                                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stringValidator(input)` | `prepare(...ops)`, `required()`, `requiredIf(cond)`, `minLength(n)`, `maxLength(n)`, `email()`, `regexp(re, msg?)`, `in(arr)`, `notIn(arr)`, `startsWith(s)`, `endsWith(s)`, `contains(s)`, `noSpace()`, `notBlank()`, `uppercase()`, `lowercase()`, `alphanumeric()`, `numeric()`, `slug()`, `identifier()`, `website(mode)` |
+| `numberValidator(input)` | `required()`, `requiredIf(cond)`, `min(n)`, `max(n)`, `between(min, max)`, `integer()`, `positive()`, `negative()`, `nonNegative()`, `notZero()`, `multipleOf(n)`, `step(n)`, `decimal(places)`, `percentage()`                                                                                                               |
+| `arrayValidator(input)`  | `required()`, `requiredIf(cond)`, `minLength(n)`, `maxLength(n)`, `ofLength(n)`, `unique()`, `includes(item)`, `includesAny(items)`, `includesAll(items)`                                                                                                                                                                     |
+| `dateValidator(input)`   | `required()`, `requiredIf(cond)`, `before(date)`, `after(date)`, `between(start, end)`, `past()`, `future()`, `weekday()`, `weekend()`, `minAge(years)`, `maxAge(years)`                                                                                                                                                      |
 
 ### TypeScript Types
 
