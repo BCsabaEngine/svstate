@@ -30,6 +30,11 @@ export function stringValidator(input: string | null | undefined): StringValidat
       return builder;
     },
 
+    requiredIf(cond: boolean) {
+      if (cond && !error && (isNullish || !processedInput)) setError('Required');
+      return builder;
+    },
+
     noSpace() {
       if (isNullish) return builder;
       if (!error && processedInput.includes(' ')) setError('No space allowed');
@@ -157,6 +162,7 @@ type StringValidatorBuilder = {
   prepare(...prepares: (BaseOption | 'localeLower')[]): StringValidatorBuilder;
   prepare(...prepares: BaseOption[]): StringValidatorBuilder;
   required(): StringValidatorBuilder;
+  requiredIf(cond: boolean): StringValidatorBuilder;
   noSpace(): StringValidatorBuilder;
   notBlank(): StringValidatorBuilder;
   minLength(length: number): StringValidatorBuilder;
@@ -189,6 +195,11 @@ export function numberValidator(input: number | null | undefined): NumberValidat
   const builder: NumberValidatorBuilder = {
     required() {
       if (!error && (isNullish || Number.isNaN(input))) setError('Required');
+      return builder;
+    },
+
+    requiredIf(cond: boolean) {
+      if (cond && !error && (isNullish || Number.isNaN(input))) setError('Required');
       return builder;
     },
 
@@ -277,6 +288,7 @@ export function numberValidator(input: number | null | undefined): NumberValidat
 
 type NumberValidatorBuilder = {
   required(): NumberValidatorBuilder;
+  requiredIf(cond: boolean): NumberValidatorBuilder;
   min(n: number): NumberValidatorBuilder;
   max(n: number): NumberValidatorBuilder;
   between(min: number, max: number): NumberValidatorBuilder;
@@ -304,6 +316,11 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
   const builder: ArrayValidatorBuilder<T> = {
     required() {
       if (!error && (isNullish || array.length === 0)) setError('Required');
+      return builder;
+    },
+
+    requiredIf(cond: boolean) {
+      if (cond && !error && (isNullish || array.length === 0)) setError('Required');
       return builder;
     },
 
@@ -391,6 +408,7 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
 
 type ArrayValidatorBuilder<T> = {
   required(): ArrayValidatorBuilder<T>;
+  requiredIf(cond: boolean): ArrayValidatorBuilder<T>;
   minLength(n: number): ArrayValidatorBuilder<T>;
   maxLength(n: number): ArrayValidatorBuilder<T>;
   unique(): ArrayValidatorBuilder<T>;
@@ -415,6 +433,11 @@ export function dateValidator(input: Date | string | number | null | undefined):
   const builder: DateValidatorBuilder = {
     required() {
       if (!error && !isValid) setError('Required');
+      return builder;
+    },
+
+    requiredIf(cond: boolean) {
+      if (cond && !error && !isValid) setError('Required');
       return builder;
     },
 
@@ -498,6 +521,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
 
 type DateValidatorBuilder = {
   required(): DateValidatorBuilder;
+  requiredIf(cond: boolean): DateValidatorBuilder;
   before(target: Date | string | number): DateValidatorBuilder;
   after(target: Date | string | number): DateValidatorBuilder;
   between(start: Date | string | number, end: Date | string | number): DateValidatorBuilder;

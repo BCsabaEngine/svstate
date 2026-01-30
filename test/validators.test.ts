@@ -57,6 +57,43 @@ describe('stringValidator', () => {
     });
   });
 
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for empty string when condition is true', () => {
+      expect(stringValidator('').requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for valid value when condition is true', () => {
+      expect(stringValidator('hello').requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for empty string when condition is false', () => {
+      expect(stringValidator('').requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for valid value when condition is false', () => {
+      expect(stringValidator('hello').requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(stringValidator('hi').requiredIf(true).minLength(5).getError()).toBe('Min length 5');
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).requiredIf(false).minLength(5).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
   describe('noSpace', () => {
     it('should pass for string without spaces', () => {
       expect(stringValidator('hello').noSpace().getError()).toBe('');
@@ -593,6 +630,47 @@ describe('numberValidator', () => {
     });
   });
 
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for NaN when condition is true', () => {
+      expect(numberValidator(Number.NaN).requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for valid value when condition is true', () => {
+      expect(numberValidator(5).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for zero when condition is true', () => {
+      expect(numberValidator(0).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for NaN when condition is false', () => {
+      expect(numberValidator(Number.NaN).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for valid value when condition is false', () => {
+      expect(numberValidator(5).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(numberValidator(3).requiredIf(true).min(5).getError()).toBe('Minimum 5');
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).requiredIf(false).min(5).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+  });
+
   describe('min', () => {
     it('should pass when number equals minimum', () => {
       expect(numberValidator(5).min(5).getError()).toBe('');
@@ -868,6 +946,43 @@ describe('arrayValidator', () => {
 
     it('should fail for empty array', () => {
       expect(arrayValidator([]).required().getError()).toBe('Required');
+    });
+  });
+
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for empty array when condition is true', () => {
+      expect(arrayValidator([]).requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for non-empty array when condition is true', () => {
+      expect(arrayValidator([1, 2, 3]).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for empty array when condition is false', () => {
+      expect(arrayValidator([]).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for non-empty array when condition is false', () => {
+      expect(arrayValidator([1, 2, 3]).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(arrayValidator([1, 2]).requiredIf(true).minLength(3).getError()).toBe('Minimum 3 items');
+      /* eslint-disable unicorn/no-null */
+      expect(arrayValidator(null).requiredIf(false).minLength(3).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
     });
   });
 
@@ -1196,6 +1311,41 @@ describe('dateValidator', () => {
 
     it('should fail for invalid string', () => {
       expect(dateValidator('not-a-date').required().getError()).toBe('Required');
+    });
+  });
+
+  describe('requiredIf', () => {
+    it('should fail for null when condition is true', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(dateValidator(null).requiredIf(true).getError()).toBe('Required');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should fail for invalid date when condition is true', () => {
+      expect(dateValidator('invalid').requiredIf(true).getError()).toBe('Required');
+    });
+
+    it('should pass for valid date when condition is true', () => {
+      expect(dateValidator(new Date()).requiredIf(true).getError()).toBe('');
+    });
+
+    it('should pass for null when condition is false', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(dateValidator(null).requiredIf(false).getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
+
+    it('should pass for invalid date when condition is false', () => {
+      expect(dateValidator('invalid').requiredIf(false).getError()).toBe('');
+    });
+
+    it('should pass for valid date when condition is false', () => {
+      expect(dateValidator(new Date()).requiredIf(false).getError()).toBe('');
+    });
+
+    it('should chain with other methods', () => {
+      expect(dateValidator(futureDate).requiredIf(true).past().getError()).toBe('Must be in the past');
+      expect(dateValidator('invalid').requiredIf(false).past().getError()).toBe('');
     });
   });
 
