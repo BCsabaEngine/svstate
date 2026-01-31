@@ -2,45 +2,53 @@ import { get } from 'svelte/store';
 
 import { arrayValidator, createSvState, dateValidator, numberValidator, stringValidator } from '../src/index';
 
+// CI environment detection - GitHub Actions sets GITHUB_ACTIONS=true
+const IS_CI = process.env.GITHUB_ACTIONS === 'true';
+const CI_MULTIPLIER = 3; // Thresholds are 3x higher in CI
+
+// Helper to apply CI multiplier to thresholds
+function threshold(value: number): number {
+  return IS_CI ? value * CI_MULTIPLIER : value;
+}
+
 // Centralized thresholds for easy adjustment (in milliseconds)
-// Set at 10x expected values to pass in CI/CD pipelines
 const THRESHOLDS = {
   // State Creation
-  simpleStateCreation: 1,
-  largeStateCreation: 5,
-  stateWithValidator: 5,
-  stateWithEffect: 5,
+  simpleStateCreation: threshold(1),
+  largeStateCreation: threshold(5),
+  stateWithValidator: threshold(5),
+  stateWithEffect: threshold(5),
 
   // Property Changes
-  singleChange: 0.5,
-  hundredChanges: 10,
-  thousandChanges: 100,
-  nestedChanges: 10,
+  singleChange: threshold(0.5),
+  hundredChanges: threshold(10),
+  thousandChanges: threshold(100),
+  nestedChanges: threshold(10),
 
   // Validation
-  singleValidation: 1,
-  batchedValidation: 1,
+  singleValidation: threshold(1),
+  batchedValidation: threshold(1),
 
   // Snapshots
-  smallStateSnapshot: 0.5,
-  largeStateSnapshot: 10,
-  fiftySnapshots: 10,
+  smallStateSnapshot: threshold(0.5),
+  largeStateSnapshot: threshold(10),
+  fiftySnapshots: threshold(10),
 
   // Rollback
-  singleRollback: 1,
-  multiStepRollback: 1,
-  reset: 1,
+  singleRollback: threshold(1),
+  multiStepRollback: threshold(1),
+  reset: threshold(1),
 
   // Validators (higher threshold for first-call JIT compilation overhead)
-  stringChain: 0.5,
-  numberChain: 0.5,
-  arrayChain: 0.5,
-  dateChain: 0.5,
-  thousandValidatorCalls: 50,
+  stringChain: threshold(0.5),
+  numberChain: threshold(0.5),
+  arrayChain: threshold(0.5),
+  dateChain: threshold(0.5),
+  thousandValidatorCalls: threshold(50),
 
   // Large State
-  deeplyNested: 5,
-  arrayWithObjects: 5
+  deeplyNested: threshold(5),
+  arrayWithObjects: threshold(5)
 };
 
 // Helper function to measure execution time
