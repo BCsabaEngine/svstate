@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-31
+
+### Added
+
+- Async validation support for server-side checks like username availability or email verification
+- Configurable concurrency limit for async validators to prevent overwhelming servers
+- `requiredIf(condition)` method for all validators to conditionally require fields
+- New number validator with constraints for min, max, integer, positive, negative, decimal places, and more
+- New array validator with constraints for length, uniqueness, and item inclusion checks
+- New date validator with constraints for ranges, past/future, weekday/weekend, and age calculations
+
+### Changed
+
+- All validators now accept `null` or `undefined` values gracefully, skipping validation unless `required()` is called
+- String validator's `prepare()` method now supports chaining multiple preprocessing operations
+
 ## [1.2.0] - 2026-01-28
 
 ### Added
