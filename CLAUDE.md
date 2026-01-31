@@ -77,8 +77,8 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`)
-- `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system
+- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`)
+- `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system and async validation
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
 
@@ -97,26 +97,35 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 - `rollback(steps?)` - Undo N steps (default 1), restores state and triggers validation
 - `reset()` - Return to initial snapshot, triggers validation
 - `state` - Object containing reactive stores:
-  - `errors: Readable<V | undefined>` - Validation errors
-  - `hasErrors: Readable<boolean>` - Whether any validation errors exist
+  - `errors: Readable<V | undefined>` - Validation errors (sync)
+  - `hasErrors: Readable<boolean>` - Whether any sync validation errors exist
   - `isDirty: Readable<boolean>` - Whether state has been modified
   - `actionInProgress: Readable<boolean>` - Action execution status
   - `actionError: Readable<Error | undefined>` - Last action error
   - `snapshots: Readable<Snapshot<T>[]>` - Snapshot history for undo
+  - `asyncErrors: Readable<AsyncErrors>` - Async validation errors (keyed by property path)
+  - `hasAsyncErrors: Readable<boolean>` - Whether any async validation errors exist
+  - `asyncValidating: Readable<string[]>` - Property paths currently being validated
+  - `hasCombinedErrors: Readable<boolean>` - Whether any sync OR async errors exist
 
 **Actuators:**
 
-- `validator?: (source: T) => V` - Validation function returning error structure
+- `validator?: (source: T) => V` - Sync validation function returning error structure
 - `effect?: (context: EffectContext<T>) => void` - Side effect receiving context object with `snapshot` function
 - `action?: (params?: P) => Promise<void> | void` - Async action to execute
 - `actionCompleted?: (error?: unknown) => void | Promise<void>` - Callback after action completes (can be async)
+- `asyncValidator?: AsyncValidator<T>` - Async validators keyed by property path (see Async Validation System)
 
 **Options:**
 
 - `resetDirtyOnAction: boolean` (default: `true`) - Reset `isDirty` after successful action
-- `debounceValidation: number` (default: `0`) - Debounce validation by N ms (0 = `queueMicrotask`)
+- `debounceValidation: number` (default: `0`) - Debounce sync validation by N ms (0 = `queueMicrotask`)
 - `allowConcurrentActions: boolean` (default: `false`) - Ignore `execute()` if action in progress
 - `persistActionError: boolean` (default: `false`) - Keep action errors until next action
+- `debounceAsyncValidation: number` (default: `300`) - Debounce async validation by N ms
+- `runAsyncValidationOnInit: boolean` (default: `false`) - Run async validators when state is created
+- `clearAsyncErrorsOnChange: boolean` (default: `true`) - Clear async error for a path when that property changes
+- `maxConcurrentAsyncValidations: number` (default: `4`) - Maximum concurrent async validators running simultaneously
 
 ### Snapshot/Undo System
 
@@ -139,6 +148,33 @@ effect: ({ snapshot, property }) => {
 - Initial state is saved as first snapshot with title `"Initial"`
 - Successful action execution resets snapshots with current state as new initial
 - `rollback()` and `reset()` trigger validation after restoring state
+
+### Async Validation System
+
+Async validators are defined per property path and receive an `AbortSignal` for cancellation:
+
+```typescript
+type AsyncValidatorFunction<T> = (value: unknown, source: T, signal: AbortSignal) => Promise<string>;
+
+type AsyncValidator<T> = {
+  [propertyPath: string]: AsyncValidatorFunction<T>;
+};
+```
+
+**Key behaviors:**
+
+- Async validators are keyed by dot-notation property paths (e.g., `"email"`, `"user.username"`)
+- When a property changes, matching async validators are scheduled after `debounceAsyncValidation` ms
+- If sync validation fails for a property path, async validation is skipped for that path
+- Changing a property cancels any pending async validation for that path
+- `rollback()` and `reset()` cancel all async validations and clear async errors
+- The `maxConcurrentAsyncValidations` option limits how many async validators run simultaneously; additional validators are queued
+
+**Matching rules for property paths:**
+
+- Exact match: validator for `"email"` triggers when `email` changes
+- Parent triggers child: validator for `"user.email"` triggers when `user` changes
+- Child triggers parent: validator for `"user"` triggers when `user.email` changes
 
 ### Deep Clone System (src/state.svelte.ts)
 
