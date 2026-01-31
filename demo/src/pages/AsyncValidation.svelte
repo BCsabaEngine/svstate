@@ -23,7 +23,13 @@
 		state: { errors, hasErrors, isDirty, asyncErrors, hasAsyncErrors, asyncValidating, hasCombinedErrors }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
-			username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
+			username: stringValidator(source.username)
+				.prepare('trim')
+				.required()
+				.minLength(3)
+				.maxLength(20)
+				.noSpace()
+				.getError(),
 			email: stringValidator(source.email).prepare('trim').required().email().getError()
 		}),
 		asyncValidator: {
@@ -188,10 +194,12 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 
 		<div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
 			<div class="text-sm text-blue-800">
-				<span class="font-medium">Taken usernames:</span> {takenUsernames.join(', ')}
+				<span class="font-medium">Taken usernames:</span>
+				{takenUsernames.join(', ')}
 			</div>
 			<div class="mt-1 text-sm text-blue-800">
-				<span class="font-medium">Taken emails:</span> {takenEmails.join(', ')}
+				<span class="font-medium">Taken emails:</span>
+				{takenEmails.join(', ')}
 			</div>
 		</div>
 
@@ -246,7 +254,7 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 
 			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
 				<h6 class="mb-2 text-sm font-medium text-gray-700">Async Errors</h6>
-				<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify($asyncErrors, null, 2)}</pre>
+				<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify($asyncErrors, undefined, 2)}</pre>
 			</div>
 		</div>
 	{/snippet}

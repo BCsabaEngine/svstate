@@ -18,7 +18,14 @@ export default defineConfig({
 		emptyOutDir: true,
 		outDir: '../docs',
 		chunkSizeWarningLimit: 1500,
-		assetsInlineLimit: 4096
+		assetsInlineLimit: 4096,
+		rollupOptions: {
+			onwarn(warning, warn) {
+				// Suppress @__PURE__ annotation warnings from Svelte 5 runes
+				if (warning.code === 'INVALID_ANNOTATION' && warning.message.includes('@__PURE__')) return;
+				warn(warning);
+			}
+		}
 	},
 	base: process.env.NODE_ENV === 'production' ? '/svstate' : '',
 	resolve: {
