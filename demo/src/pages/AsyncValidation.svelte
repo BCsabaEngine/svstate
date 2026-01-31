@@ -9,92 +9,117 @@
 	import StatusBadges from '$components/StatusBadges.svelte';
 	import { randomId } from '$lib/utilities';
 
-	// Simulated taken usernames and emails
+	// Simulated taken usernames, emails, and slugs
 	const takenUsernames = ['admin', 'user', 'test', 'demo', 'root'];
 	const takenEmails = ['admin@example.com', 'test@example.com', 'user@example.com'];
+	const takenSlugs = ['admin', 'about', 'contact', 'help', 'support'];
 
 	const sourceData = {
 		username: '',
-		email: ''
+		email: '',
+		slug: ''
 	};
 
 	const {
 		data,
 		state: { errors, hasErrors, isDirty, asyncErrors, hasAsyncErrors, asyncValidating, hasCombinedErrors }
-	} = createSvState(sourceData, {
-		validator: (source) => ({
-			username: stringValidator(source.username)
-				.prepare('trim')
-				.required()
-				.minLength(3)
-				.maxLength(20)
-				.noSpace()
-				.getError(),
-			email: stringValidator(source.email).prepare('trim').required().email().getError()
-		}),
-		asyncValidator: {
-			username: async (value, _source, signal) => {
-				// Simulate API delay (500ms)
-				await new Promise((resolve, reject) => {
-					const timeout = setTimeout(resolve, 500);
-					signal.addEventListener('abort', () => {
-						clearTimeout(timeout);
-						reject(new DOMException('Aborted', 'AbortError'));
+	} = createSvState(
+		sourceData,
+		{
+			validator: (source) => ({
+				username: stringValidator(source.username)
+					.prepare('trim')
+					.required()
+					.minLength(3)
+					.maxLength(20)
+					.noSpace()
+					.getError(),
+				email: stringValidator(source.email).prepare('trim').required().email().getError(),
+				slug: stringValidator(source.slug).prepare('trim').required().minLength(2).slug().getError()
+			}),
+			asyncValidator: {
+				username: async (value, _source, signal) => {
+					// Simulate API delay (500ms)
+					await new Promise((resolve, reject) => {
+						const timeout = setTimeout(resolve, 500);
+						signal.addEventListener('abort', () => {
+							clearTimeout(timeout);
+							reject(new DOMException('Aborted', 'AbortError'));
+						});
 					});
-				});
 
-				const username = String(value).toLowerCase();
-				return takenUsernames.includes(username) ? 'Username is already taken' : '';
-			},
-			email: async (value, _source, signal) => {
-				// Simulate API delay (300ms)
-				await new Promise((resolve, reject) => {
-					const timeout = setTimeout(resolve, 300);
-					signal.addEventListener('abort', () => {
-						clearTimeout(timeout);
-						reject(new DOMException('Aborted', 'AbortError'));
+					const username = String(value).toLowerCase();
+					return takenUsernames.includes(username) ? 'Username is already taken' : '';
+				},
+				email: async (value, _source, signal) => {
+					// Simulate API delay (400ms)
+					await new Promise((resolve, reject) => {
+						const timeout = setTimeout(resolve, 400);
+						signal.addEventListener('abort', () => {
+							clearTimeout(timeout);
+							reject(new DOMException('Aborted', 'AbortError'));
+						});
 					});
-				});
 
-				const email = String(value).toLowerCase();
-				return takenEmails.includes(email) ? 'Email is already registered' : '';
+					const email = String(value).toLowerCase();
+					return takenEmails.includes(email) ? 'Email is already registered' : '';
+				},
+				slug: async (value, _source, signal) => {
+					// Simulate API delay (600ms)
+					await new Promise((resolve, reject) => {
+						const timeout = setTimeout(resolve, 600);
+						signal.addEventListener('abort', () => {
+							clearTimeout(timeout);
+							reject(new DOMException('Aborted', 'AbortError'));
+						});
+					});
+
+					const slug = String(value).toLowerCase();
+					return takenSlugs.includes(slug) ? 'URL slug is already in use' : '';
+				}
 			}
-		}
-	});
+		},
+		{ maxConcurrentAsyncValidations: 2 }
+	);
 
 	const fillWithValidData = () => {
 		data.username = `newuser${randomId()}`;
 		data.email = `${randomId()}@example.com`;
+		data.slug = `my-page-${randomId()}`;
 	};
 
 	const fillWithTakenData = () => {
 		data.username = 'admin';
 		data.email = 'admin@example.com';
+		data.slug = 'about';
 	};
 
 	// ─────────────────────────────────────────────
 	// Source code examples for the collapsible section
 	// ─────────────────────────────────────────────
-	const stateSourceCode = `const { data, state: { errors, hasErrors, asyncErrors, hasAsyncErrors, asyncValidating, hasCombinedErrors } } =
+	const stateSourceCode = `const { data, state: { errors, asyncErrors, asyncValidating, hasCombinedErrors } } =
   createSvState(sourceData, {
     validator: (source) => ({
       username: stringValidator(source.username).required().minLength(3).noSpace().getError(),
-      email: stringValidator(source.email).required().email().getError()
+      email: stringValidator(source.email).required().email().getError(),
+      slug: stringValidator(source.slug).required().minLength(2).slug().getError()
     }),
     asyncValidator: {
       username: async (value, source, signal) => {
         const res = await fetch(\`/api/check-username?u=\${value}\`, { signal });
-        const { available } = await res.json();
-        return available ? '' : 'Username already taken';
+        return (await res.json()).available ? '' : 'Username already taken';
       },
       email: async (value, source, signal) => {
         const res = await fetch(\`/api/check-email?e=\${value}\`, { signal });
-        const { available } = await res.json();
-        return available ? '' : 'Email already registered';
+        return (await res.json()).available ? '' : 'Email already registered';
+      },
+      slug: async (value, source, signal) => {
+        const res = await fetch(\`/api/check-slug?s=\${value}\`, { signal });
+        return (await res.json()).available ? '' : 'URL slug already in use';
       }
     }
   },
-  { debounceAsyncValidation: 300 } // default is 300ms
+  { maxConcurrentAsyncValidations: 2 } // Only 2 async validations run at a time
 );`;
 
 	const templateSourceCode = `<!-- Show loading spinner when validating -->
@@ -190,6 +215,28 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 					</div>
 				{/if}
 			</div>
+
+			<div class="relative">
+				<FormField
+					id="slug"
+					error={$errors?.slug || $asyncErrors.slug}
+					label="URL Slug"
+					placeholder="Enter slug (try 'admin', 'about', 'contact')"
+					bind:value={data.slug}
+				/>
+				{#if $asyncValidating.includes('slug')}
+					<div class="absolute right-3 top-9">
+						<svg class="h-5 w-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path
+								class="opacity-75"
+								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+								fill="currentColor"
+							></path>
+						</svg>
+					</div>
+				{/if}
+			</div>
 		</div>
 
 		<div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
@@ -200,6 +247,19 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 			<div class="mt-1 text-sm text-blue-800">
 				<span class="font-medium">Taken emails:</span>
 				{takenEmails.join(', ')}
+			</div>
+			<div class="mt-1 text-sm text-blue-800">
+				<span class="font-medium">Taken slugs:</span>
+				{takenSlugs.join(', ')}
+			</div>
+		</div>
+
+		<div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+			<div class="text-sm text-amber-800">
+				<span class="font-medium">Concurrency limit:</span> maxConcurrentAsyncValidations = 2
+			</div>
+			<div class="mt-1 text-xs text-amber-700">
+				Only 2 async validations run simultaneously. Try filling all 3 fields at once to see queuing in action.
 			</div>
 		</div>
 
