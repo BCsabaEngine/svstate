@@ -70,6 +70,7 @@ const customer = $state({
 
 - 🔍 **Detects changes** at any nesting level (`customer.billing.bankAccount.iban`)
 - ✅ **Validates** with a structure that mirrors your data
+- 🌐 **Async validation** for server-side checks (username availability, email verification)
 - ⚡ **Fires effects** when any property changes (with full context)
 - ⏪ **Snapshots & undo** for complex editing workflows
 - 🎯 **Tracks dirty state** automatically
@@ -161,6 +162,63 @@ const {
 - 🧹 String preprocessing via `.prepare()`: `'trim'`, `'normalize'`, `'upper'`, `'lower'`, `'localeUpper'`, `'localeLower'`
 - ⚡ First-error-wins: `getError()` returns the first failure
 - 🔀 Conditional validation: `requiredIf(condition)` on all validators
+
+#### Async Validation
+
+For server-side validation (checking username availability, email verification, etc.), svstate supports async validators that run after sync validation passes:
+
+```typescript
+import { createSvState, stringValidator, type AsyncValidator } from 'svstate';
+
+type UserForm = { username: string; email: string };
+
+const asyncValidators: AsyncValidator<UserForm> = {
+  username: async (value, source, signal) => {
+    // Skip if empty (let sync validation handle required)
+    if (!value) return '';
+
+    const response = await fetch(`/api/check-username?name=${value}`, { signal });
+    const { available } = await response.json();
+    return available ? '' : 'Username already taken';
+  },
+  email: async (value, source, signal) => {
+    if (!value) return '';
+
+    const response = await fetch(`/api/check-email?email=${value}`, { signal });
+    const { valid } = await response.json();
+    return valid ? '' : 'Email not deliverable';
+  }
+};
+
+const {
+  data,
+  state: { errors, asyncErrors, asyncValidating, hasAsyncErrors, hasCombinedErrors }
+} = createSvState(
+  { username: '', email: '' },
+  {
+    validator: (source) => ({
+      username: stringValidator(source.username).required().minLength(3).getError(),
+      email: stringValidator(source.email).required().email().getError()
+    }),
+    asyncValidator: asyncValidators
+  },
+  { debounceAsyncValidation: 500 }
+);
+
+// In template:
+// {#if $asyncValidating.includes('username')}Checking...{/if}
+// {#if $asyncErrors.username}{$asyncErrors.username}{/if}
+// <button disabled={$hasCombinedErrors}>Submit</button>
+```
+
+**Key features:**
+
+- 🌐 Async validators receive `AbortSignal` for automatic cancellation
+- ⏱️ Debounced by default (300ms) to avoid excessive API calls
+- 🔄 Auto-cancels on property change or new validation
+- 🚫 Skipped if sync validation fails for the same path
+- 🎯 `asyncValidating` shows which paths are currently checking
+- 🔒 `maxConcurrentAsyncValidations` limits parallel requests (default: 4)
 
 ---
 
@@ -317,23 +375,39 @@ const { data } = createSvState(formData, actuators, {
   // Reset isDirty after successful action (default: true)
   resetDirtyOnAction: true,
 
-  // Debounce validation in ms (default: 0 = microtask)
+  // Debounce sync validation in ms (default: 0 = microtask)
   debounceValidation: 300,
 
   // Allow concurrent action executions (default: false)
   allowConcurrentActions: false,
 
   // Keep actionError until next action (default: false)
-  persistActionError: false
+  persistActionError: false,
+
+  // Debounce async validation in ms (default: 300)
+  debounceAsyncValidation: 500,
+
+  // Run async validators on state creation (default: false)
+  runAsyncValidationOnInit: false,
+
+  // Clear async error when property changes (default: true)
+  clearAsyncErrorsOnChange: true,
+
+  // Max concurrent async validators (default: 4)
+  maxConcurrentAsyncValidations: 4
 });
 ```
 
-| Option                   | Default | Description                              |
-| ------------------------ | ------- | ---------------------------------------- |
-| `resetDirtyOnAction`     | `true`  | Clear dirty flag after successful action |
-| `debounceValidation`     | `0`     | Delay validation (0 = next microtask)    |
-| `allowConcurrentActions` | `false` | Block execute() while action runs        |
-| `persistActionError`     | `false` | Clear error on next change or action     |
+| Option                          | Default | Description                                |
+| ------------------------------- | ------- | ------------------------------------------ |
+| `resetDirtyOnAction`            | `true`  | Clear dirty flag after successful action   |
+| `debounceValidation`            | `0`     | Delay sync validation (0 = next microtask) |
+| `allowConcurrentActions`        | `false` | Block execute() while action runs          |
+| `persistActionError`            | `false` | Clear error on next change or action       |
+| `debounceAsyncValidation`       | `300`   | Delay async validation in ms               |
+| `runAsyncValidationOnInit`      | `false` | Run async validators on creation           |
+| `clearAsyncErrorsOnChange`      | `true`  | Clear async error when property changes    |
+| `maxConcurrentAsyncValidations` | `4`     | Max concurrent async validators            |
 
 ---
 
@@ -779,12 +853,16 @@ Creates a supercharged state object.
 | `execute(params?)` | `(P?) => Promise<void>` | Run the configured action |
 | `rollback(steps?)` | `(n?: number) => void` | Undo N changes (default: 1) |
 | `reset()` | `() => void` | Return to initial state |
-| `state.errors` | `Readable<V>` | Validation errors store |
-| `state.hasErrors` | `Readable<boolean>` | Quick error check |
+| `state.errors` | `Readable<V>` | Sync validation errors store |
+| `state.hasErrors` | `Readable<boolean>` | Has sync errors? |
 | `state.isDirty` | `Readable<boolean>` | Has state changed? |
 | `state.actionInProgress` | `Readable<boolean>` | Is action running? |
 | `state.actionError` | `Readable<Error>` | Last action error |
 | `state.snapshots` | `Readable<Snapshot[]>` | Undo history |
+| `state.asyncErrors` | `Readable<AsyncErrors>` | Async validation errors (keyed by path) |
+| `state.hasAsyncErrors` | `Readable<boolean>` | Has async errors? |
+| `state.asyncValidating` | `Readable<string[]>` | Paths currently validating |
+| `state.hasCombinedErrors` | `Readable<boolean>` | Has sync OR async errors? |
 
 ### Built-in Validators
 
@@ -804,16 +882,28 @@ String validators support optional preprocessing (`'trim'`, `'normalize'`, `'upp
 svstate exports TypeScript types to help you write type-safe external validator and effect functions. This is useful when you want to define these functions outside the `createSvState` call or reuse them across multiple state instances.
 
 ```typescript
-import type { Validator, EffectContext, Snapshot, SnapshotFunction, SvStateOptions } from 'svstate';
+import type {
+  Validator,
+  EffectContext,
+  Snapshot,
+  SnapshotFunction,
+  SvStateOptions,
+  AsyncValidator,
+  AsyncValidatorFunction,
+  AsyncErrors
+} from 'svstate';
 ```
 
-| Type               | Description                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| `Validator`        | Nested object type for validation errors — leaf values are error strings (empty = valid)            |
-| `EffectContext<T>` | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }` |
-| `SnapshotFunction` | Type for the `snapshot(title, replace?)` function used in effects                                   |
-| `Snapshot<T>`      | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
-| `SvStateOptions`   | Configuration options type for `createSvState`                                                      |
+| Type                        | Description                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `Validator`                 | Nested object type for validation errors — leaf values are error strings (empty = valid)            |
+| `EffectContext<T>`          | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }` |
+| `SnapshotFunction`          | Type for the `snapshot(title, replace?)` function used in effects                                   |
+| `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
+| `SvStateOptions`            | Configuration options type for `createSvState`                                                      |
+| `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                          |
+| `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                        |
+| `AsyncErrors`               | Object mapping property paths to error strings                                                      |
 
 **Example: External validator and effect functions**
 
@@ -860,6 +950,7 @@ const { data, state } = createSvState<UserData, UserErrors, object>(
 | Deep nested objects    | ⚠️ Manual tracking | ✅ Automatic    |
 | Property change events | ❌ Not available   | ✅ Full context |
 | Structured validation  | ❌ DIY             | ✅ Mirrors data |
+| Async validation       | ❌ DIY             | ✅ Built-in     |
 | Undo/Redo              | ❌ DIY             | ✅ Built-in     |
 | Dirty tracking         | ❌ DIY             | ✅ Automatic    |
 | Action loading states  | ❌ DIY             | ✅ Built-in     |
