@@ -111,6 +111,7 @@ export type SvStateOptions = {
   debounceAsyncValidation: number;
   runAsyncValidationOnInit: boolean;
   clearAsyncErrorsOnChange: boolean;
+  maxConcurrentAsyncValidations: number;
 };
 const defaultOptions: SvStateOptions = {
   resetDirtyOnAction: true,
@@ -119,7 +120,8 @@ const defaultOptions: SvStateOptions = {
   persistActionError: false,
   debounceAsyncValidation: 300,
   runAsyncValidationOnInit: false,
-  clearAsyncErrorsOnChange: true
+  clearAsyncErrorsOnChange: true,
+  maxConcurrentAsyncValidations: 4
 };
 
 // createSvState
@@ -157,6 +159,9 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     { controller: AbortController; timeoutId: ReturnType<typeof setTimeout> }
   >();
 
+  // Queue for async validations waiting to run (when at concurrency limit)
+  const asyncValidationQueue: string[] = [];
+
   const stateObject = $state<T>(init);
 
   const createSnapshot: SnapshotFunction = (title: string, replace = true) => {
@@ -191,7 +196,15 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   // Async validation functions
+  const removeFromQueue = (path: string) => {
+    const index = asyncValidationQueue.indexOf(path);
+    if (index !== -1) asyncValidationQueue.splice(index, 1);
+  };
+
   const cancelAsyncValidation = (path: string) => {
+    // Remove from queue if waiting
+    removeFromQueue(path);
+
     const tracker = asyncValidationTrackers.get(path);
     if (tracker) {
       clearTimeout(tracker.timeoutId);
@@ -205,8 +218,68 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const cancelAllAsyncValidations = () => {
+    asyncValidationQueue.length = 0;
     for (const path of asyncValidationTrackers.keys()) cancelAsyncValidation(path);
     asyncErrorsStore.set({});
+  };
+
+  const executeAsyncValidation = async (path: string, onComplete: () => void) => {
+    if (!asyncValidator) {
+      onComplete();
+      return;
+    }
+
+    const asyncValidatorForPath = asyncValidator[path];
+    if (!asyncValidatorForPath) {
+      onComplete();
+      return;
+    }
+
+    // Check sync error for this path - skip if sync fails
+    const syncError = getSyncErrorForPath(get(errors), path);
+    if (syncError) {
+      onComplete();
+      return;
+    }
+
+    const controller = new AbortController();
+    // Store controller with a dummy timeoutId (validation already started)
+    asyncValidationTrackers.set(path, { controller, timeoutId: 0 as unknown as ReturnType<typeof setTimeout> });
+
+    // Mark as validating
+    asyncValidatingSet.update(($set) => new Set([...$set, path]));
+
+    try {
+      const value = getValueAtPath(data, path);
+      const error = await asyncValidatorForPath(value, data, controller.signal);
+
+      // Only update if not aborted
+      if (!controller.signal.aborted)
+        asyncErrorsStore.update(($asyncErrors) => ({
+          ...$asyncErrors,
+          [path]: error
+        }));
+    } catch (error) {
+      // Ignore abort errors, re-throw others
+      if (error instanceof Error && error.name !== 'AbortError') throw error;
+    } finally {
+      asyncValidationTrackers.delete(path);
+      asyncValidatingSet.update(($set) => {
+        $set.delete(path);
+        return new Set($set);
+      });
+      onComplete();
+    }
+  };
+
+  const processAsyncValidationQueue = () => {
+    while (asyncValidationQueue.length > 0) {
+      const currentActiveCount = get(asyncValidatingSet).size;
+      if (currentActiveCount >= usedOptions.maxConcurrentAsyncValidations) break;
+
+      const path = asyncValidationQueue.shift();
+      if (path) executeAsyncValidation(path, processAsyncValidationQueue);
+    }
   };
 
   const scheduleAsyncValidation = (path: string) => {
@@ -224,39 +297,18 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(async () => {
-      // Check sync error for this path - skip if sync fails
-      const syncError = getSyncErrorForPath(get(errors), path);
-      if (syncError) {
-        asyncValidationTrackers.delete(path);
-        return;
-      }
+    const timeoutId = setTimeout(() => {
+      // Remove tracker since debounce is done
+      asyncValidationTrackers.delete(path);
 
-      // Mark as validating
-      asyncValidatingSet.update(($set) => new Set([...$set, path]));
-
-      try {
-        const value = getValueAtPath(data, path);
-        const asyncValidatorForPath = asyncValidator[path];
-        if (!asyncValidatorForPath) return;
-
-        const error = await asyncValidatorForPath(value, data, controller.signal);
-
-        // Only update if not aborted
-        if (!controller.signal.aborted)
-          asyncErrorsStore.update(($asyncErrors) => ({
-            ...$asyncErrors,
-            [path]: error
-          }));
-      } catch (error) {
-        // Ignore abort errors, re-throw others
-        if (error instanceof Error && error.name !== 'AbortError') throw error;
-      } finally {
-        asyncValidationTrackers.delete(path);
-        asyncValidatingSet.update(($set) => {
-          $set.delete(path);
-          return new Set($set);
-        });
+      // Check if we can run immediately or need to queue
+      const activeCount = get(asyncValidatingSet).size;
+      if (activeCount < usedOptions.maxConcurrentAsyncValidations)
+        executeAsyncValidation(path, processAsyncValidationQueue);
+      else {
+        // Remove any existing entry for this path and add to end of queue
+        removeFromQueue(path);
+        asyncValidationQueue.push(path);
       }
     }, usedOptions.debounceAsyncValidation);
 

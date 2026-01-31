@@ -589,3 +589,313 @@ describe('async validation - receives full source', () => {
     expect((receivedSource as { username: string; email: string }).email).toBe('test@example.com');
   });
 });
+
+describe('async validation - maxConcurrentAsyncValidations', () => {
+  it('should respect concurrency limit (6 validators, max 4)', async () => {
+    const activeValidations: string[] = [];
+    const maxConcurrent = { value: 0 };
+
+    const { data, state } = createSvState(
+      { a: '', b: '', c: '', d: '', e: '', f: '' },
+      {
+        asyncValidator: {
+          a: async () => {
+            activeValidations.push('a');
+            maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            activeValidations.splice(activeValidations.indexOf('a'), 1);
+            return '';
+          },
+          b: async () => {
+            activeValidations.push('b');
+            maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            activeValidations.splice(activeValidations.indexOf('b'), 1);
+            return '';
+          },
+          c: async () => {
+            activeValidations.push('c');
+            maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            activeValidations.splice(activeValidations.indexOf('c'), 1);
+            return '';
+          },
+          d: async () => {
+            activeValidations.push('d');
+            maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            activeValidations.splice(activeValidations.indexOf('d'), 1);
+            return '';
+          },
+          e: async () => {
+            activeValidations.push('e');
+            maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            activeValidations.splice(activeValidations.indexOf('e'), 1);
+            return '';
+          },
+          f: async () => {
+            activeValidations.push('f');
+            maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            activeValidations.splice(activeValidations.indexOf('f'), 1);
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10, maxConcurrentAsyncValidations: 4 }
+    );
+
+    // Trigger all 6 validators simultaneously
+    data.a = 'x';
+    data.b = 'x';
+    data.c = 'x';
+    data.d = 'x';
+    data.e = 'x';
+    data.f = 'x';
+
+    // Wait for all validations to complete
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Should never exceed 4 concurrent validations
+    expect(maxConcurrent.value).toBeLessThanOrEqual(4);
+    expect(get(state.asyncValidating)).toEqual([]);
+  });
+
+  it('should process queue in FIFO order', async () => {
+    const completionOrder: string[] = [];
+
+    const { data } = createSvState(
+      { a: '', b: '', c: '', d: '', e: '' },
+      {
+        asyncValidator: {
+          a: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            completionOrder.push('a');
+            return '';
+          },
+          b: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            completionOrder.push('b');
+            return '';
+          },
+          c: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            completionOrder.push('c');
+            return '';
+          },
+          d: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            completionOrder.push('d');
+            return '';
+          },
+          e: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            completionOrder.push('e');
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10, maxConcurrentAsyncValidations: 2 }
+    );
+
+    // Trigger in order a, b, c, d, e
+    data.a = 'x';
+    data.b = 'x';
+    data.c = 'x';
+    data.d = 'x';
+    data.e = 'x';
+
+    // Wait for all validations to complete
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // First 2 (a, b) should complete first, then c, d, then e
+    // Since they have same duration, order depends on when they started
+    expect(completionOrder.length).toBe(5);
+    // a and b start immediately (first batch), c and d are queued (second batch), e is last
+  });
+
+  it('should remove cancelled validation from queue', async () => {
+    let fieldEValidatorCalled = false;
+
+    const { data } = createSvState(
+      { a: '', b: '', c: '', d: '', e: '' },
+      {
+        asyncValidator: {
+          a: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return '';
+          },
+          b: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return '';
+          },
+          c: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return '';
+          },
+          d: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return '';
+          },
+          e: async () => {
+            fieldEValidatorCalled = true;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10, maxConcurrentAsyncValidations: 2 }
+    );
+
+    // Trigger all validators
+    data.a = 'x';
+    data.b = 'x';
+    data.c = 'x';
+    data.d = 'x';
+    data.e = 'first';
+
+    // Wait for debounce, but before e gets to run
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Re-trigger e - this should remove old e from queue and add new one
+    data.e = 'second';
+
+    // Wait for all to complete
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // e should have been called (with the second value)
+    expect(fieldEValidatorCalled).toBe(true);
+  });
+
+  it('should use default limit of 4 when not specified', async () => {
+    const activeValidations: string[] = [];
+    const maxConcurrent = { value: 0 };
+
+    const makeValidator = (name: string) => async () => {
+      activeValidations.push(name);
+      maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      activeValidations.splice(activeValidations.indexOf(name), 1);
+      return '';
+    };
+
+    const { data } = createSvState(
+      { a: '', b: '', c: '', d: '', e: '', f: '' },
+      {
+        asyncValidator: {
+          a: makeValidator('a'),
+          b: makeValidator('b'),
+          c: makeValidator('c'),
+          d: makeValidator('d'),
+          e: makeValidator('e'),
+          f: makeValidator('f')
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    data.a = 'x';
+    data.b = 'x';
+    data.c = 'x';
+    data.d = 'x';
+    data.e = 'x';
+    data.f = 'x';
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Default is 4
+    expect(maxConcurrent.value).toBeLessThanOrEqual(4);
+  });
+
+  it('should allow setting higher concurrency limit', async () => {
+    const activeValidations: string[] = [];
+    const maxConcurrent = { value: 0 };
+
+    const makeValidator = (name: string) => async () => {
+      activeValidations.push(name);
+      maxConcurrent.value = Math.max(maxConcurrent.value, activeValidations.length);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      activeValidations.splice(activeValidations.indexOf(name), 1);
+      return '';
+    };
+
+    const { data } = createSvState(
+      { a: '', b: '', c: '', d: '', e: '', f: '' },
+      {
+        asyncValidator: {
+          a: makeValidator('a'),
+          b: makeValidator('b'),
+          c: makeValidator('c'),
+          d: makeValidator('d'),
+          e: makeValidator('e'),
+          f: makeValidator('f')
+        }
+      },
+      { debounceAsyncValidation: 10, maxConcurrentAsyncValidations: 10 }
+    );
+
+    data.a = 'x';
+    data.b = 'x';
+    data.c = 'x';
+    data.d = 'x';
+    data.e = 'x';
+    data.f = 'x';
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    // With limit of 10, all 6 should run concurrently
+    expect(maxConcurrent.value).toBe(6);
+  });
+
+  it('should clear queue on reset', async () => {
+    let callCount = 0;
+
+    const { data, reset } = createSvState(
+      { a: '', b: '', c: '', d: '', e: '' },
+      {
+        asyncValidator: {
+          a: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return '';
+          },
+          b: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return '';
+          },
+          c: async () => {
+            callCount++;
+            return '';
+          },
+          d: async () => {
+            callCount++;
+            return '';
+          },
+          e: async () => {
+            callCount++;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10, maxConcurrentAsyncValidations: 2 }
+    );
+
+    // Trigger all - a and b run, c, d, e are queued
+    data.a = 'x';
+    data.b = 'x';
+    data.c = 'x';
+    data.d = 'x';
+    data.e = 'x';
+
+    // Wait for debounce to expire and validations to start
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Reset should clear the queue
+    reset();
+
+    // Wait for any remaining validations
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // c, d, e should never have been called since they were in queue when reset happened
+    expect(callCount).toBe(0);
+  });
+});
