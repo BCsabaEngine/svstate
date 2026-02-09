@@ -77,7 +77,7 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`)
+- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`, `DirtyFields`)
 - `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system and async validation
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
@@ -99,7 +99,8 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 - `state` - Object containing reactive stores:
   - `errors: Readable<V | undefined>` - Validation errors (sync)
   - `hasErrors: Readable<boolean>` - Whether any sync validation errors exist
-  - `isDirty: Readable<boolean>` - Whether state has been modified
+  - `isDirty: Readable<boolean>` - Whether state has been modified (derived from `isDirtyByField`)
+  - `isDirtyByField: Readable<DirtyFields>` - Per-field dirty tracking; keys are dot-notation property paths. When a nested field changes, all parent paths are also marked dirty (e.g., changing `customer.address.street` marks `customer.address` and `customer` as dirty). Cleared on `reset()`, `rollback()`, and successful action (respecting `resetDirtyOnAction`).
   - `actionInProgress: Readable<boolean>` - Action execution status
   - `actionError: Readable<Error | undefined>` - Last action error
   - `snapshots: Readable<Snapshot<T>[]>` - Snapshot history for undo
