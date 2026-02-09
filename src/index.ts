@@ -3,6 +3,7 @@ export {
   type AsyncValidator,
   type AsyncValidatorFunction,
   createSvState,
+  type DirtyFields,
   type EffectContext,
   type Snapshot,
   type SnapshotFunction,

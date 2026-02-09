@@ -33,6 +33,10 @@ export type AsyncErrors = {
   [propertyPath: string]: string;
 };
 
+export type DirtyFields = {
+  [propertyPath: string]: boolean;
+};
+
 type Actuators<T extends Record<string, unknown>, V extends Validator, P extends object> = {
   validator?: (source: T) => V;
   effect?: (context: EffectContext<T>) => void;
@@ -45,6 +49,7 @@ type StateResult<T, V> = {
   errors: Readable<V | undefined>;
   hasErrors: Readable<boolean>;
   isDirty: Readable<boolean>;
+  isDirtyByField: Readable<DirtyFields>;
   actionInProgress: Readable<boolean>;
   actionError: Readable<Error | undefined>;
   snapshots: Readable<Snapshot<T>[]>;
@@ -136,7 +141,8 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   const errors = writable<V | undefined>();
   const hasErrors = derived(errors, hasAnyErrors);
-  const isDirty = writable(false);
+  const dirtyFieldsStore = writable<DirtyFields>({});
+  const isDirty = derived(dirtyFieldsStore, ($fields) => Object.keys($fields).length > 0);
   const actionInProgress = writable(false);
   const actionError = writable<Error | undefined>();
   const snapshots = writable<Snapshot<T>[]>([{ title: 'Initial', data: deepClone(init) }]);
@@ -161,6 +167,15 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   // Queue for async validations waiting to run (when at concurrency limit)
   const asyncValidationQueue: string[] = [];
+
+  const markDirtyWithParents = (property: string) => {
+    dirtyFieldsStore.update(($fields) => {
+      const updated = { ...$fields, [property]: true };
+      const parts = property.split('.');
+      for (let index = 1; index < parts.length; index++) updated[parts.slice(0, index).join('.')] = true;
+      return updated;
+    });
+  };
 
   const stateObject = $state<T>(init);
 
@@ -324,7 +339,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
     if (!usedOptions.persistActionError) actionError.set(undefined);
-    isDirty.set(true);
+    markDirtyWithParents(property);
     const effectResult: unknown = effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
     if (effectResult instanceof Promise)
       throw new Error('svstate: effect callback must be synchronous. Use action for async operations.');
@@ -345,7 +360,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     actionInProgress.set(true);
     try {
       await actuators?.action?.(parameters);
-      if (usedOptions.resetDirtyOnAction) isDirty.set(false);
+      if (usedOptions.resetDirtyOnAction) dirtyFieldsStore.set({});
       snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
       await actuators?.actionCompleted?.();
     } catch (caughtError) {
@@ -365,6 +380,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (!targetSnapshot) return;
 
     cancelAllAsyncValidations();
+    dirtyFieldsStore.set({});
     Object.assign(stateObject, deepClone(targetSnapshot.data));
     snapshots.set(currentSnapshots.slice(0, targetIndex + 1));
 
@@ -377,6 +393,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (!initialSnapshot) return;
 
     cancelAllAsyncValidations();
+    dirtyFieldsStore.set({});
     Object.assign(stateObject, deepClone(initialSnapshot.data));
     snapshots.set([initialSnapshot]);
 
@@ -387,6 +404,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     errors,
     hasErrors,
     isDirty,
+    isDirtyByField: dirtyFieldsStore,
     actionInProgress,
     actionError,
     snapshots,
