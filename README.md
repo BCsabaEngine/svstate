@@ -73,7 +73,7 @@ const customer = $state({
 - 🌐 **Async validation** for server-side checks (username availability, email verification)
 - ⚡ **Fires effects** when any property changes (with full context)
 - ⏪ **Snapshots & undo** for complex editing workflows
-- 🎯 **Tracks dirty state** automatically
+- 🎯 **Tracks dirty state** automatically (per-field and aggregate)
 - 🔧 **Supports methods** on state objects for computed values and formatting
 
 ```typescript
@@ -855,7 +855,8 @@ Creates a supercharged state object.
 | `reset()` | `() => void` | Return to initial state |
 | `state.errors` | `Readable<V>` | Sync validation errors store |
 | `state.hasErrors` | `Readable<boolean>` | Has sync errors? |
-| `state.isDirty` | `Readable<boolean>` | Has state changed? |
+| `state.isDirty` | `Readable<boolean>` | Has state changed? (derived from `isDirtyByField`) |
+| `state.isDirtyByField` | `Readable<DirtyFields>` | Per-field dirty tracking (dot-notation paths) |
 | `state.actionInProgress` | `Readable<boolean>` | Is action running? |
 | `state.actionError` | `Readable<Error>` | Last action error |
 | `state.snapshots` | `Readable<Snapshot[]>` | Undo history |
@@ -890,7 +891,8 @@ import type {
   SvStateOptions,
   AsyncValidator,
   AsyncValidatorFunction,
-  AsyncErrors
+  AsyncErrors,
+  DirtyFields
 } from 'svstate';
 ```
 
@@ -904,6 +906,7 @@ import type {
 | `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                          |
 | `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                        |
 | `AsyncErrors`               | Object mapping property paths to error strings                                                      |
+| `DirtyFields`               | Object mapping dot-notation property paths to `boolean` dirty status                                |
 
 **Example: External validator and effect functions**
 
@@ -944,17 +947,17 @@ const { data, state } = createSvState<UserData, UserErrors, object>(
 
 ## 🎨 Why svstate?
 
-| Feature                | Native Svelte 5    | svstate         |
-| ---------------------- | ------------------ | --------------- |
-| Simple flat objects    | ✅ Great           | ✅ Great        |
-| Deep nested objects    | ⚠️ Manual tracking | ✅ Automatic    |
-| Property change events | ❌ Not available   | ✅ Full context |
-| Structured validation  | ❌ DIY             | ✅ Mirrors data |
-| Async validation       | ❌ DIY             | ✅ Built-in     |
-| Undo/Redo              | ❌ DIY             | ✅ Built-in     |
-| Dirty tracking         | ❌ DIY             | ✅ Automatic    |
-| Action loading states  | ❌ DIY             | ✅ Built-in     |
-| State with methods     | ⚠️ Manual cloning  | ✅ Automatic    |
+| Feature                | Native Svelte 5    | svstate                  |
+| ---------------------- | ------------------ | ------------------------ |
+| Simple flat objects    | ✅ Great           | ✅ Great                 |
+| Deep nested objects    | ⚠️ Manual tracking | ✅ Automatic             |
+| Property change events | ❌ Not available   | ✅ Full context          |
+| Structured validation  | ❌ DIY             | ✅ Mirrors data          |
+| Async validation       | ❌ DIY             | ✅ Built-in              |
+| Undo/Redo              | ❌ DIY             | ✅ Built-in              |
+| Dirty tracking         | ❌ DIY             | ✅ Automatic (per-field) |
+| Action loading states  | ❌ DIY             | ✅ Built-in              |
+| State with methods     | ⚠️ Manual cloning  | ✅ Automatic             |
 
 **svstate is for:**
 
