@@ -1,6 +1,6 @@
 {
   "name": "svstate",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
   "author": "BCsabaEngine",
   "license": "ISC",
