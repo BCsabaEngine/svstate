@@ -97,6 +97,47 @@ const { data, state: { errors, hasErrors } } = createSvState(
 
 ---
 
+### How does per-field dirty tracking work?
+
+svstate tracks which specific fields have been modified via the `isDirtyByField` store. It returns a `DirtyFields` object where keys are dot-notation property paths and values are `true`:
+
+```typescript
+const {
+  data,
+  state: { isDirty, isDirtyByField }
+} = createSvState({
+  name: '',
+  address: { street: '', city: '' }
+});
+
+data.address.street = '123 Main St';
+
+// $isDirtyByField → { "address.street": true, "address": true }
+// $isDirty → true (derived from isDirtyByField)
+```
+
+**Key behaviors:**
+
+- When a nested field changes, all parent paths are also marked dirty (e.g., changing `address.street` also marks `address` as dirty)
+- `isDirty` is derived from `isDirtyByField` — it's `true` when any field is dirty
+- Cleared on `reset()`, `rollback()`, and successful action (respecting `resetDirtyOnAction`)
+- Useful for highlighting changed fields in the UI or showing "unsaved changes" per section
+
+```svelte
+<!-- Highlight changed fields -->
+<input
+  bind:value={data.name}
+  class:modified={$isDirtyByField['name']}
+/>
+
+<!-- Show section-level dirty indicator -->
+{#if $isDirtyByField['address']}
+  <span class="badge">Modified</span>
+{/if}
+```
+
+---
+
 ## Validation
 
 ### How does validation work and when does it run?
@@ -424,16 +465,30 @@ execute(); // Default save
 svstate exports these types for building type-safe external functions:
 
 ```typescript
-import type { Validator, EffectContext, Snapshot, SnapshotFunction, SvStateOptions } from 'svstate';
+import type {
+  Validator,
+  EffectContext,
+  Snapshot,
+  SnapshotFunction,
+  SvStateOptions,
+  AsyncValidator,
+  AsyncValidatorFunction,
+  AsyncErrors,
+  DirtyFields
+} from 'svstate';
 ```
 
-| Type               | Use Case                                      |
-| ------------------ | --------------------------------------------- |
-| `Validator`        | Type for validation error objects             |
-| `EffectContext<T>` | Type effect callbacks when defined externally |
-| `SnapshotFunction` | Type for the `snapshot` function parameter    |
-| `Snapshot<T>`      | Type for snapshot history entries             |
-| `SvStateOptions`   | Type for configuration options                |
+| Type                        | Use Case                                                     |
+| --------------------------- | ------------------------------------------------------------ |
+| `Validator`                 | Type for validation error objects                            |
+| `EffectContext<T>`          | Type effect callbacks when defined externally                |
+| `SnapshotFunction`          | Type for the `snapshot` function parameter                   |
+| `Snapshot<T>`               | Type for snapshot history entries                            |
+| `SvStateOptions`            | Type for configuration options                               |
+| `AsyncValidator<T>`         | Object mapping property paths to async validator functions   |
+| `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>` |
+| `AsyncErrors`               | Object mapping property paths to error strings               |
+| `DirtyFields`               | Object mapping dot-notation paths to dirty status            |
 
 **Example:**
 

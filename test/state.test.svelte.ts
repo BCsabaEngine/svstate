@@ -1191,3 +1191,162 @@ describe('deeply nested validators', () => {
     expect(get(state.hasErrors)).toBe(false);
   });
 });
+
+describe('isDirtyByField', () => {
+  it('should start as empty object', () => {
+    const { state } = createSvState({ email: '', name: '' });
+
+    expect(get(state.isDirtyByField)).toEqual({});
+  });
+
+  it('should mark single field dirty on change', () => {
+    const { data, state } = createSvState({ email: '', name: '' });
+
+    data.email = 'test@example.com';
+
+    expect(get(state.isDirtyByField)).toEqual({ email: true });
+  });
+
+  it('should track multiple fields independently', () => {
+    const { data, state } = createSvState({ email: '', name: '' });
+
+    data.email = 'test@example.com';
+    data.name = 'John';
+
+    expect(get(state.isDirtyByField)).toEqual({ email: true, name: true });
+  });
+
+  it('should track nested paths', () => {
+    const { data, state } = createSvState({ user: { name: 'test' } });
+
+    data.user.name = 'updated';
+
+    expect(get(state.isDirtyByField)['user.name']).toBe(true);
+    expect(get(state.isDirtyByField)['user']).toBe(true);
+  });
+
+  it('should bubble dirty state to parent paths', () => {
+    const { data, state } = createSvState({
+      customer: { address: { street: '', city: '' } }
+    });
+
+    data.customer.address.street = '123 Main St';
+
+    const dirtyFields = get(state.isDirtyByField);
+    expect(dirtyFields['customer.address.street']).toBe(true);
+    expect(dirtyFields['customer.address']).toBe(true);
+    expect(dirtyFields['customer']).toBe(true);
+  });
+
+  it('should support prefix check via parent bubbling', () => {
+    const { data, state } = createSvState({
+      user: { address: { street: '', city: '' } }
+    });
+
+    data.user.address.city = 'New York';
+
+    expect(get(state.isDirtyByField)['user.address']).toBe(true);
+  });
+
+  it('should stay dirty on repeated changes to same field', () => {
+    const { data, state } = createSvState({ value: 0 });
+
+    data.value = 1;
+    data.value = 2;
+    data.value = 3;
+
+    expect(get(state.isDirtyByField)).toEqual({ value: true });
+  });
+
+  it('should make isDirty true when any field is dirty', () => {
+    const { data, state } = createSvState({ email: '', name: '' });
+
+    expect(get(state.isDirty)).toBe(false);
+
+    data.email = 'test@example.com';
+
+    expect(get(state.isDirty)).toBe(true);
+  });
+
+  it('should clear on successful action with resetDirtyOnAction: true', async () => {
+    const { data, execute, state } = createSvState(
+      { email: '', name: '' },
+      { action: async () => {} },
+      { resetDirtyOnAction: true }
+    );
+
+    data.email = 'test@example.com';
+    data.name = 'John';
+    expect(Object.keys(get(state.isDirtyByField)).length).toBeGreaterThan(0);
+
+    await execute();
+
+    expect(get(state.isDirtyByField)).toEqual({});
+    expect(get(state.isDirty)).toBe(false);
+  });
+
+  it('should preserve on action with resetDirtyOnAction: false', async () => {
+    const { data, execute, state } = createSvState(
+      { email: '', name: '' },
+      { action: async () => {} },
+      { resetDirtyOnAction: false }
+    );
+
+    data.email = 'test@example.com';
+    await execute();
+
+    expect(get(state.isDirtyByField)['email']).toBe(true);
+    expect(get(state.isDirty)).toBe(true);
+  });
+
+  it('should clear on rollback', () => {
+    const { data, rollback, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Changed');
+        }
+      }
+    );
+
+    data.value = 1;
+    expect(get(state.isDirtyByField)).toEqual({ value: true });
+
+    rollback();
+
+    expect(get(state.isDirtyByField)).toEqual({});
+    expect(get(state.isDirty)).toBe(false);
+  });
+
+  it('should clear on reset', () => {
+    const { data, reset, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Changed', false);
+        }
+      }
+    );
+
+    data.value = 1;
+    data.value = 2;
+    expect(Object.keys(get(state.isDirtyByField)).length).toBeGreaterThan(0);
+
+    reset();
+
+    expect(get(state.isDirtyByField)).toEqual({});
+    expect(get(state.isDirty)).toBe(false);
+  });
+
+  it('should NOT clear dirty fields on no-op rollback (only initial snapshot)', () => {
+    const { data, rollback, state } = createSvState({ value: 0 });
+
+    data.value = 1;
+    expect(get(state.isDirtyByField)).toEqual({ value: true });
+
+    rollback();
+
+    expect(get(state.isDirtyByField)).toEqual({ value: true });
+    expect(get(state.isDirty)).toBe(true);
+  });
+});

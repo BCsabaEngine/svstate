@@ -22,7 +22,7 @@
 
 	const {
 		data,
-		state: { errors, hasErrors, isDirty }
+		state: { errors, hasErrors, isDirty, isDirtyByField }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
 			username: stringValidator(source.username)
@@ -58,7 +58,7 @@
   website: ''
 };
 
-const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
   validator: (source) => ({
     username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
     email: stringValidator(source.email).prepare('trim').required().email().getError(),
@@ -89,6 +89,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			<FormField
 				id="username"
 				error={$errors?.username}
+				isDirty={$isDirtyByField['username']}
 				label="Username"
 				placeholder="Enter username"
 				bind:value={data.username}
@@ -97,6 +98,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			<FormField
 				id="email"
 				error={$errors?.email}
+				isDirty={$isDirtyByField['email']}
 				label="Email"
 				placeholder="Enter email"
 				type="email"
@@ -106,6 +108,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			<FormField
 				id="age"
 				error={$errors?.age}
+				isDirty={$isDirtyByField['age']}
 				label="Age"
 				placeholder="Enter age"
 				type="number"
@@ -115,6 +118,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			<FormTextarea
 				id="bio"
 				error={$errors?.bio}
+				isDirty={$isDirtyByField['bio']}
 				label="Bio"
 				placeholder="Tell us about yourself"
 				bind:value={data.bio}
@@ -123,6 +127,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			<FormField
 				id="website"
 				error={$errors?.website}
+				isDirty={$isDirtyByField['website']}
 				label="Website"
 				placeholder="https://example.com"
 				required={false}
@@ -132,7 +137,14 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 	{/snippet}
 
 	{#snippet sidebar()}
-		<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData} />
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			isDirtyByField={$isDirtyByField}
+			onFill={fillWithValidData}
+		/>
 	{/snippet}
 
 	{#snippet sourceCode()}

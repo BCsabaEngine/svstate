@@ -8,6 +8,7 @@
 		value: string;
 		error?: string;
 		required?: boolean;
+		isDirty?: boolean;
 		rows?: number;
 	}
 
@@ -18,6 +19,7 @@
 		value = $bindable(),
 		error = '',
 		required = false,
+		isDirty,
 		rows = 3
 	}: Properties = $props();
 </script>
@@ -25,6 +27,9 @@
 <div>
 	<label class="mb-2 block text-sm text-gray-900 {required ? 'font-bold' : ''}" for={id}>
 		{label}
+		{#if isDirty}
+			<span class="ml-1 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+		{/if}
 	</label>
 	<textarea
 		{id}
