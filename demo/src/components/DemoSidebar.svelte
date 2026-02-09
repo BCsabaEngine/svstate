@@ -4,11 +4,12 @@
 		errors: unknown;
 		isDirty: boolean;
 		hasErrors: boolean;
+		isDirtyByField?: Record<string, boolean>;
 		onFill: () => void;
 		width?: 'xl:w-80' | 'xl:w-96';
 	}
 
-	let { data, errors, isDirty, hasErrors, onFill, width = 'xl:w-80' }: Properties = $props();
+	let { data, errors, isDirty, hasErrors, isDirtyByField, onFill, width = 'xl:w-80' }: Properties = $props();
 </script>
 
 <div class="w-full {width} flex-shrink-0 space-y-4">
@@ -24,6 +25,17 @@
 			<div><span class="font-medium">hasErrors:</span> {hasErrors}</div>
 		</div>
 	</div>
+
+	{#if isDirtyByField}
+		<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+			<h6 class="mb-2 text-sm font-medium text-gray-700">Dirty Fields</h6>
+			<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify(
+					isDirtyByField,
+					Object.keys(isDirtyByField).toSorted(),
+					2
+				)}</pre>
+		</div>
+	{/if}
 
 	<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
 		<h6 class="mb-2 text-sm font-medium text-gray-700">Errors</h6>

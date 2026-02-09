@@ -32,7 +32,7 @@
 
 	const {
 		data,
-		state: { errors, hasErrors, isDirty }
+		state: { errors, hasErrors, isDirty, isDirtyByField }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
 			name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
@@ -76,7 +76,7 @@
   }
 };
 
-const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
   validator: (source) => ({
     name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
     address: {
@@ -113,7 +113,11 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 
 		<div class="space-y-6">
 			<div>
-				<SectionHeader title="Personal Info" />
+				<SectionHeader title="Personal Info">
+					{#if $isDirtyByField['name']}
+						<span class="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+					{/if}
+				</SectionHeader>
 				<FormField
 					id="name"
 					error={$errors?.name}
@@ -124,7 +128,11 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			</div>
 
 			<div>
-				<SectionHeader subtitle="2-level nested" title="Address" />
+				<SectionHeader subtitle="2-level nested" title="Address">
+					{#if $isDirtyByField['address']}
+						<span class="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+					{/if}
+				</SectionHeader>
 				<div class="space-y-4">
 					<FormField
 						id="street"
@@ -153,7 +161,11 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			</div>
 
 			<div>
-				<SectionHeader subtitle="3-level nested" title="Company" />
+				<SectionHeader subtitle="3-level nested" title="Company">
+					{#if $isDirtyByField['company']}
+						<span class="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+					{/if}
+				</SectionHeader>
 				<div class="space-y-4">
 					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<FormField
@@ -173,7 +185,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 						/>
 					</div>
 
-					<NestedSection subtitle="3rd level" title="Contact Info">
+					<NestedSection isDirty={$isDirtyByField['company.contact']} subtitle="3rd level" title="Contact Info">
 						<div class="space-y-4">
 							<FormField
 								id="contact-phone"
@@ -205,6 +217,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 			errors={$errors}
 			hasErrors={$hasErrors}
 			isDirty={$isDirty}
+			isDirtyByField={$isDirtyByField}
 			onFill={fillWithValidData}
 			width="xl:w-96"
 		/>

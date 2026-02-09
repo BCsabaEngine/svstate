@@ -10,6 +10,7 @@
 		error?: string;
 		required?: boolean;
 		disabled?: boolean;
+		isDirty?: boolean;
 		min?: number;
 		max?: number;
 		step?: number;
@@ -25,6 +26,7 @@
 		error = '',
 		required = true,
 		disabled = false,
+		isDirty,
 		min,
 		max,
 		step,
@@ -37,6 +39,9 @@
 <div>
 	<label class="mb-2 block text-sm text-gray-900 {required ? 'font-bold' : ''}" for={id}>
 		{label}
+		{#if isDirty}
+			<span class="ml-1 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+		{/if}
 	</label>
 	<input
 		{id}
