@@ -87,7 +87,7 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 The main export creates a validated state object with snapshot/undo support:
 
 ```typescript
-const { data, execute, state, rollback, reset } = createSvState(init, actuators?, options?);
+const { data, execute, state, rollback, rollbackTo, reset } = createSvState(init, actuators?, options?);
 ```
 
 **Returns:**
@@ -95,6 +95,7 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 - `data` - Deep reactive proxy around the state object (methods on the object are preserved and callable)
 - `execute(params)` - Async function to run the configured action
 - `rollback(steps?)` - Undo N steps (default 1), restores state and triggers validation
+- `rollbackTo(title)` - Roll back to the last snapshot matching `title`, returns `boolean` (true if found)
 - `reset()` - Return to initial snapshot, triggers validation
 - `state` - Object containing reactive stores:
   - `errors: Readable<V | undefined>` - Validation errors (sync)
@@ -127,6 +128,7 @@ const { data, execute, state, rollback, reset } = createSvState(init, actuators?
 - `runAsyncValidationOnInit: boolean` (default: `false`) - Run async validators when state is created
 - `clearAsyncErrorsOnChange: boolean` (default: `true`) - Clear async error for a path when that property changes
 - `maxConcurrentAsyncValidations: number` (default: `4`) - Maximum concurrent async validators running simultaneously
+- `maxSnapshots: number` (default: `50`) - Maximum number of snapshots to keep; oldest non-Initial snapshots are trimmed when exceeded. `0` = unlimited.
 
 ### Snapshot/Undo System
 
@@ -148,7 +150,9 @@ effect: ({ snapshot, property }) => {
 - `snapshot(title, replace = true)` - Creates a snapshot; if `replace=true` and last snapshot has same title, replaces it (debouncing)
 - Initial state is saved as first snapshot with title `"Initial"`
 - Successful action execution resets snapshots with current state as new initial
-- `rollback()` and `reset()` trigger validation after restoring state
+- `rollback()`, `rollbackTo()`, and `reset()` trigger validation after restoring state
+- `rollbackTo(title)` searches from the end to find the last matching snapshot; returns `false` if not found or only initial snapshot exists
+- `maxSnapshots` option (default 50) trims oldest non-Initial snapshots via LRU; Initial snapshot (index 0) is always preserved
 
 ### Async Validation System
 

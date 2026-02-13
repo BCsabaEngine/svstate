@@ -290,7 +290,8 @@ describe('Performance Tests', () => {
             // Use unique title to prevent replacement
             snapshot(`Change to ${currentValue}`);
           }
-        }
+        },
+        { maxSnapshots: 0 }
       );
 
       const time = measureTime(() => {

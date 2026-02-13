@@ -79,7 +79,7 @@ const customer = $state({
 ```typescript
 import { createSvState, stringValidator, numberValidator } from 'svstate';
 
-const { data, state, rollback, reset, execute } = createSvState(customer, {
+const { data, state, rollback, rollbackTo, reset, execute } = createSvState(customer, {
   validator: (source) => ({
     /* validation that mirrors your structure */
   }),
@@ -331,6 +331,7 @@ Complex forms need undo. svstate provides a snapshot system that captures state 
 const {
   data,
   rollback,
+  rollbackTo,
   reset,
   state: { snapshots }
 } = createSvState(formData, {
@@ -349,6 +350,12 @@ rollback();
 // Undo 3 changes
 rollback(3);
 
+// Roll back to a named snapshot (returns true if found)
+rollbackTo('Changed email');
+
+// Roll back to initial state by name
+rollbackTo('Initial');
+
 // Reset to initial state
 reset();
 
@@ -360,9 +367,11 @@ $snapshots.forEach((s, i) => console.log(`${i}: ${s.title}`));
 
 - 📸 `snapshot(title, replace?)` — create undo points
 - ⏪ `rollback(steps)` — undo N changes
+- 🏷️ `rollbackTo(title)` — jump to a named snapshot
 - 🔄 `reset()` — return to initial state
 - 📜 `snapshots` store — access full history
 - 🔀 Smart deduplication: same title replaces previous snapshot
+- 📏 `maxSnapshots` option — LRU trimming to prevent unbounded growth
 
 ---
 
@@ -394,7 +403,10 @@ const { data } = createSvState(formData, actuators, {
   clearAsyncErrorsOnChange: true,
 
   // Max concurrent async validators (default: 4)
-  maxConcurrentAsyncValidations: 4
+  maxConcurrentAsyncValidations: 4,
+
+  // Max snapshots to keep, 0 = unlimited (default: 50)
+  maxSnapshots: 50
 });
 ```
 
@@ -408,6 +420,7 @@ const { data } = createSvState(formData, actuators, {
 | `runAsyncValidationOnInit`      | `false` | Run async validators on creation           |
 | `clearAsyncErrorsOnChange`      | `true`  | Clear async error when property changes    |
 | `maxConcurrentAsyncValidations` | `4`     | Max concurrent async validators            |
+| `maxSnapshots`                  | `50`    | Max snapshots to keep (0 = unlimited)      |
 
 ---
 
@@ -852,6 +865,7 @@ Creates a supercharged state object.
 | `data` | `T` | Deep reactive proxy — bind directly, methods preserved |
 | `execute(params?)` | `(P?) => Promise<void>` | Run the configured action |
 | `rollback(steps?)` | `(n?: number) => void` | Undo N changes (default: 1) |
+| `rollbackTo(title)` | `(title: string) => boolean` | Roll back to last snapshot with matching title |
 | `reset()` | `() => void` | Return to initial state |
 | `state.errors` | `Readable<V>` | Sync validation errors store |
 | `state.hasErrors` | `Readable<boolean>` | Has sync errors? |

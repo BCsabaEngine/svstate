@@ -117,6 +117,7 @@ export type SvStateOptions = {
   runAsyncValidationOnInit: boolean;
   clearAsyncErrorsOnChange: boolean;
   maxConcurrentAsyncValidations: number;
+  maxSnapshots: number;
 };
 const defaultOptions: SvStateOptions = {
   resetDirtyOnAction: true,
@@ -126,7 +127,8 @@ const defaultOptions: SvStateOptions = {
   debounceAsyncValidation: 300,
   runAsyncValidationOnInit: false,
   clearAsyncErrorsOnChange: true,
-  maxConcurrentAsyncValidations: 4
+  maxConcurrentAsyncValidations: 4,
+  maxSnapshots: 50
 };
 
 // createSvState
@@ -184,9 +186,17 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     const createdSnapshot: Snapshot<T> = { title, data: deepClone(stateObject) };
     const lastSnapshot = currentSnapshots.at(-1);
 
-    if (replace && lastSnapshot && lastSnapshot.title === title)
-      snapshots.set([...currentSnapshots.slice(0, -1), createdSnapshot]);
-    else snapshots.set([...currentSnapshots, createdSnapshot]);
+    let updatedSnapshots: Snapshot<T>[] =
+      replace && lastSnapshot && lastSnapshot.title === title
+        ? [...currentSnapshots.slice(0, -1), createdSnapshot]
+        : [...currentSnapshots, createdSnapshot];
+
+    if (usedOptions.maxSnapshots > 0 && updatedSnapshots.length > usedOptions.maxSnapshots) {
+      const excess = updatedSnapshots.length - usedOptions.maxSnapshots;
+      updatedSnapshots = [updatedSnapshots[0]!, ...updatedSnapshots.slice(1 + excess)];
+    }
+
+    snapshots.set(updatedSnapshots);
   };
 
   let validationScheduled = false;
@@ -371,33 +381,39 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     }
   };
 
-  const rollback = (steps = 1) => {
-    const currentSnapshots = get(snapshots);
-    if (currentSnapshots.length <= 1) return;
-
-    const targetIndex = Math.max(0, currentSnapshots.length - 1 - steps);
+  const restoreToSnapshot = (targetIndex: number, currentSnapshots: Snapshot<T>[]) => {
     const targetSnapshot = currentSnapshots[targetIndex];
     if (!targetSnapshot) return;
-
     cancelAllAsyncValidations();
     dirtyFieldsStore.set({});
     Object.assign(stateObject, deepClone(targetSnapshot.data));
     snapshots.set(currentSnapshots.slice(0, targetIndex + 1));
-
     if (validator) errors.set(validator(data));
+  };
+
+  const rollback = (steps = 1) => {
+    const currentSnapshots = get(snapshots);
+    if (currentSnapshots.length <= 1) return;
+    const targetIndex = Math.max(0, currentSnapshots.length - 1 - steps);
+    restoreToSnapshot(targetIndex, currentSnapshots);
+  };
+
+  const rollbackTo = (title: string): boolean => {
+    const currentSnapshots = get(snapshots);
+    if (currentSnapshots.length <= 1) return false;
+    for (let index = currentSnapshots.length - 1; index >= 0; index--)
+      if (currentSnapshots[index]!.title === title) {
+        restoreToSnapshot(index, currentSnapshots);
+        return true;
+      }
+
+    return false;
   };
 
   const reset = () => {
     const currentSnapshots = get(snapshots);
-    const initialSnapshot = currentSnapshots[0];
-    if (!initialSnapshot) return;
-
-    cancelAllAsyncValidations();
-    dirtyFieldsStore.set({});
-    Object.assign(stateObject, deepClone(initialSnapshot.data));
-    snapshots.set([initialSnapshot]);
-
-    if (validator) errors.set(validator(data));
+    if (!currentSnapshots[0]) return;
+    restoreToSnapshot(0, currentSnapshots);
   };
 
   const state: StateResult<T, V> = {
@@ -414,5 +430,5 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     hasCombinedErrors
   };
 
-  return { data, execute, state, rollback, reset };
+  return { data, execute, state, rollback, rollbackTo, reset };
 }

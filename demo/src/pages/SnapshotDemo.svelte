@@ -28,19 +28,24 @@
 		data,
 		reset,
 		rollback,
+		rollbackTo,
 		state: { errors, hasErrors, isDirty, snapshots }
-	} = createSvState(sourceData, {
-		validator: (source) => ({
-			firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
-			lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
-			email: stringValidator(source.email).prepare('trim').required().email().getError(),
-			phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
-			bio: stringValidator(source.bio).maxLength(200).getError()
-		}),
-		effect: ({ snapshot, property }) => {
-			snapshot(`Changed ${formatFieldName(property)}`);
-		}
-	});
+	} = createSvState(
+		sourceData,
+		{
+			validator: (source) => ({
+				firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+				lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+				email: stringValidator(source.email).prepare('trim').required().email().getError(),
+				phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
+				bio: stringValidator(source.bio).maxLength(200).getError()
+			}),
+			effect: ({ snapshot, property }) => {
+				snapshot(`Changed ${formatFieldName(property)}`);
+			}
+		},
+		{ maxSnapshots: 5 }
+	);
 
 	const fillWithValidData = () => {
 		data.firstName = 'John';
@@ -57,13 +62,13 @@
   firstName: 'Alice', lastName: 'Smith', email: 'alice.smith@example.com', phone: '', bio: ''
 };
 
-const { data, reset, rollback, state: { errors, hasErrors, isDirty, snapshots } } =
+const { data, reset, rollback, rollbackTo, state: { errors, hasErrors, isDirty, snapshots } } =
   createSvState(sourceData, {
     validator: (source) => ({ /* validation rules */ }),
     effect: ({ snapshot, property }) => {
       snapshot(\`Changed \${formatFieldName(property)}\`);
     }
-  });`;
+  }, { maxSnapshots: 5 });`;
 
 	const effectSourceCode = `// Effect callback creates snapshots on each change
 effect: ({ snapshot, property }) => {
@@ -72,20 +77,24 @@ effect: ({ snapshot, property }) => {
   // Use snapshot(title, false) to always create new
 }`;
 
-	const rollbackSourceCode = `// Undo last change (disabled if only initial snapshot)
-<button onclick={() => rollback()} disabled={$snapshots.length <= 1}>
-  Undo Last Change
-</button>
+	const rollbackSourceCode = `// Undo last change
+rollback();
 
-// Rollback multiple steps at once
-rollback(3);  // Undo 3 changes
+// Undo 3 changes at once
+rollback(3);
+
+// Roll back to a named snapshot (returns true if found)
+rollbackTo('Changed First Name');
+
+// Roll back to initial state
+rollbackTo('Initial');
 
 // Reset to initial state (clears all snapshots)
-<button onclick={reset}>Reset All</button>`;
+reset();`;
 </script>
 
 <PageLayout
-	description="Shows snapshot creation for undo functionality with rollback() support."
+	description="Shows snapshot creation for undo functionality with rollback(), rollbackTo(), and maxSnapshots support."
 	title="Snapshot & Rollback Demo"
 >
 	{#snippet main()}
@@ -94,6 +103,9 @@ rollback(3);  // Undo 3 changes
 		<div class="mb-4 flex items-center gap-2">
 			<span class="rounded bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800">
 				{$snapshots.length} Snapshot{$snapshots.length === 1 ? '' : 's'}
+			</span>
+			<span class="rounded bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-800">
+				Max: 5
 			</span>
 		</div>
 
@@ -135,7 +147,7 @@ rollback(3);  // Undo 3 changes
 			/>
 		</div>
 
-		<div class="mt-6 flex gap-3">
+		<div class="mt-6 flex flex-wrap gap-3">
 			<button
 				class="flex-1 cursor-pointer rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
 				disabled={$snapshots.length <= 1}
@@ -143,6 +155,15 @@ rollback(3);  // Undo 3 changes
 				type="button"
 			>
 				Undo Last Change
+			</button>
+
+			<button
+				class="flex-1 cursor-pointer rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+				disabled={$snapshots.length <= 1}
+				onclick={() => rollbackTo('Initial')}
+				type="button"
+			>
+				Rollback To Initial
 			</button>
 
 			{#if $isDirty}
@@ -181,7 +202,14 @@ rollback(3);  // Undo 3 changes
 								>
 									{index + 1}
 								</span>
-								<span class="truncate">{snap.title}</span>
+								<button
+									class="cursor-pointer truncate hover:text-purple-700 hover:underline disabled:cursor-default disabled:no-underline disabled:hover:text-gray-600"
+									disabled={$snapshots.length <= 1}
+									onclick={() => rollbackTo(snap.title)}
+									type="button"
+								>
+									{snap.title}
+								</button>
 							</li>
 						{/each}
 					</ul>
@@ -192,9 +220,9 @@ rollback(3);  // Undo 3 changes
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
-			<CodeBlock code={stateSourceCode} title="State Setup with Snapshots" />
+			<CodeBlock code={stateSourceCode} title="State Setup with Snapshots & maxSnapshots" />
 			<CodeBlock code={effectSourceCode} title="Effect with Snapshot Creation" />
-			<CodeBlock code={rollbackSourceCode} title="Rollback & Reset Usage" />
+			<CodeBlock code={rollbackSourceCode} title="Rollback, RollbackTo & Reset Usage" />
 		</SourceCodeSection>
 	{/snippet}
 </PageLayout>
