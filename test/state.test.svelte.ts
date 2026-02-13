@@ -1350,3 +1350,238 @@ describe('isDirtyByField', () => {
     expect(get(state.isDirty)).toBe(true);
   });
 });
+
+describe('rollbackTo', () => {
+  it('should roll back to a snapshot by title and return true', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot, property }) => {
+          snapshot(`Changed ${property}`, false);
+        }
+      }
+    );
+
+    data.value = 1;
+    data.value = 2;
+    data.value = 3;
+
+    const snapshotsBefore = get(state.snapshots);
+    expect(snapshotsBefore).toHaveLength(4); // Initial + 3 changes
+
+    const result = rollbackTo('Changed value');
+    expect(result).toBe(true);
+    expect(data.value).toBe(3); // Last matching snapshot (value=3)
+  });
+
+  it('should return false when title not found and leave state unchanged', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Change', false);
+        }
+      }
+    );
+
+    data.value = 1;
+    expect(get(state.snapshots)).toHaveLength(2);
+
+    const result = rollbackTo('Nonexistent');
+    expect(result).toBe(false);
+    expect(data.value).toBe(1);
+    expect(get(state.snapshots)).toHaveLength(2);
+  });
+
+  it('should find the LAST matching snapshot (search from end)', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot, currentValue }) => {
+          if (currentValue === 2) snapshot('Milestone', false);
+          else if (currentValue === 5) snapshot('Milestone', false);
+          else snapshot(`Set to ${currentValue}`, false);
+        }
+      }
+    );
+
+    data.value = 1;
+    data.value = 2; // Milestone
+    data.value = 3;
+    data.value = 4;
+    data.value = 5; // Milestone
+
+    expect(get(state.snapshots)).toHaveLength(6);
+
+    rollbackTo('Milestone');
+    // Should find the LAST "Milestone" (value=5), so snapshots trimmed to that point
+    expect(data.value).toBe(5);
+    expect(get(state.snapshots)).toHaveLength(6); // All snapshots up to and including last Milestone
+  });
+
+  it('should be able to roll back to Initial', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Change', false);
+        }
+      }
+    );
+
+    data.value = 1;
+    data.value = 2;
+
+    const result = rollbackTo('Initial');
+    expect(result).toBe(true);
+    expect(data.value).toBe(0);
+    expect(get(state.snapshots)).toHaveLength(1);
+  });
+
+  it('should return false when only initial snapshot exists', () => {
+    const { rollbackTo } = createSvState({ value: 0 });
+
+    const result = rollbackTo('Initial');
+    expect(result).toBe(false);
+  });
+
+  it('should trigger validation after rollbackTo', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { value: '' },
+      {
+        validator: (source) => ({
+          value: source.value.length < 3 ? 'Too short' : ''
+        }),
+        effect: ({ snapshot }) => {
+          snapshot('Change', false);
+        }
+      }
+    );
+
+    data.value = 'abcdef'; // Valid
+    data.value = 'ab'; // Invalid
+
+    rollbackTo('Initial');
+    expect(get(state.errors)).toEqual({ value: 'Too short' });
+  });
+
+  it('should clear dirty fields on rollbackTo', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Change', false);
+        }
+      }
+    );
+
+    data.value = 1;
+    expect(get(state.isDirty)).toBe(true);
+
+    rollbackTo('Initial');
+    expect(get(state.isDirtyByField)).toEqual({});
+    expect(get(state.isDirty)).toBe(false);
+  });
+});
+
+describe('maxSnapshots', () => {
+  it('should trim oldest non-Initial snapshots when exceeding limit', () => {
+    const { data, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot, currentValue }) => {
+          snapshot(`Set ${currentValue}`, false);
+        }
+      },
+      { maxSnapshots: 4 }
+    );
+
+    data.value = 1;
+    data.value = 2;
+    data.value = 3;
+    data.value = 4;
+    data.value = 5;
+
+    const snaps = get(state.snapshots);
+    expect(snaps).toHaveLength(4);
+    expect(snaps[0]!.title).toBe('Initial'); // Always preserved
+    expect(snaps[1]!.title).toBe('Set 3');
+    expect(snaps[2]!.title).toBe('Set 4');
+    expect(snaps[3]!.title).toBe('Set 5');
+  });
+
+  it('should always preserve Initial snapshot', () => {
+    const { data, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot, currentValue }) => {
+          snapshot(`V${currentValue}`, false);
+        }
+      },
+      { maxSnapshots: 2 }
+    );
+
+    data.value = 1;
+    data.value = 2;
+    data.value = 3;
+
+    const snaps = get(state.snapshots);
+    expect(snaps).toHaveLength(2);
+    expect(snaps[0]!.title).toBe('Initial');
+    expect(snaps[1]!.title).toBe('V3');
+  });
+
+  it('should not trim when maxSnapshots is 0 (unlimited)', () => {
+    const { data, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot, currentValue }) => {
+          snapshot(`V${currentValue}`, false);
+        }
+      },
+      { maxSnapshots: 0 }
+    );
+
+    for (let index = 1; index <= 100; index++) data.value = index;
+
+    expect(get(state.snapshots)).toHaveLength(101); // Initial + 100
+  });
+
+  it('should trim at default 50 limit', () => {
+    const { data, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot, currentValue }) => {
+          snapshot(`V${currentValue}`, false);
+        }
+      }
+    );
+
+    for (let index = 1; index <= 55; index++) data.value = index;
+
+    const snaps = get(state.snapshots);
+    expect(snaps).toHaveLength(50);
+    expect(snaps[0]!.title).toBe('Initial');
+    expect(snaps.at(-1)!.title).toBe('V55');
+  });
+
+  it('should not trigger trim when replacing a snapshot (same title)', () => {
+    const { data, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Same Title'); // replace=true by default
+        }
+      },
+      { maxSnapshots: 5 }
+    );
+
+    // Replacing the same title should keep length at 2 (Initial + latest)
+    for (let index = 1; index <= 10; index++) data.value = index;
+
+    const snaps = get(state.snapshots);
+    expect(snaps).toHaveLength(2);
+    expect(snaps[0]!.title).toBe('Initial');
+    expect(snaps[1]!.title).toBe('Same Title');
+  });
+});
