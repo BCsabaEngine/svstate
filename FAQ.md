@@ -10,6 +10,7 @@ Common questions and answers about svstate.
 - [Snapshots & Undo](#snapshots--undo)
 - [Actions](#actions)
 - [TypeScript & Types](#typescript--types)
+- [Plugins](#plugins)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -507,6 +508,190 @@ const userEffect = ({ snapshot, property }: EffectContext<UserData>) => {
 const { data } = createSvState(userData, {
   validator: validateUser,
   effect: userEffect
+});
+```
+
+---
+
+## Plugins
+
+### What is the plugin system and when should I use it?
+
+Plugins extend `createSvState` with reusable behaviors via lifecycle hooks. Use them when you need cross-cutting concerns like persistence, auto-saving, debugging, or analytics — without cluttering your effect or action callbacks.
+
+Plugins are passed via the `plugins` option array:
+
+```typescript
+import { createSvState, persistPlugin, devtoolsPlugin } from 'svstate';
+
+const { data, destroy } = createSvState(formData, actuators, {
+  plugins: [persistPlugin({ key: 'my-form' }), devtoolsPlugin({ name: 'MyForm' })]
+});
+
+// Call destroy() to clean up plugin resources (e.g., in onDestroy)
+destroy();
+```
+
+---
+
+### What built-in plugins are available?
+
+svstate ships with 7 built-in plugins:
+
+| Plugin            | Purpose                                      | Import                                      |
+| ----------------- | -------------------------------------------- | ------------------------------------------- |
+| `persistPlugin`   | Persist state to localStorage/custom storage | `import { persistPlugin } from 'svstate'`   |
+| `autosavePlugin`  | Auto-save after idle/interval                | `import { autosavePlugin } from 'svstate'`  |
+| `devtoolsPlugin`  | Console logging of all events                | `import { devtoolsPlugin } from 'svstate'`  |
+| `historyPlugin`   | Sync state fields to URL params              | `import { historyPlugin } from 'svstate'`   |
+| `syncPlugin`      | Cross-tab sync via BroadcastChannel          | `import { syncPlugin } from 'svstate'`      |
+| `undoRedoPlugin`  | Redo stack on top of built-in rollback       | `import { undoRedoPlugin } from 'svstate'`  |
+| `analyticsPlugin` | Batch event buffering for analytics          | `import { analyticsPlugin } from 'svstate'` |
+
+---
+
+### How do I persist state to localStorage?
+
+Use `persistPlugin` to automatically save and restore state:
+
+```typescript
+import { persistPlugin } from 'svstate';
+
+const persist = persistPlugin({
+  key: 'my-form', // Required: storage key
+  throttle: 300, // Write debounce ms (default: 300)
+  exclude: ['password'], // Don't persist these fields
+  include: ['name', 'email'] // Only persist these fields (mutually exclusive with exclude)
+});
+
+const { data, reset } = createSvState(formData, actuators, {
+  plugins: [persist]
+});
+
+// Check if state was restored from storage
+persist.isRestored(); // true/false
+
+// Clear persisted data
+persist.clearPersistedState();
+```
+
+Reload the page and your state will be automatically restored.
+
+---
+
+### How do I add undo/redo support?
+
+The built-in `rollback()` provides undo. Add `undoRedoPlugin` for redo:
+
+```typescript
+import { undoRedoPlugin } from 'svstate';
+
+const undoRedo = undoRedoPlugin();
+
+const { data, rollback } = createSvState(
+  formData,
+  {
+    effect: ({ snapshot, property }) => {
+      snapshot(`Changed ${property}`);
+    }
+  },
+  { plugins: [undoRedo] }
+);
+
+// Undo (built-in)
+rollback();
+
+// Redo (from plugin)
+undoRedo.redo();
+
+// Check if redo is available
+undoRedo.canRedo(); // boolean
+
+// Reactive redo stack
+undoRedo.redoStack; // Readable<Snapshot[]>
+```
+
+---
+
+### How do I sync state across browser tabs?
+
+Use `syncPlugin` which uses BroadcastChannel to sync state changes:
+
+```typescript
+import { syncPlugin } from 'svstate';
+
+const sync = syncPlugin({
+  key: 'my-form-sync', // Required: channel name
+  throttle: 100 // Broadcast debounce ms (default: 100)
+});
+
+const { data } = createSvState(formData, actuators, {
+  plugins: [sync]
+});
+
+// Changes in one tab automatically appear in all other tabs with the same key
+```
+
+---
+
+### How do I write a custom plugin?
+
+Implement the `SvStatePlugin<T>` interface — all hooks are optional:
+
+```typescript
+import type { SvStatePlugin, ChangeEvent } from 'svstate';
+
+const myPlugin: SvStatePlugin<MyState> = {
+  name: 'my-plugin',
+  onInit(context) {
+    // Access: context.data, context.state, context.options, context.snapshot
+  },
+  onChange(event) {
+    console.log(`${event.property}: ${event.oldValue} → ${event.currentValue}`);
+  },
+  onValidation(errors) {
+    /* Called after sync validation */
+  },
+  onSnapshot(snapshot) {
+    /* Called when snapshot is created */
+  },
+  onAction(event) {
+    if (event.phase === 'before') {
+      /* Action starting */
+    }
+    if (event.phase === 'after') {
+      /* Action done, check event.error */
+    }
+  },
+  onRollback(snapshot) {
+    /* Called after rollback */
+  },
+  onReset() {
+    /* Called after reset */
+  },
+  destroy() {
+    /* Cleanup resources */
+  }
+};
+```
+
+**Hook execution order:** Hooks run in plugin array order (first to last), except `destroy` which runs last-to-first.
+
+---
+
+### Can I combine multiple plugins?
+
+**Yes!** Plugins are composed via the `plugins` array. They run independently and don't interfere with each other:
+
+```typescript
+const { data } = createSvState(formData, actuators, {
+  plugins: [
+    persistPlugin({ key: 'my-form' }),
+    syncPlugin({ key: 'my-form-sync' }),
+    autosavePlugin({ save: (d) => api.saveDraft(d), idle: 2000 }),
+    devtoolsPlugin({ name: 'MyForm' }),
+    analyticsPlugin({ onFlush: (events) => sendToAnalytics(events) })
+  ]
 });
 ```
 

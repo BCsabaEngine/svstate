@@ -77,17 +77,19 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`, `DirtyFields`)
-- `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system and async validation
+- `src/index.ts` - Public exports: `createSvState`, validator builders, plugin types and built-in plugins, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`, `DirtyFields`, `SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`)
+- `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system, async validation, and plugin integration
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
+- `src/plugin.ts` - Plugin type definitions (`SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`)
+- `src/plugins/` - Built-in plugins: `persistPlugin`, `autosavePlugin`, `devtoolsPlugin`, `historyPlugin`, `syncPlugin`, `undoRedoPlugin`, `analyticsPlugin`
 
 ### createSvState Function (src/state.svelte.ts)
 
 The main export creates a validated state object with snapshot/undo support:
 
 ```typescript
-const { data, execute, state, rollback, rollbackTo, reset } = createSvState(init, actuators?, options?);
+const { data, execute, state, rollback, rollbackTo, reset, destroy } = createSvState(init, actuators?, options?);
 ```
 
 **Returns:**
@@ -97,6 +99,7 @@ const { data, execute, state, rollback, rollbackTo, reset } = createSvState(init
 - `rollback(steps?)` - Undo N steps (default 1), restores state and triggers validation
 - `rollbackTo(title)` - Roll back to the last snapshot matching `title`, returns `boolean` (true if found)
 - `reset()` - Return to initial snapshot, triggers validation
+- `destroy()` - Cleanup function: calls plugin `destroy` hooks in reverse order, cancels async validations
 - `state` - Object containing reactive stores:
   - `errors: Readable<V | undefined>` - Validation errors (sync)
   - `hasErrors: Readable<boolean>` - Whether any sync validation errors exist
@@ -129,6 +132,7 @@ const { data, execute, state, rollback, rollbackTo, reset } = createSvState(init
 - `clearAsyncErrorsOnChange: boolean` (default: `true`) - Clear async error for a path when that property changes
 - `maxConcurrentAsyncValidations: number` (default: `4`) - Maximum concurrent async validators running simultaneously
 - `maxSnapshots: number` (default: `50`) - Maximum number of snapshots to keep; oldest non-Initial snapshots are trimmed when exceeded. `0` = unlimited.
+- `plugins: SvStatePlugin<any>[]` (default: `[]`) - Array of plugins to extend behavior (see Plugin System)
 
 ### Snapshot/Undo System
 
@@ -180,6 +184,45 @@ type AsyncValidator<T> = {
 - Exact match: validator for `"email"` triggers when `email` changes
 - Parent triggers child: validator for `"user.email"` triggers when `user` changes
 - Child triggers parent: validator for `"user"` triggers when `user.email` changes
+
+### Plugin System (src/plugin.ts, src/plugins/)
+
+Plugins extend `createSvState` via lifecycle hooks. They are registered via `options.plugins` array.
+
+**`SvStatePlugin<T>` interface:**
+
+- `name: string` - Required unique identifier
+- `onInit?(context: PluginContext<T>)` - Called once after state is fully initialized
+- `onChange?(event: ChangeEvent<T>)` - Called on every property mutation (`{ target, property, currentValue, oldValue }`)
+- `onValidation?(errors: Validator | undefined)` - Called after sync validation runs
+- `onSnapshot?(snapshot: Snapshot<T>)` - Called when a snapshot is created
+- `onAction?(event: ActionEvent)` - Called before (`{ phase: 'before', params }`) and after (`{ phase: 'after', error? }`) action execution
+- `onRollback?(snapshot: Snapshot<T>)` - Called after rollback/rollbackTo completes
+- `onReset?()` - Called after reset completes
+- `destroy?()` - Called on `destroy()`, in **reverse** plugin array order
+
+**`PluginContext<T>` (received by `onInit`):**
+
+- `data: T` - The live reactive proxy
+- `state: PluginStores<T>` - All readable stores (errors, isDirty, snapshots, etc.)
+- `options: Readonly<SvStateOptions>` - Resolved options
+- `snapshot: SnapshotFunction` - Create snapshots programmatically
+
+**Hook execution:** Hooks are called in plugin array order (first to last), except `destroy` which runs last-to-first. All hooks are optional.
+
+**Internal implementation:** `createSvState` uses a `callPlugins(hook, ...args)` helper that iterates plugins and calls matching hook functions.
+
+**Built-in plugins (src/plugins/):**
+
+| Plugin            | File           | Purpose                                      | Key options                                                              |
+| ----------------- | -------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
+| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude` |
+| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`  |
+| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`                          |
+| `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`                  |
+| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`                                    |
+| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | No required options; exposes `redo()`, `canRedo()`, `redoStack`          |
+| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`            |
 
 ### Deep Clone System (src/state.svelte.ts)
 

@@ -9,6 +9,10 @@
 	import CalculatedFields from './pages/CalculatedFields.svelte';
 	import NestedObjects from './pages/NestedObjects.svelte';
 	import OptionsDemo from './pages/OptionsDemo.svelte';
+	import PluginAutosaveAnalytics from './pages/PluginAutosaveAnalytics.svelte';
+	import PluginDevtools from './pages/PluginDevtools.svelte';
+	import PluginPersistSync from './pages/PluginPersistSync.svelte';
+	import PluginUndoRedo from './pages/PluginUndoRedo.svelte';
 	import ResetDemo from './pages/ResetDemo.svelte';
 	import SnapshotDemo from './pages/SnapshotDemo.svelte';
 	import ZodValidation from './pages/ZodValidation.svelte';
@@ -24,7 +28,11 @@
 		| 'action-demo'
 		| 'async-validation'
 		| 'options-demo'
-		| 'zod-validation';
+		| 'zod-validation'
+		| 'plugin-devtools'
+		| 'plugin-persist-sync'
+		| 'plugin-undo-redo'
+		| 'plugin-autosave-analytics';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
@@ -37,7 +45,11 @@
 		{ value: 'action-demo', name: 'Action & Error' },
 		{ value: 'async-validation', name: 'Async Validation' },
 		{ value: 'options-demo', name: 'Options' },
-		{ value: 'zod-validation', name: 'Zod Integration' }
+		{ value: 'zod-validation', name: 'Zod Integration' },
+		{ value: 'plugin-devtools', name: 'Plugin: Devtools' },
+		{ value: 'plugin-persist-sync', name: 'Plugin: Persist & Sync' },
+		{ value: 'plugin-undo-redo', name: 'Plugin: Undo/Redo' },
+		{ value: 'plugin-autosave-analytics', name: 'Plugin: Autosave & Analytics' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -149,6 +161,14 @@
 				<OptionsDemo />
 			{:else if selectedMode === 'zod-validation'}
 				<ZodValidation />
+			{:else if selectedMode === 'plugin-devtools'}
+				<PluginDevtools />
+			{:else if selectedMode === 'plugin-persist-sync'}
+				<PluginPersistSync />
+			{:else if selectedMode === 'plugin-undo-redo'}
+				<PluginUndoRedo />
+			{:else if selectedMode === 'plugin-autosave-analytics'}
+				<PluginAutosaveAnalytics />
 			{/if}
 		</main>
 	</div>
