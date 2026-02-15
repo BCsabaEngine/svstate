@@ -8,7 +8,7 @@
 [![Tests](https://img.shields.io/badge/tests-300%2B-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-%3E98%25-brightgreen.svg)]()
 
-> **Deep reactive proxy with validation, snapshot/undo, and side effects — built for complex, real-world applications.**
+> **Deep reactive proxy with validation, snapshot/undo, side effects, and plugins — built for complex, real-world applications.**
 
 <p align="center">
   <img src="svstate.png" alt="svstate" />
@@ -18,6 +18,7 @@
   <a href="https://bcsabaengine.github.io/svstate/"><strong>🎮 Live Demo</strong></a> ·
   <a href="#-installation">Installation</a> ·
   <a href="#-core-features">Features</a> ·
+  <a href="#7%EF%B8%8F%E2%83%A3-plugins--extend-with-reusable-behaviors">Plugins</a> ·
   <a href="#-complete-examples">Examples</a>
 </p>
 
@@ -75,6 +76,7 @@ const customer = $state({
 - ⏪ **Snapshots & undo** for complex editing workflows
 - 🎯 **Tracks dirty state** automatically (per-field and aggregate)
 - 🔧 **Supports methods** on state objects for computed values and formatting
+- 🔌 **Plugin system** for persistence, autosave, devtools, URL sync, cross-tab sync, undo/redo, and analytics
 
 ```typescript
 import { createSvState, stringValidator, numberValidator } from 'svstate';
@@ -406,7 +408,10 @@ const { data } = createSvState(formData, actuators, {
   maxConcurrentAsyncValidations: 4,
 
   // Max snapshots to keep, 0 = unlimited (default: 50)
-  maxSnapshots: 50
+  maxSnapshots: 50,
+
+  // Plugins to extend behavior (default: [])
+  plugins: [persistPlugin({ key: 'my-form' })]
 });
 ```
 
@@ -421,6 +426,7 @@ const { data } = createSvState(formData, actuators, {
 | `clearAsyncErrorsOnChange`      | `true`  | Clear async error when property changes    |
 | `maxConcurrentAsyncValidations` | `4`     | Max concurrent async validators            |
 | `maxSnapshots`                  | `50`    | Max snapshots to keep (0 = unlimited)      |
+| `plugins`                       | `[]`    | Array of plugins to extend behavior        |
 
 ---
 
@@ -485,6 +491,167 @@ const {
 - 📸 Methods preserved through `rollback()` and `reset()`
 - 🎯 Call methods from effects to compute derived values
 - 📐 Encapsulate formatting and business logic in state object
+
+---
+
+### 7️⃣ Plugins — Extend with Reusable Behaviors
+
+svstate includes a plugin system that lets you hook into every stage of the state lifecycle. Plugins are passed via the `plugins` option and can react to changes, snapshots, actions, rollbacks, and more.
+
+```typescript
+import { createSvState, persistPlugin, devtoolsPlugin, autosavePlugin } from 'svstate';
+
+const { data, destroy } = createSvState(formData, actuators, {
+  plugins: [
+    persistPlugin({ key: 'customer-form', throttle: 500 }),
+    autosavePlugin({ save: (data) => api.saveDraft(data), idle: 2000 }),
+    devtoolsPlugin({ name: 'CustomerForm' })
+  ]
+});
+
+// Call destroy() when done (e.g., in onDestroy) to clean up plugin resources
+destroy();
+```
+
+#### Built-in Plugins
+
+**`persistPlugin`** — Persist state to localStorage (or custom storage) with throttled writes.
+
+```typescript
+import { persistPlugin } from 'svstate';
+
+const persist = persistPlugin({
+  key: 'my-form', // Required: storage key
+  storage: localStorage, // Custom storage backend (default: localStorage)
+  throttle: 300, // Write debounce ms (default: 300)
+  version: 1, // Schema version (default: 1)
+  migrate: (data, v) => data, // Migration on version mismatch
+  include: ['name', 'email'], // Only persist these paths
+  exclude: ['password'] // Exclude these paths
+});
+
+// Extra methods:
+persist.isRestored(); // Was state hydrated from storage?
+persist.clearPersistedState(); // Remove stored data
+```
+
+**`autosavePlugin`** — Auto-save after idle period or on interval.
+
+```typescript
+import { autosavePlugin } from 'svstate';
+
+const autosave = autosavePlugin({
+  save: (data) => fetch('/api/draft', { method: 'POST', body: JSON.stringify(data) }),
+  idle: 1000, // Save after 1s of inactivity (default: 1000)
+  interval: 30000, // Also save every 30s (default: 0 = disabled)
+  saveOnDestroy: true, // Save on cleanup (default: true)
+  onlyWhenDirty: true, // Skip if unchanged (default: true)
+  onVisibilityHidden: false, // Save when tab goes hidden (default: false)
+  onError: (err) => console.error(err)
+});
+
+// Extra methods:
+await autosave.saveNow(); // Trigger immediate save
+autosave.isSaving(); // Is a save in progress?
+```
+
+**`devtoolsPlugin`** — Log all state events to the browser console.
+
+```typescript
+import { devtoolsPlugin } from 'svstate';
+
+devtoolsPlugin({
+  name: 'MyForm', // Log prefix (default: 'svstate')
+  collapsed: true, // Use groupCollapsed (default: true)
+  logValidation: false, // Log validation results (default: false)
+  enabled: true // Auto-disabled in production
+});
+```
+
+**`historyPlugin`** — Sync state fields to/from URL search parameters.
+
+```typescript
+import { historyPlugin } from 'svstate';
+
+const history = historyPlugin({
+  fields: { search: 'q', page: 'p' }, // { stateField: 'urlParam' }
+  mode: 'replace', // 'push' | 'replace' (default: 'replace')
+  serialize: (value) => String(value),
+  deserialize: (param) => param
+});
+
+// Extra method:
+history.syncFromUrl(); // Manually re-read URL into state
+```
+
+**`syncPlugin`** — Sync state across browser tabs via BroadcastChannel.
+
+```typescript
+import { syncPlugin } from 'svstate';
+
+const sync = syncPlugin({
+  key: 'my-form-sync', // Required: channel name
+  throttle: 100, // Broadcast debounce ms (default: 100)
+  merge: 'overwrite' // 'overwrite' | 'ignore' (default: 'overwrite')
+});
+
+// Extra method:
+sync.disconnect(); // Close the channel
+```
+
+**`undoRedoPlugin`** — Adds redo capability on top of built-in rollback.
+
+```typescript
+import { undoRedoPlugin } from 'svstate';
+
+const undoRedo = undoRedoPlugin<MyState>();
+
+// Extra methods and stores:
+undoRedo.redo(); // Re-apply last undone change
+undoRedo.canRedo(); // Are there redo states?
+undoRedo.redoStack; // Readable<Snapshot<T>[]> — reactive redo history
+```
+
+**`analyticsPlugin`** — Buffer and batch state events for analytics.
+
+```typescript
+import { analyticsPlugin } from 'svstate';
+
+analyticsPlugin({
+  onFlush: (events) => sendToAnalytics(events), // Required
+  batchSize: 20, // Flush at N events (default: 20)
+  flushInterval: 5000, // Periodic flush ms (default: 5000)
+  include: ['change', 'action'] // Filter event types
+});
+```
+
+#### Writing Custom Plugins
+
+Implement the `SvStatePlugin<T>` interface — all hooks are optional:
+
+```typescript
+import type { SvStatePlugin } from 'svstate';
+
+const myPlugin: SvStatePlugin<MyState> = {
+  name: 'my-plugin',
+  onInit(context) {
+    // Access context.data, context.state, context.options, context.snapshot
+    console.log('State initialized with', Object.keys(context.data));
+  },
+  onChange(event) {
+    console.log(`${event.property}: ${event.oldValue} → ${event.currentValue}`);
+  },
+  onAction(event) {
+    if (event.phase === 'before') console.log('Action starting...');
+    if (event.phase === 'after') console.log('Action done', event.error || 'success');
+  },
+  destroy() {
+    // Cleanup resources
+  }
+};
+```
+
+**Available hooks:** `onInit`, `onChange`, `onValidation`, `onSnapshot`, `onAction`, `onRollback`, `onReset`, `destroy`
 
 ---
 
@@ -867,6 +1034,7 @@ Creates a supercharged state object.
 | `rollback(steps?)` | `(n?: number) => void` | Undo N changes (default: 1) |
 | `rollbackTo(title)` | `(title: string) => boolean` | Roll back to last snapshot with matching title |
 | `reset()` | `() => void` | Return to initial state |
+| `destroy()` | `() => void` | Cleanup plugins and cancel async validations |
 | `state.errors` | `Readable<V>` | Sync validation errors store |
 | `state.hasErrors` | `Readable<boolean>` | Has sync errors? |
 | `state.isDirty` | `Readable<boolean>` | Has state changed? (derived from `isDirtyByField`) |
@@ -906,7 +1074,12 @@ import type {
   AsyncValidator,
   AsyncValidatorFunction,
   AsyncErrors,
-  DirtyFields
+  DirtyFields,
+  SvStatePlugin,
+  PluginContext,
+  PluginStores,
+  ChangeEvent,
+  ActionEvent
 } from 'svstate';
 ```
 
@@ -921,6 +1094,11 @@ import type {
 | `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                        |
 | `AsyncErrors`               | Object mapping property paths to error strings                                                      |
 | `DirtyFields`               | Object mapping dot-notation property paths to `boolean` dirty status                                |
+| `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks (`onInit`, `onChange`, `onAction`, etc.)                      |
+| `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`                                    |
+| `PluginStores<T>`           | All readable stores exposed to plugins                                                              |
+| `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }`                              |
+| `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                                                |
 
 **Example: External validator and effect functions**
 
@@ -972,6 +1150,7 @@ const { data, state } = createSvState<UserData, UserErrors, object>(
 | Dirty tracking         | ❌ DIY             | ✅ Automatic (per-field) |
 | Action loading states  | ❌ DIY             | ✅ Built-in              |
 | State with methods     | ⚠️ Manual cloning  | ✅ Automatic             |
+| Plugin ecosystem       | ❌ Not available   | ✅ 7 built-in plugins    |
 
 **svstate is for:**
 
