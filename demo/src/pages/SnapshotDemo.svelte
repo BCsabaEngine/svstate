@@ -104,9 +104,7 @@ reset();`;
 			<span class="rounded bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800">
 				{$snapshots.length} Snapshot{$snapshots.length === 1 ? '' : 's'}
 			</span>
-			<span class="rounded bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-800">
-				Max: 5
-			</span>
+			<span class="rounded bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-800"> Max: 5 </span>
 		</div>
 
 		<div class="space-y-4">

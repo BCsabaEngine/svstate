@@ -11,6 +11,7 @@
 	import OptionsDemo from './pages/OptionsDemo.svelte';
 	import ResetDemo from './pages/ResetDemo.svelte';
 	import SnapshotDemo from './pages/SnapshotDemo.svelte';
+	import ZodValidation from './pages/ZodValidation.svelte';
 
 	type DemoMode =
 		| 'basic-validation'
@@ -22,7 +23,8 @@
 		| 'snapshot-demo'
 		| 'action-demo'
 		| 'async-validation'
-		| 'options-demo';
+		| 'options-demo'
+		| 'zod-validation';
 
 	const demoModes: { value: DemoMode; name: string }[] = [
 		{ value: 'basic-validation', name: 'Basic Validation' },
@@ -34,7 +36,8 @@
 		{ value: 'snapshot-demo', name: 'Snapshot & Rollback' },
 		{ value: 'action-demo', name: 'Action & Error' },
 		{ value: 'async-validation', name: 'Async Validation' },
-		{ value: 'options-demo', name: 'Options' }
+		{ value: 'options-demo', name: 'Options' },
+		{ value: 'zod-validation', name: 'Zod Integration' }
 	];
 
 	let selectedMode: DemoMode = $state('basic-validation');
@@ -144,6 +147,8 @@
 				<AsyncValidation />
 			{:else if selectedMode === 'options-demo'}
 				<OptionsDemo />
+			{:else if selectedMode === 'zod-validation'}
+				<ZodValidation />
 			{/if}
 		</main>
 	</div>
