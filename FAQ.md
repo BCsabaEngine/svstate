@@ -6,10 +6,12 @@ Common questions and answers about svstate.
 
 - [General Questions](#general-questions)
 - [Validation](#validation)
+- [Async Validation](#async-validation)
 - [Effects & Side Effects](#effects--side-effects)
 - [Snapshots & Undo](#snapshots--undo)
 - [Actions](#actions)
 - [TypeScript & Types](#typescript--types)
+- [Plugins](#plugins)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -22,9 +24,11 @@ svstate is a Svelte 5 library that provides a supercharged `$state()` with deep 
 
 - Automatic change detection at any nesting level
 - Structured validation that mirrors your data shape
+- Async validation for server-side checks (username availability, email verification)
 - Property change events with full context (what changed, old/new values)
 - Snapshot-based undo/redo system
-- Dirty state tracking
+- Dirty state tracking (aggregate and per-field)
+- Plugin system for persistence, auto-save, devtools, URL sync, cross-tab sync, undo/redo, and analytics
 
 **Use it when:** You have complex forms, ERP/CRM applications, or any state beyond simple username/password fields.
 
@@ -84,8 +88,8 @@ const { data, state: { errors, hasErrors } } = createSvState(
   { email: '', name: '' },
   {
     validator: (source) => ({
-      email: stringValidator(source.email, 'trim').required().email().getError(),
-      name: stringValidator(source.name, 'trim').required().getError()
+      email: stringValidator(source.email).prepare('trim').required().email().getError(),
+      name: stringValidator(source.name).prepare('trim').required().getError()
     })
   }
 );
@@ -256,13 +260,103 @@ const {
 
       // Validate each contact item
       contacts: source.contacts.map((contact) => ({
-        name: stringValidator(contact.name, 'trim').required().getError(),
-        email: stringValidator(contact.email, 'trim').required().email().getError()
+        name: stringValidator(contact.name).prepare('trim').required().getError(),
+        email: stringValidator(contact.email).prepare('trim').required().email().getError()
       }))
     })
   }
 );
 ```
+
+---
+
+## Async Validation
+
+### How do I validate fields against a server (e.g., check if a username is taken)?
+
+Use `asyncValidator` — a map of property paths to async functions. Each function receives the current value, the full source object, and an `AbortSignal` for cancellation:
+
+```typescript
+import { createSvState, stringValidator, type AsyncValidator } from 'svstate';
+
+type UserForm = { username: string; email: string };
+
+const asyncValidators: AsyncValidator<UserForm> = {
+  username: async (value, source, signal) => {
+    if (!value) return ''; // Let sync validation handle required
+    const res = await fetch(`/api/check-username?name=${value}`, { signal });
+    const { available } = await res.json();
+    return available ? '' : 'Username already taken';
+  },
+  email: async (value, source, signal) => {
+    if (!value) return '';
+    const res = await fetch(`/api/check-email?email=${value}`, { signal });
+    const { valid } = await res.json();
+    return valid ? '' : 'Email not deliverable';
+  }
+};
+
+const {
+  data,
+  state: { errors, asyncErrors, asyncValidating, hasCombinedErrors }
+} = createSvState(
+  { username: '', email: '' },
+  {
+    validator: (source) => ({
+      username: stringValidator(source.username).required().minLength(3).getError(),
+      email: stringValidator(source.email).required().email().getError()
+    }),
+    asyncValidator: asyncValidators
+  },
+  { debounceAsyncValidation: 500 }
+);
+```
+
+```svelte
+<!-- Show loading indicator while checking -->
+{#if $asyncValidating.includes('username')}
+  <span>Checking...</span>
+{/if}
+
+<!-- Show async error -->
+{#if $asyncErrors.username}
+  <span class="error">{$asyncErrors.username}</span>
+{/if}
+
+<!-- Disable submit when any errors exist (sync OR async) -->
+<button disabled={$hasCombinedErrors}>Submit</button>
+```
+
+---
+
+### What stores does async validation expose?
+
+| Store               | Type                    | Description                                 |
+| ------------------- | ----------------------- | ------------------------------------------- |
+| `asyncErrors`       | `Readable<AsyncErrors>` | Error strings keyed by property path        |
+| `hasAsyncErrors`    | `Readable<boolean>`     | True if any async error string is non-empty |
+| `asyncValidating`   | `Readable<string[]>`    | Property paths currently being validated    |
+| `hasCombinedErrors` | `Readable<boolean>`     | True if any sync OR async error exists      |
+
+---
+
+### How does async validation interact with sync validation?
+
+- Async validators only run if sync validation **passes** for that path
+- When a property changes, pending async validation for that path is **cancelled** (via `AbortSignal`)
+- `rollback()` and `reset()` cancel all pending async validations and clear async errors
+- Use `debounceAsyncValidation` (default: 300ms) to avoid excessive API calls during typing
+- Use `maxConcurrentAsyncValidations` (default: 4) to limit parallel requests
+
+---
+
+### What triggers async validators for nested paths?
+
+Async validators use dot-notation paths and trigger based on these matching rules:
+
+- **Exact match**: validator for `"email"` triggers when `email` changes
+- **Parent triggers child**: validator for `"user.email"` triggers when `user` changes
+- **Child triggers parent**: validator for `"user"` triggers when `user.email` changes
 
 ---
 
@@ -381,9 +475,37 @@ snapshot('Important change', false);
 
 ---
 
+### How do I roll back to a specific named snapshot?
+
+Use `rollbackTo(title)` to jump directly to the last snapshot with a matching title. It returns `true` if found, `false` otherwise:
+
+```typescript
+const { data, rollback, rollbackTo, reset } = createSvState(formData, {
+  effect: ({ snapshot, property }) => {
+    snapshot(`Changed ${property}`);
+  }
+});
+
+// Jump to the last snapshot with this exact title
+const found = rollbackTo('Changed email'); // true if found
+
+// Roll back to the very beginning
+rollbackTo('Initial');
+
+// One step undo
+rollback();
+
+// Undo 3 steps
+rollback(3);
+```
+
+**Note:** `rollbackTo` searches from the most recent snapshot backwards and returns `false` if no matching snapshot exists or only the initial snapshot remains.
+
+---
+
 ### Does rollback trigger validation?
 
-**Yes.** Both `rollback()` and `reset()` trigger validation after restoring state, ensuring your error state stays in sync with your data.
+**Yes.** Both `rollback()`, `rollbackTo()`, and `reset()` trigger validation after restoring state, ensuring your error state stays in sync with your data.
 
 ---
 
@@ -474,21 +596,35 @@ import type {
   AsyncValidator,
   AsyncValidatorFunction,
   AsyncErrors,
-  DirtyFields
+  DirtyFields,
+  SvStatePlugin,
+  PluginContext,
+  PluginStores,
+  ChangeEvent,
+  ActionEvent
 } from 'svstate';
+
+// Plugin-specific types
+import type { AnalyticsEvent } from 'svstate';
 ```
 
-| Type                        | Use Case                                                     |
-| --------------------------- | ------------------------------------------------------------ |
-| `Validator`                 | Type for validation error objects                            |
-| `EffectContext<T>`          | Type effect callbacks when defined externally                |
-| `SnapshotFunction`          | Type for the `snapshot` function parameter                   |
-| `Snapshot<T>`               | Type for snapshot history entries                            |
-| `SvStateOptions`            | Type for configuration options                               |
-| `AsyncValidator<T>`         | Object mapping property paths to async validator functions   |
-| `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>` |
-| `AsyncErrors`               | Object mapping property paths to error strings               |
-| `DirtyFields`               | Object mapping dot-notation paths to dirty status            |
+| Type                        | Use Case                                                               |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `Validator`                 | Type for validation error objects                                      |
+| `EffectContext<T>`          | Type effect callbacks when defined externally                          |
+| `SnapshotFunction`          | Type for the `snapshot` function parameter                             |
+| `Snapshot<T>`               | Type for snapshot history entries                                      |
+| `SvStateOptions`            | Type for configuration options                                         |
+| `AsyncValidator<T>`         | Object mapping property paths to async validator functions             |
+| `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`           |
+| `AsyncErrors`               | Object mapping property paths to error strings                         |
+| `DirtyFields`               | Object mapping dot-notation paths to dirty status                      |
+| `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks                                  |
+| `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`       |
+| `PluginStores<T>`           | All readable stores exposed to plugins                                 |
+| `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }` |
+| `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                   |
+| `AnalyticsEvent`            | Event object buffered by `analyticsPlugin`                             |
 
 **Example:**
 
@@ -507,6 +643,190 @@ const userEffect = ({ snapshot, property }: EffectContext<UserData>) => {
 const { data } = createSvState(userData, {
   validator: validateUser,
   effect: userEffect
+});
+```
+
+---
+
+## Plugins
+
+### What is the plugin system and when should I use it?
+
+Plugins extend `createSvState` with reusable behaviors via lifecycle hooks. Use them when you need cross-cutting concerns like persistence, auto-saving, debugging, or analytics — without cluttering your effect or action callbacks.
+
+Plugins are passed via the `plugins` option array:
+
+```typescript
+import { createSvState, persistPlugin, devtoolsPlugin } from 'svstate';
+
+const { data, destroy } = createSvState(formData, actuators, {
+  plugins: [persistPlugin({ key: 'my-form' }), devtoolsPlugin({ name: 'MyForm' })]
+});
+
+// Call destroy() to clean up plugin resources (e.g., in onDestroy)
+destroy();
+```
+
+---
+
+### What built-in plugins are available?
+
+svstate ships with 7 built-in plugins:
+
+| Plugin            | Purpose                                      | Import                                      |
+| ----------------- | -------------------------------------------- | ------------------------------------------- |
+| `persistPlugin`   | Persist state to localStorage/custom storage | `import { persistPlugin } from 'svstate'`   |
+| `autosavePlugin`  | Auto-save after idle/interval                | `import { autosavePlugin } from 'svstate'`  |
+| `devtoolsPlugin`  | Console logging of all events                | `import { devtoolsPlugin } from 'svstate'`  |
+| `historyPlugin`   | Sync state fields to URL params              | `import { historyPlugin } from 'svstate'`   |
+| `syncPlugin`      | Cross-tab sync via BroadcastChannel          | `import { syncPlugin } from 'svstate'`      |
+| `undoRedoPlugin`  | Redo stack on top of built-in rollback       | `import { undoRedoPlugin } from 'svstate'`  |
+| `analyticsPlugin` | Batch event buffering for analytics          | `import { analyticsPlugin } from 'svstate'` |
+
+---
+
+### How do I persist state to localStorage?
+
+Use `persistPlugin` to automatically save and restore state:
+
+```typescript
+import { persistPlugin } from 'svstate';
+
+const persist = persistPlugin({
+  key: 'my-form', // Required: storage key
+  throttle: 300, // Write debounce ms (default: 300)
+  exclude: ['password'], // Don't persist these fields
+  include: ['name', 'email'] // Only persist these fields (mutually exclusive with exclude)
+});
+
+const { data, reset } = createSvState(formData, actuators, {
+  plugins: [persist]
+});
+
+// Check if state was restored from storage
+persist.isRestored(); // true/false
+
+// Clear persisted data
+persist.clearPersistedState();
+```
+
+Reload the page and your state will be automatically restored.
+
+---
+
+### How do I add undo/redo support?
+
+The built-in `rollback()` provides undo. Add `undoRedoPlugin` for redo:
+
+```typescript
+import { undoRedoPlugin } from 'svstate';
+
+const undoRedo = undoRedoPlugin();
+
+const { data, rollback } = createSvState(
+  formData,
+  {
+    effect: ({ snapshot, property }) => {
+      snapshot(`Changed ${property}`);
+    }
+  },
+  { plugins: [undoRedo] }
+);
+
+// Undo (built-in)
+rollback();
+
+// Redo (from plugin)
+undoRedo.redo();
+
+// Check if redo is available
+undoRedo.canRedo(); // boolean
+
+// Reactive redo stack
+undoRedo.redoStack; // Readable<Snapshot[]>
+```
+
+---
+
+### How do I sync state across browser tabs?
+
+Use `syncPlugin` which uses BroadcastChannel to sync state changes:
+
+```typescript
+import { syncPlugin } from 'svstate';
+
+const sync = syncPlugin({
+  key: 'my-form-sync', // Required: channel name
+  throttle: 100 // Broadcast debounce ms (default: 100)
+});
+
+const { data } = createSvState(formData, actuators, {
+  plugins: [sync]
+});
+
+// Changes in one tab automatically appear in all other tabs with the same key
+```
+
+---
+
+### How do I write a custom plugin?
+
+Implement the `SvStatePlugin<T>` interface — all hooks are optional:
+
+```typescript
+import type { SvStatePlugin, ChangeEvent } from 'svstate';
+
+const myPlugin: SvStatePlugin<MyState> = {
+  name: 'my-plugin',
+  onInit(context) {
+    // Access: context.data, context.state, context.options, context.snapshot
+  },
+  onChange(event) {
+    console.log(`${event.property}: ${event.oldValue} → ${event.currentValue}`);
+  },
+  onValidation(errors) {
+    /* Called after sync validation */
+  },
+  onSnapshot(snapshot) {
+    /* Called when snapshot is created */
+  },
+  onAction(event) {
+    if (event.phase === 'before') {
+      /* Action starting */
+    }
+    if (event.phase === 'after') {
+      /* Action done, check event.error */
+    }
+  },
+  onRollback(snapshot) {
+    /* Called after rollback */
+  },
+  onReset() {
+    /* Called after reset */
+  },
+  destroy() {
+    /* Cleanup resources */
+  }
+};
+```
+
+**Hook execution order:** Hooks run in plugin array order (first to last), except `destroy` which runs last-to-first.
+
+---
+
+### Can I combine multiple plugins?
+
+**Yes!** Plugins are composed via the `plugins` array. They run independently and don't interfere with each other:
+
+```typescript
+const { data } = createSvState(formData, actuators, {
+  plugins: [
+    persistPlugin({ key: 'my-form' }),
+    syncPlugin({ key: 'my-form-sync' }),
+    autosavePlugin({ save: (d) => api.saveDraft(d), idle: 2000 }),
+    devtoolsPlugin({ name: 'MyForm' }),
+    analyticsPlugin({ onFlush: (events) => sendToAnalytics(events) })
+  ]
 });
 ```
 
@@ -565,7 +885,22 @@ validator: (source) => ({
 
 ### How do I debug what's happening inside svstate?
 
-Add logging to your effect to see all changes:
+The easiest way is to use the built-in `devtoolsPlugin`, which logs all state events to the browser console:
+
+```typescript
+import { createSvState, devtoolsPlugin } from 'svstate';
+
+const { data } = createSvState(formData, actuators, {
+  plugins: [
+    devtoolsPlugin({
+      name: 'MyForm', // Label in console output
+      logValidation: true // Also log validation results
+    })
+  ]
+});
+```
+
+For more granular debugging, add logging to your effect:
 
 ```typescript
 effect: ({ target, property, currentValue, oldValue, snapshot }) => {

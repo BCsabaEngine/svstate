@@ -1,5 +1,6 @@
 import { derived, get, type Readable, writable } from 'svelte/store';
 
+import type { SvStatePlugin } from './plugin';
 import { ChangeProxy } from './proxy';
 
 // Types
@@ -118,6 +119,8 @@ export type SvStateOptions = {
   clearAsyncErrorsOnChange: boolean;
   maxConcurrentAsyncValidations: number;
   maxSnapshots: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  plugins: SvStatePlugin<any>[];
 };
 const defaultOptions: SvStateOptions = {
   resetDirtyOnAction: true,
@@ -128,7 +131,8 @@ const defaultOptions: SvStateOptions = {
   runAsyncValidationOnInit: false,
   clearAsyncErrorsOnChange: true,
   maxConcurrentAsyncValidations: 4,
-  maxSnapshots: 50
+  maxSnapshots: 50,
+  plugins: []
 };
 
 // createSvState
@@ -181,6 +185,22 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   const stateObject = $state<T>(init);
 
+  // Plugin system
+  const plugins = usedOptions.plugins as SvStatePlugin<T>[];
+  const callPlugins = (hook: string, ...arguments_: unknown[]) => {
+    for (const plugin of plugins) {
+      const function_ = plugin[hook as keyof SvStatePlugin<T>];
+      if (typeof function_ === 'function') (function_ as (...a: unknown[]) => void).call(plugin, ...arguments_);
+    }
+  };
+
+  const runValidation = () => {
+    if (!validator) return;
+    const result = validator(data);
+    errors.set(result);
+    callPlugins('onValidation', result);
+  };
+
   const createSnapshot: SnapshotFunction = (title: string, replace = true) => {
     const currentSnapshots = get(snapshots);
     const createdSnapshot: Snapshot<T> = { title, data: deepClone(stateObject) };
@@ -197,6 +217,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     }
 
     snapshots.set(updatedSnapshots);
+    callPlugins('onSnapshot', createdSnapshot);
   };
 
   let validationScheduled = false;
@@ -208,13 +229,13 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (usedOptions.debounceValidation > 0) {
       clearTimeout(validationTimeout);
       validationTimeout = setTimeout(() => {
-        errors.set(validator(data));
+        runValidation();
       }, usedOptions.debounceValidation);
     } else {
       if (validationScheduled) return;
       validationScheduled = true;
       queueMicrotask(() => {
-        errors.set(validator(data));
+        runValidation();
         validationScheduled = false;
       });
     }
@@ -353,11 +374,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     const effectResult: unknown = effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
     if (effectResult instanceof Promise)
       throw new Error('svstate: effect callback must be synchronous. Use action for async operations.');
+    callPlugins('onChange', { target, property, currentValue, oldValue });
     scheduleValidation();
     scheduleAsyncValidationsForPath(property);
   });
 
-  if (validator) errors.set(validator(data));
+  runValidation();
 
   // Run async validation on init if configured
   if (asyncValidator && usedOptions.runAsyncValidationOnInit)
@@ -366,6 +388,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   const execute = async (parameters?: P) => {
     if (!usedOptions.allowConcurrentActions && get(actionInProgress)) return;
 
+    callPlugins('onAction', { phase: 'before', params: parameters });
     actionError.set(undefined);
     actionInProgress.set(true);
     try {
@@ -373,9 +396,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       if (usedOptions.resetDirtyOnAction) dirtyFieldsStore.set({});
       snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
       await actuators?.actionCompleted?.();
+      callPlugins('onAction', { phase: 'after', params: parameters });
     } catch (caughtError) {
       await actuators?.actionCompleted?.(caughtError);
-      actionError.set(caughtError instanceof Error ? caughtError : undefined);
+      const actionError_ = caughtError instanceof Error ? caughtError : undefined;
+      actionError.set(actionError_);
+      callPlugins('onAction', { phase: 'after', params: parameters, error: actionError_ });
     } finally {
       actionInProgress.set(false);
     }
@@ -388,14 +414,16 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     dirtyFieldsStore.set({});
     Object.assign(stateObject, deepClone(targetSnapshot.data));
     snapshots.set(currentSnapshots.slice(0, targetIndex + 1));
-    if (validator) errors.set(validator(data));
+    runValidation();
+    return targetSnapshot;
   };
 
   const rollback = (steps = 1) => {
     const currentSnapshots = get(snapshots);
     if (currentSnapshots.length <= 1) return;
     const targetIndex = Math.max(0, currentSnapshots.length - 1 - steps);
-    restoreToSnapshot(targetIndex, currentSnapshots);
+    const targetSnapshot = restoreToSnapshot(targetIndex, currentSnapshots);
+    if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
   };
 
   const rollbackTo = (title: string): boolean => {
@@ -403,7 +431,8 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (currentSnapshots.length <= 1) return false;
     for (let index = currentSnapshots.length - 1; index >= 0; index--)
       if (currentSnapshots[index]!.title === title) {
-        restoreToSnapshot(index, currentSnapshots);
+        const targetSnapshot = restoreToSnapshot(index, currentSnapshots);
+        if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
         return true;
       }
 
@@ -414,6 +443,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     const currentSnapshots = get(snapshots);
     if (!currentSnapshots[0]) return;
     restoreToSnapshot(0, currentSnapshots);
+    callPlugins('onReset');
   };
 
   const state: StateResult<T, V> = {
@@ -430,5 +460,11 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     hasCombinedErrors
   };
 
-  return { data, execute, state, rollback, rollbackTo, reset };
+  const destroy = () => {
+    for (let index = plugins.length - 1; index >= 0; index--) plugins[index]?.destroy?.();
+  };
+
+  callPlugins('onInit', { data, state, options: usedOptions, snapshot: createSnapshot });
+
+  return { data, execute, state, rollback, rollbackTo, reset, destroy };
 }

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-02-26
+
+### Added
+
+- **Plugin system** — extend svstate with reusable behaviors via lifecycle hooks (`onInit`, `onChange`, `onValidation`, `onSnapshot`, `onAction`, `onRollback`, `onReset`, `destroy`)
+- **`persistPlugin`** — automatically save and restore state to localStorage (or any custom storage) with throttled writes, schema versioning, migration support, and include/exclude field filtering
+- **`autosavePlugin`** — auto-save state after a period of inactivity, on a fixed interval, or when the browser tab is hidden; exposes `saveNow()` and `isSaving()` methods
+- **`devtoolsPlugin`** — log all state events (changes, snapshots, actions, rollbacks) to the browser console for easier debugging
+- **`historyPlugin`** — sync selected state fields to URL search parameters, keeping the browser history in step with your app state
+- **`syncPlugin`** — broadcast state changes across browser tabs in real time using BroadcastChannel
+- **`undoRedoPlugin`** — adds redo capability on top of the built-in rollback, with `redo()`, `canRedo()`, and a reactive `redoStack` store
+- **`analyticsPlugin`** — buffer and batch state events (changes, actions, snapshots) for sending to analytics services
+- `destroy()` return value from `createSvState` — call it to clean up all plugin resources and cancel pending async validations
+- New plugin type exports: `SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`
+
 ## [1.4.1] - 2026-02-13
 
 ### Added
