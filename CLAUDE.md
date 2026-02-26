@@ -73,6 +73,12 @@ npm run all             # format → lint → ts:check → build
 
 Note: The demo has its own `node_modules` and uses Zod for some validation examples.
 
+## Documentation Files
+
+- `README.md` - Main documentation: features, API reference, examples, plugin guide
+- `FAQ.md` - Frequently asked questions: common patterns, troubleshooting, Zod integration, per-field dirty tracking
+- `docs/llms.txt` - LLM-oriented documentation with demo page descriptions and code snippets
+
 ## Architecture
 
 ### Core Files
@@ -313,6 +319,16 @@ Test files go in `test/` directory:
 
 - `*.test.ts` - Pure TypeScript tests (validators, proxy)
 - `*.test.svelte.ts` - Tests using Svelte 5 runes (`$state`, `$derived`, etc.)
+
+Current test files:
+
+- `validators.test.ts` - Fluent validator builder tests (~320 cases)
+- `proxy.test.ts` - ChangeProxy deep proxy tests
+- `state.test.svelte.ts` - Core createSvState tests (~90 cases)
+- `async-validation.test.svelte.ts` - Async validator tests
+- `performance.test.svelte.ts` - Performance/stress tests
+- `plugins.test.svelte.ts` - Plugin system integration tests
+- `plugins-analytics.test.svelte.ts`, `plugins-autosave.test.svelte.ts`, `plugins-devtools.test.svelte.ts`, `plugins-history.test.svelte.ts`, `plugins-persist.test.svelte.ts`, `plugins-sync.test.svelte.ts`, `plugins-undo-redo.test.svelte.ts` - Per-plugin tests
 
 Vitest is configured with:
 

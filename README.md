@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-orange.svg)](https://svelte.dev/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
-[![Tests](https://img.shields.io/badge/tests-300%2B-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-500%2B-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-%3E98%25-brightgreen.svg)]()
 
 > **Deep reactive proxy with validation, snapshot/undo, side effects, and plugins — built for complex, real-world applications.**
@@ -1167,6 +1167,7 @@ const { data, state } = createSvState<UserData, UserErrors, object>(
 - 🎮 [Live Demo](https://bcsabaengine.github.io/svstate/) — Try it in your browser
 - 🛠️ [SvelteKit Example](https://github.com/BCsabaEngine/svstate-kit) — Example SvelteKit application using svstate
 - 📖 [Documentation](https://github.com/BCsabaEngine/svstate)
+- ❓ [FAQ](FAQ.md) — Common questions and troubleshooting
 - 🐛 [Report Issues](https://github.com/BCsabaEngine/svstate/issues)
 - 💬 [Discussions](https://github.com/BCsabaEngine/svstate/discussions)
 
