@@ -83,7 +83,8 @@ export function autosavePlugin<T extends Record<string, unknown>>(
         const shouldSave = !onlyWhenDirty || get(context.state.isDirty);
         if (shouldSave)
           try {
-            options.save(context.data);
+            const result = options.save(context.data);
+            if (result instanceof Promise) result.catch((error: unknown) => options.onError?.(error));
           } catch (error) {
             options.onError?.(error);
           }

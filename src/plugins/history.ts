@@ -1,5 +1,7 @@
 import type { PluginContext, SvStatePlugin } from '../plugin';
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export type HistoryOptions = {
   fields: Record<string, string>;
   mode?: 'push' | 'replace';
@@ -29,10 +31,12 @@ const setValueAtPath = (target: Record<string, unknown>, path: string, value: un
   let current: Record<string, unknown> = target;
   for (let index = 0; index < parts.length - 1; index++) {
     const part = parts[index]!;
+    if (DANGEROUS_KEYS.has(part)) return;
     if (current[part] === undefined || current[part] === null) current[part] = {};
     current = current[part] as Record<string, unknown>;
   }
-  current[parts.at(-1)!] = value;
+  const lastPart = parts.at(-1)!;
+  if (!DANGEROUS_KEYS.has(lastPart)) current[lastPart] = value;
 };
 
 export function historyPlugin<T extends Record<string, unknown>>(options: HistoryOptions): HistoryPluginInstance<T> {
@@ -47,6 +51,7 @@ export function historyPlugin<T extends Record<string, unknown>>(options: Histor
     if (!context || typeof window === 'undefined') return;
     const parameters = new URLSearchParams(window.location.search);
     for (const [stateField, urlParameter] of Object.entries(options.fields)) {
+      if (stateField.split('.').some((part) => DANGEROUS_KEYS.has(part))) continue;
       const parameterValue = parameters.get(urlParameter);
       if (parameterValue !== null) {
         const value = deserialize(parameterValue, stateField);

@@ -65,12 +65,15 @@ const checkHasErrors = (validator: Validator): boolean =>
   Object.values(validator).some((item) => (typeof item === 'string' ? !!item : checkHasErrors(item)));
 const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && checkHasErrors($errors);
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 const deepClone = <T>(object: T): T => {
   if (object === null || typeof object !== 'object') return object;
   if (object instanceof Date) return new Date(object) as T;
   if (Array.isArray(object)) return object.map((item) => deepClone(item)) as T;
   const cloned = Object.create(Object.getPrototypeOf(object)) as T;
-  for (const key of Object.keys(object)) cloned[key as keyof T] = deepClone(object[key as keyof T]);
+  for (const key of Object.keys(object))
+    if (!DANGEROUS_KEYS.has(key)) cloned[key as keyof T] = deepClone(object[key as keyof T]);
   return cloned;
 };
 
@@ -306,8 +309,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
           [path]: error
         }));
     } catch (error) {
-      // Ignore abort errors, re-throw others
-      if (error instanceof Error && error.name !== 'AbortError') throw error;
+      if (error instanceof Error && error.name === 'AbortError') return;
+      // Store unexpected validator errors rather than re-throwing
+      if (!controller.signal.aborted) {
+        const message = error instanceof Error ? error.message : 'Async validation error';
+        asyncErrorsStore.update(($asyncErrors) => ({ ...$asyncErrors, [path]: message }));
+      }
     } finally {
       asyncValidationTrackers.delete(path);
       asyncValidatingSet.update(($set) => {

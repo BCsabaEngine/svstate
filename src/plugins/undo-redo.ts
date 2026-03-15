@@ -3,13 +3,19 @@ import { get, type Readable, writable } from 'svelte/store';
 import type { PluginContext, SvStatePlugin } from '../plugin';
 import type { Snapshot } from '../state.svelte';
 
+export type UndoRedoOptions = {
+  maxRedoStack?: number;
+};
+
 export type UndoRedoPluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
   redo(): void;
   canRedo(): boolean;
   redoStack: Readable<Snapshot<T>[]>;
 };
 
-export function undoRedoPlugin<T extends Record<string, unknown>>(): UndoRedoPluginInstance<T> {
+export function undoRedoPlugin<T extends Record<string, unknown>>(
+  options?: UndoRedoOptions
+): UndoRedoPluginInstance<T> {
   const redoStore = writable<Snapshot<T>[]>([]);
   let cachedSnapshots: Snapshot<T>[] = [];
   let context: PluginContext<T> | undefined;
@@ -77,7 +83,11 @@ export function undoRedoPlugin<T extends Record<string, unknown>>(): UndoRedoPlu
       // With the refactored approach, previousTipSnapshot is set by the subscription
       // before cachedSnapshots is updated. We push that to the redo stack.
       if (previousTipSnapshot) {
-        redoStore.update((stack) => [...stack, previousTipSnapshot!]);
+        redoStore.update((stack) => {
+          const updated = [...stack, previousTipSnapshot!];
+          const max = options?.maxRedoStack;
+          return max && max > 0 ? updated.slice(-max) : updated;
+        });
         previousTipSnapshot = undefined;
       }
     },
