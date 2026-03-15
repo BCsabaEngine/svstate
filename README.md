@@ -564,7 +564,8 @@ devtoolsPlugin({
   name: 'MyForm', // Log prefix (default: 'svstate')
   collapsed: true, // Use groupCollapsed (default: true)
   logValidation: false, // Log validation results (default: false)
-  enabled: true // Auto-disabled in production
+  enabled: true, // Auto-disabled in production
+  logValues: false // Log raw state values in change events (default: false — avoids leaking passwords/tokens)
 });
 ```
 
@@ -604,7 +605,9 @@ sync.disconnect(); // Close the channel
 ```typescript
 import { undoRedoPlugin } from 'svstate';
 
-const undoRedo = undoRedoPlugin<MyState>();
+const undoRedo = undoRedoPlugin<MyState>({
+  maxRedoStack: 50 // Cap redo stack size (default: unlimited)
+});
 
 // Extra methods and stores:
 undoRedo.redo(); // Re-apply last undone change
@@ -621,7 +624,8 @@ analyticsPlugin({
   onFlush: (events) => sendToAnalytics(events), // Required
   batchSize: 20, // Flush at N events (default: 20)
   flushInterval: 5000, // Periodic flush ms (default: 5000)
-  include: ['change', 'action'] // Filter event types
+  include: ['change', 'action'], // Filter event types
+  redact: ['password', 'creditCard'] // Replace values for these paths with '[redacted]'
 });
 ```
 

@@ -224,11 +224,11 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 | ----------------- | -------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
 | `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude` |
 | `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`  |
-| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`                          |
+| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`             |
 | `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`                  |
 | `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`                                    |
-| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | No required options; exposes `redo()`, `canRedo()`, `redoStack`          |
-| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`            |
+| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`               |
+| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact`  |
 
 ### Deep Clone System (src/state.svelte.ts)
 
