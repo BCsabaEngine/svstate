@@ -5,6 +5,7 @@ export type DevtoolsOptions = {
   collapsed?: boolean;
   logValidation?: boolean;
   enabled?: boolean;
+  logValues?: boolean;
 };
 
 const isProduction = (): boolean => {
@@ -19,6 +20,7 @@ export function devtoolsPlugin<T extends Record<string, unknown>>(options?: Devt
   const name = options?.name ?? 'svstate';
   const collapsed = options?.collapsed ?? true;
   const logValidation = options?.logValidation ?? false;
+  const logValues = options?.logValues ?? false;
   const enabled = options?.enabled ?? !isProduction();
 
   const log = (label: string, ...arguments_: unknown[]) => {
@@ -34,7 +36,8 @@ export function devtoolsPlugin<T extends Record<string, unknown>>(options?: Devt
     name: 'devtools',
 
     onChange(event) {
-      log('change', { property: event.property, from: event.oldValue, to: event.currentValue });
+      if (logValues) log('change', { property: event.property, from: event.oldValue, to: event.currentValue });
+      else log('change', { property: event.property });
     },
 
     onValidation(errors) {

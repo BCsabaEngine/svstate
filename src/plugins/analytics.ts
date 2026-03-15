@@ -11,6 +11,7 @@ export type AnalyticsOptions = {
   batchSize?: number;
   flushInterval?: number;
   include?: AnalyticsEvent['type'][];
+  redact?: string[];
 };
 
 export function analyticsPlugin<T extends Record<string, unknown>>(
@@ -45,7 +46,12 @@ export function analyticsPlugin<T extends Record<string, unknown>>(
     },
 
     onChange(event) {
-      addEvent('change', { property: event.property, currentValue: event.currentValue, oldValue: event.oldValue });
+      const isRedacted = options.redact?.includes(event.property);
+      addEvent('change', {
+        property: event.property,
+        currentValue: isRedacted ? '[redacted]' : event.currentValue,
+        oldValue: isRedacted ? '[redacted]' : event.oldValue
+      });
     },
 
     onValidation(errors) {

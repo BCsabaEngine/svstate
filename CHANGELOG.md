@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-03-15
+
+### Fixed
+
+- **Prototype pollution** — `persistPlugin` and `syncPlugin` no longer propagate `__proto__`, `constructor`, or `prototype` keys when merging external data into state
+- **Prototype pollution via path traversal** — `setValueAtPath` in `persistPlugin` and `historyPlugin` now rejects path segments matching `__proto__`, `constructor`, or `prototype`
+- **Prototype pollution via snapshot restore** — `deepClone` in `createSvState` now skips dangerous keys, preventing polluted data from being re-applied through `rollback()`, `rollbackTo()`, or `reset()`
+- **Unvalidated localStorage data** — `persistPlugin` now validates that parsed JSON has a numeric `version` and a plain-object `data` field before applying it; invalid payloads are silently discarded
+- **Silent async validator crashes** — uncaught errors from async validators are now stored in `asyncErrors` under the relevant path instead of being re-thrown silently
+- **`saveOnDestroy` with async save functions** — `autosavePlugin` now attaches `.catch(onError)` to the save promise returned during `destroy()`, preventing unhandled rejections
+
+### Added
+
+- **`devtoolsPlugin`** — new `logValues` option (default: `false`) to opt into logging raw state values in the console; omitting values by default prevents passwords and tokens from appearing in devtools
+- **`undoRedoPlugin`** — new `maxRedoStack` option to cap the redo stack size (mirrors the main `maxSnapshots` limit)
+- **`analyticsPlugin`** — new `redact` option accepting an array of property paths whose `currentValue`/`oldValue` are replaced with `'[redacted]'` in flushed events
+- **`syncPlugin`** — incoming `BroadcastChannel` messages are now validated as plain objects and rate-limited to one per `throttle` ms interval, preventing message-flooding attacks
+
 ## [1.5.0] - 2026-02-26
 
 ### Added

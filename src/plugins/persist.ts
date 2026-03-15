@@ -1,5 +1,19 @@
 import type { SvStatePlugin } from '../plugin';
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const isValidStorageFormat = (value: unknown): value is StorageFormat =>
+  isPlainObject(value) &&
+  typeof (value as StorageFormat).version === 'number' &&
+  isPlainObject((value as StorageFormat).data);
+
+const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
+  for (const key of Object.keys(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = source[key];
+};
+
 export type PersistOptions = {
   key: string;
   storage?: {
@@ -34,10 +48,12 @@ const setValueAtPath = (target: Record<string, unknown>, path: string, value: un
   let current: Record<string, unknown> = target;
   for (let index = 0; index < parts.length - 1; index++) {
     const part = parts[index]!;
+    if (DANGEROUS_KEYS.has(part)) return;
     if (current[part] === undefined || current[part] === null) current[part] = {};
     current = current[part] as Record<string, unknown>;
   }
-  current[parts.at(-1)!] = value;
+  const lastPart = parts.at(-1)!;
+  if (!DANGEROUS_KEYS.has(lastPart)) current[lastPart] = value;
 };
 
 const filterData = (data: Record<string, unknown>, include?: string[], exclude?: string[]): Record<string, unknown> => {
@@ -109,11 +125,17 @@ export function persistPlugin<T extends Record<string, unknown>>(
       if (!raw) return;
 
       try {
-        let parsed = JSON.parse(raw) as StorageFormat;
-        if (options.migrate && parsed.version !== version)
-          parsed = { version, data: options.migrate(parsed.data, parsed.version) as Record<string, unknown> };
+        const rawParsed: unknown = JSON.parse(raw);
+        if (!isValidStorageFormat(rawParsed)) return;
 
-        Object.assign(context.data, parsed.data);
+        let parsed: StorageFormat = rawParsed;
+        if (options.migrate && parsed.version !== version) {
+          const migrated = options.migrate(parsed.data, parsed.version);
+          if (!isPlainObject(migrated)) return;
+          parsed = { version, data: migrated };
+        }
+
+        safeMerge(context.data as unknown as Record<string, unknown>, parsed.data);
         restored = true;
       } catch {
         // Invalid stored data — ignore

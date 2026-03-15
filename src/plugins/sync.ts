@@ -1,5 +1,14 @@
 import type { PluginContext, SvStatePlugin } from '../plugin';
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
+  for (const key of Object.keys(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = source[key];
+};
+
 export type SyncOptions = {
   key: string;
   throttle?: number;
@@ -18,6 +27,7 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
   let context: PluginContext<T> | undefined;
   let isReceiving = false;
   let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
+  let lastReceivedAt = 0;
 
   const broadcast = () => {
     if (!channel || !context) return;
@@ -50,11 +60,17 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
       channel = new BroadcastChannel(options.key);
       channel.addEventListener('message', (event: MessageEvent) => {
         if (!context || merge === 'ignore') return;
-        if (event.data?.type === 'sync') {
-          isReceiving = true;
-          Object.assign(context.data, event.data.data);
-          isReceiving = false;
-        }
+        if (event.data?.type !== 'sync') return;
+
+        const now = Date.now();
+        if (now - lastReceivedAt < throttleMs) return;
+        lastReceivedAt = now;
+
+        if (!isPlainObject(event.data.data)) return;
+
+        isReceiving = true;
+        safeMerge(context.data as unknown as Record<string, unknown>, event.data.data);
+        isReceiving = false;
       });
     },
 
