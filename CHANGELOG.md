@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-03-31
+
+### Fixed
+
+- **`syncPlugin` — incoming message depth validation** — BroadcastChannel payloads exceeding 10 levels of nesting are now rejected, preventing a malicious same-origin script from pushing deeply nested objects into state
+- **`undoRedoPlugin` — redundant `onInit` override removed** — the plugin previously defined `onInit` twice (the second silently shadowed the first without calling it); consolidated into a single `onInit` that correctly sets up the snapshot subscription and `previousTipSnapshot` tracking
+
+### Changed
+
+- **`syncPlugin` — serialization behaviour documented** — `JSON.stringify`/`JSON.parse` is used to clone state before broadcasting (structuredClone cannot be used on Svelte reactive proxies); `Date` objects arrive as strings, `undefined` values and functions are dropped silently
+
 ## [1.5.1] - 2026-03-15
 
 ### Fixed
