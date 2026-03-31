@@ -767,6 +767,19 @@ const { data } = createSvState(formData, actuators, {
 // Changes in one tab automatically appear in all other tabs with the same key
 ```
 
+**Serialization limitations:** State is serialized with `JSON.stringify` before broadcasting, so some types are not preserved:
+
+| Type                                | Behaviour after sync                  |
+| ----------------------------------- | ------------------------------------- |
+| `Date`                              | Becomes a string — re-parse if needed |
+| `undefined` values                  | Dropped from the object               |
+| Functions / Symbols                 | Dropped silently                      |
+| Plain objects / arrays / primitives | Fully preserved                       |
+
+If your state contains `Date` fields, convert them back after receiving (e.g. in your validator or an `effect`).
+
+Incoming messages deeper than 10 levels of nesting are rejected to prevent payload abuse.
+
 ---
 
 ### How do I write a custom plugin?

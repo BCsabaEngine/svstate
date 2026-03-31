@@ -5,6 +5,14 @@ const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+const MAX_SYNC_DEPTH = 10;
+
+const isWithinDepthLimit = (value: unknown, depth = 0): boolean => {
+  if (depth > MAX_SYNC_DEPTH) return false;
+  if (!isPlainObject(value)) return true;
+  return Object.values(value).every((v) => isWithinDepthLimit(v, depth + 1));
+};
+
 const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
   for (const key of Object.keys(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = source[key];
 };
@@ -67,6 +75,7 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
         lastReceivedAt = now;
 
         if (!isPlainObject(event.data.data)) return;
+        if (!isWithinDepthLimit(event.data.data)) return;
 
         isReceiving = true;
         safeMerge(context.data as unknown as Record<string, unknown>, event.data.data);

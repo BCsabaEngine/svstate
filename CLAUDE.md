@@ -220,15 +220,15 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 
 **Built-in plugins (src/plugins/):**
 
-| Plugin            | File           | Purpose                                      | Key options                                                              |
-| ----------------- | -------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
-| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude` |
-| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`  |
-| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`             |
-| `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`                  |
-| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`                                    |
-| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`               |
-| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact`  |
+| Plugin            | File           | Purpose                                      | Key options                                                                                                                                                              |
+| ----------------- | -------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude`                                                                                                 |
+| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`                                                                                                  |
+| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`                                                                                                             |
+| `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`                                                                                                                  |
+| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
+| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                               |
+| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact`                                                                                                  |
 
 ### Deep Clone System (src/state.svelte.ts)
 
@@ -255,6 +255,14 @@ Methods are preserved through snapshots, rollback, and reset operations.
 - **Loop Prevention**: Uses strict equality (`!==`) to skip unchanged values
 - Excludes non-proxiable types: Date, Map, Set, WeakMap, WeakSet, RegExp, Error, Promise
 - Array indices are collapsed in paths (only named properties tracked)
+
+### Security Model
+
+- **Prototype pollution** — all path-traversal and deep-clone code guards against `__proto__`, `constructor`, and `prototype` keys via a shared `DANGEROUS_KEYS` set (`src/state.svelte.ts`, `src/plugins/persist.ts`, `src/plugins/sync.ts`)
+- **BroadcastChannel messages** — `syncPlugin` rejects incoming payloads exceeding 10 levels of nesting (`isWithinDepthLimit` in `src/plugins/sync.ts`)
+- **JSON serialization in sync** — state is serialized with `JSON.stringify`/`JSON.parse` (structuredClone cannot be used on Svelte reactive proxies); `Date` objects become strings and `undefined`/functions are dropped — document this for users
+- **No eval/Function** — the codebase contains no dynamic code execution
+- **Async race conditions** — handled via `AbortController` in `src/state.svelte.ts`
 
 ### Validation System
 

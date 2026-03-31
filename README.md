@@ -600,6 +600,8 @@ const sync = syncPlugin({
 sync.disconnect(); // Close the channel
 ```
 
+> **Serialization note:** State is serialized with `JSON.stringify` before broadcasting. `Date` objects become strings, `undefined` values and functions are dropped. If your state contains these types, restore them (e.g. re-parse dates) after reading synced values. Incoming messages exceeding 10 levels of nesting are silently rejected.
+
 **`undoRedoPlugin`** — Adds redo capability on top of built-in rollback.
 
 ```typescript
