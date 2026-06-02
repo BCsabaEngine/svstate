@@ -1,3 +1,8 @@
+declare module '*.postcss' {
+	const content: string;
+	export default content;
+}
+
 declare global {
 	namespace App {
 		// interface Error {}
