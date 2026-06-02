@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-06-02
+
+### Changed
+
+- **TypeScript 6** — the library is now built and type-checked with TypeScript 6.0, ensuring full compatibility with projects already on TS 6
+- **Updated all development dependencies** — ESLint, Svelte, Vitest, Prettier, and related tooling bumped to their latest versions
+
+### Fixed
+
+- **TypeScript project root misconfigured** — `tsconfig.json` was using the deprecated `rootDirs` option pointing at the repo root; corrected to `rootDir: "./src"` so the compiler only processes source files and emits a clean `dist/`
+
 ## [1.5.3] - 2026-03-31
 
 ### Fixed

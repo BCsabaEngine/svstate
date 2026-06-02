@@ -26,7 +26,7 @@
     "incremental": false,
     "allowJs": false,
     "typeRoots": ["./node_modules/@types"],
-    "rootDirs": ["./"],
+    "rootDir": "./src",
     "outDir": "dist"
   },
   "include": ["./src"],
