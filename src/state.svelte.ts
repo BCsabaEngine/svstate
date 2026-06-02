@@ -406,7 +406,20 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       callPlugins('onAction', { phase: 'after', params: parameters });
     } catch (caughtError) {
       await actuators?.actionCompleted?.(caughtError);
-      const actionError_ = caughtError instanceof Error ? caughtError : undefined;
+      const actionError_ =
+        caughtError instanceof Error
+          ? caughtError
+          : caughtError && typeof caughtError === 'object'
+            ? new Error(
+                String(
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (caughtError as any).message ??
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (caughtError as any).body?.message ??
+                    caughtError
+                )
+              )
+            : undefined;
       actionError.set(actionError_);
       callPlugins('onAction', { phase: 'after', params: parameters, error: actionError_ });
     } finally {

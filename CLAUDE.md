@@ -112,7 +112,7 @@ const { data, execute, state, rollback, rollbackTo, reset, destroy } = createSvS
   - `isDirty: Readable<boolean>` - Whether state has been modified (derived from `isDirtyByField`)
   - `isDirtyByField: Readable<DirtyFields>` - Per-field dirty tracking; keys are dot-notation property paths. When a nested field changes, all parent paths are also marked dirty (e.g., changing `customer.address.street` marks `customer.address` and `customer` as dirty). Cleared on `reset()`, `rollback()`, and successful action (respecting `resetDirtyOnAction`).
   - `actionInProgress: Readable<boolean>` - Action execution status
-  - `actionError: Readable<Error | undefined>` - Last action error
+  - `actionError: Readable<Error | undefined>` - Last action error; non-`Error` thrown objects are wrapped by reading `.message` then `.body.message` before falling back to `String()`
   - `snapshots: Readable<Snapshot<T>[]>` - Snapshot history for undo
   - `asyncErrors: Readable<AsyncErrors>` - Async validation errors (keyed by property path)
   - `hasAsyncErrors: Readable<boolean>` - Whether any async validation errors exist
