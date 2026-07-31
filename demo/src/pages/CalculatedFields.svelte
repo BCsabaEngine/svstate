@@ -27,6 +27,7 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
@@ -46,9 +47,11 @@
 	});
 
 	const fillWithValidData = () => {
-		data.productName = `Widget ${randomId()}`;
-		data.item.unitPrice = randomInt(10, 100);
-		data.item.quantity = randomInt(1, 10);
+		batch((draft) => {
+			draft.productName = `Widget ${randomId()}`;
+			draft.item.unitPrice = randomInt(10, 100);
+			draft.item.quantity = randomInt(1, 10);
+		});
 	};
 
 	const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
@@ -64,7 +67,7 @@
 
 const TAX_RATE = 0.08;
 
-const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
   validator: (source) => ({
     productName: stringValidator(source.productName).prepare('trim').required().minLength(2).getError(),
     item: {
@@ -79,6 +82,14 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
       data.total = data.subtotal + data.tax;
     }
   }
+});`;
+
+	const batchSourceCode = `// One validation pass for the whole fill;
+// effect still recalculates the totals on each field it touches
+batch((draft) => {
+  draft.productName = 'Widget';
+  draft.item.unitPrice = 42;
+  draft.item.quantity = 3;
 });`;
 
 	const effectSourceCode = `effect: ({ property }) => {
@@ -162,6 +173,7 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Effect" />
 			<CodeBlock code={effectSourceCode} title="Effect Function" />
+			<CodeBlock code={batchSourceCode} title="Batching Item Field Updates" />
 		</SourceCodeSection>
 	{/snippet}
 </PageLayout>

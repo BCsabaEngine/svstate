@@ -6,6 +6,7 @@
 	import FormField from '$components/FormField.svelte';
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import Spinner from '$components/Spinner.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
 	import { randomId, randomInt } from '$lib/utilities';
 
@@ -19,6 +20,7 @@
 	let simulateError = $state(false);
 	let lastActionResult = $state<string | undefined>();
 	let lastChangedProperty = $state<string | undefined>();
+	let validateResult = $state<string | undefined>();
 
 	const getInitialData = () => ({
 		name: `User ${randomId()}`,
@@ -70,6 +72,7 @@
 	const handleOptionsChange = () => {
 		lastChangedProperty = undefined;
 		lastActionResult = undefined;
+		validateResult = undefined;
 		stateInstance = createState({
 			resetDirtyOnAction,
 			debounceValidation,
@@ -86,13 +89,23 @@
 	const actionError = $derived(stateInstance.state.actionError);
 
 	const fillWithValidData = () => {
-		stateInstance.data.name = `User ${randomId()}`;
-		stateInstance.data.email = `${randomId()}@example.com`;
+		stateInstance.batch((draft) => {
+			draft.name = `User ${randomId()}`;
+			draft.email = `${randomId()}@example.com`;
+		});
 	};
 
 	const handleSubmit = () => {
 		lastActionResult = undefined;
 		stateInstance.execute();
+	};
+
+	const handleValidateNow = () => {
+		const result = stateInstance.validate();
+		const errorCount = Object.values(result.errors ?? {}).filter(Boolean).length;
+		validateResult = result.hasErrors
+			? `Validated immediately — ${errorCount} field(s) have errors`
+			: 'Validated immediately — all fields valid';
 	};
 
 	// ─────────────────────────────────────────────
@@ -127,6 +140,11 @@ await execute();
 // With debounceValidation: 500
 // Validation runs 500ms after the last change
 // Useful for expensive validators or rapid typing`;
+
+	const validateSourceCode = `// validate() runs sync validation immediately, bypassing the debounce
+const { errors, hasErrors } = validate();
+
+// Useful right before submitting, even with a long debounceValidation`;
 
 	const persistErrorSourceCode = `// With persistActionError: false (default)
 data.name = 'new value';
@@ -224,14 +242,7 @@ data.name = 'new value';
 				>
 					{#if $actionInProgress}
 						<span class="inline-flex items-center gap-2">
-							<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-								<path
-									class="opacity-75"
-									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-									fill="currentColor"
-								></path>
-							</svg>
+							<Spinner />
 							Submitting...
 						</span>
 					{:else}
@@ -243,80 +254,90 @@ data.name = 'new value';
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-80">
-			<DemoSidebar
-				data={stateInstance.data}
-				errors={$errors}
-				hasErrors={$hasErrors}
-				isDirty={$isDirty}
-				onFill={fillWithValidData}
-			/>
+		<DemoSidebar
+			data={stateInstance.data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+		>
+			{#snippet extra()}
+				<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+					<h6 class="mb-3 text-sm font-semibold text-blue-900">Options</h6>
 
-			<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
-				<h6 class="mb-3 text-sm font-semibold text-blue-900">Options</h6>
-
-				<div class="space-y-4">
-					<div>
-						<div class="flex items-center gap-2">
-							<input
-								id="resetDirtyOnAction"
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-								type="checkbox"
-								bind:checked={resetDirtyOnAction}
-							/>
-							<label class="text-sm font-medium text-gray-800" for="resetDirtyOnAction">resetDirtyOnAction</label>
+					<div class="space-y-4">
+						<div>
+							<div class="flex items-center gap-2">
+								<input
+									id="resetDirtyOnAction"
+									class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+									type="checkbox"
+									bind:checked={resetDirtyOnAction}
+								/>
+								<label class="text-sm font-medium text-gray-800" for="resetDirtyOnAction">resetDirtyOnAction</label>
+							</div>
+							<p class="mt-1 text-xs text-gray-600">Reset isDirty after successful action</p>
 						</div>
-						<p class="mt-1 text-xs text-gray-600">Reset isDirty after successful action</p>
-					</div>
 
-					<div>
-						<label class="block text-sm font-medium text-gray-800" for="debounceValidation">
-							debounceValidation (ms)
-						</label>
-						<input
-							id="debounceValidation"
-							class="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
-							min="0"
-							placeholder="0"
-							step="100"
-							type="number"
-							bind:value={debounceValidation}
-						/>
-						<p class="mt-1 text-xs text-gray-600">Try 500ms and type quickly</p>
-					</div>
-
-					<div>
-						<div class="flex items-center gap-2">
+						<div>
+							<label class="block text-sm font-medium text-gray-800" for="debounceValidation">
+								debounceValidation (ms)
+							</label>
 							<input
-								id="persistActionError"
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-								type="checkbox"
-								bind:checked={persistActionError}
+								id="debounceValidation"
+								class="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+								min="0"
+								placeholder="0"
+								step="100"
+								type="number"
+								bind:value={debounceValidation}
 							/>
-							<label class="text-sm font-medium text-gray-800" for="persistActionError">persistActionError</label>
+							<p class="mt-1 text-xs text-gray-600">Try 500ms and type quickly</p>
+							<button
+								class="mt-2 w-full cursor-pointer rounded bg-indigo-100 px-3 py-1.5 text-sm text-indigo-800 hover:bg-indigo-200"
+								onclick={handleValidateNow}
+								type="button"
+							>
+								Validate Now
+							</button>
+							{#if validateResult}
+								<p class="mt-1 text-xs text-indigo-700">{validateResult}</p>
+							{/if}
 						</div>
-						<p class="mt-1 text-xs text-gray-600">Keep errors until next action</p>
+
+						<div>
+							<div class="flex items-center gap-2">
+								<input
+									id="persistActionError"
+									class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+									type="checkbox"
+									bind:checked={persistActionError}
+								/>
+								<label class="text-sm font-medium text-gray-800" for="persistActionError">persistActionError</label>
+							</div>
+							<p class="mt-1 text-xs text-gray-600">Keep errors until next action</p>
+						</div>
+
+						<button
+							class="w-full cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+							onclick={handleOptionsChange}
+							type="button"
+						>
+							Apply Options
+						</button>
 					</div>
-
-					<button
-						class="w-full cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-						onclick={handleOptionsChange}
-						type="button"
-					>
-						Apply Options
-					</button>
 				</div>
-			</div>
 
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Current Options</h6>
-				<div class="space-y-1 font-mono text-xs text-gray-600">
-					<div>resetDirtyOnAction: {resetDirtyOnAction}</div>
-					<div>debounceValidation: {debounceValidation}</div>
-					<div>persistActionError: {persistActionError}</div>
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Current Options</h6>
+					<div class="space-y-1 font-mono text-xs text-gray-600">
+						<div>resetDirtyOnAction: {resetDirtyOnAction}</div>
+						<div>debounceValidation: {debounceValidation}</div>
+						<div>persistActionError: {persistActionError}</div>
+					</div>
 				</div>
-			</div>
-		</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
@@ -324,6 +345,7 @@ data.name = 'new value';
 			<CodeBlock code={optionsSourceCode} title="Options Overview" />
 			<CodeBlock code={resetDirtySourceCode} title="resetDirtyOnAction" />
 			<CodeBlock code={debounceSourceCode} title="debounceValidation" />
+			<CodeBlock code={validateSourceCode} title="validate() Bypasses the Debounce" />
 			<CodeBlock code={persistErrorSourceCode} title="persistActionError" />
 		</SourceCodeSection>
 	{/snippet}

@@ -23,6 +23,7 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
@@ -49,12 +50,14 @@
 	};
 
 	const fillWithValidData = () => {
-		data.listName = `Contact List ${randomId()}`;
-		data.items = [
-			{ name: 'John Doe', email: 'john@example.com' },
-			{ name: 'Jane Smith', email: 'jane@example.com' },
-			{ name: 'Bob Wilson', email: 'bob@example.com' }
-		];
+		batch((draft) => {
+			draft.listName = `Contact List ${randomId()}`;
+			draft.items = [
+				{ name: 'John Doe', email: 'john@example.com' },
+				{ name: 'Jane Smith', email: 'jane@example.com' },
+				{ name: 'Bob Wilson', email: 'bob@example.com' }
+			];
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -65,7 +68,7 @@
   items: [] as { name: string; email: string }[]
 };
 
-const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
   validator: (source) => ({
     listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
     items: arrayValidator(source.items).required().minLength(1).getError(),
@@ -80,6 +83,12 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(sourceData
       ])
     )
   })
+});`;
+
+	const batchSourceCode = `// batch() runs one validation pass for the name + whole array swap
+batch((draft) => {
+  draft.listName = 'Contact List';
+  draft.items = [{ name: 'John Doe', email: 'john@example.com' }];
 });`;
 
 	const formSourceCode = `// Define type for item errors
@@ -191,6 +200,7 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Array Item Validation" />
+			<CodeBlock code={batchSourceCode} title="Batching listName + items" />
 			<CodeBlock code={formSourceCode} title="Array Form Binding Examples" />
 		</SourceCodeSection>
 	{/snippet}

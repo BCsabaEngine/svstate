@@ -73,17 +73,20 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty, isDirtyByField }
 	} = createSvState(sourceData, {
 		validator: (source) => zodToSvstateErrors(userSchema, source, allFields)
 	});
 
 	const fillWithValidData = () => {
-		data.username = `user${randomId()}`;
-		data.email = `${randomId()}@example.com`;
-		data.age = randomInt(18, 65);
-		data.bio = 'Hello, I am a demo user!';
-		data.website = `https://${randomId()}.com`;
+		batch((draft) => {
+			draft.username = `user${randomId()}`;
+			draft.email = `${randomId()}@example.com`;
+			draft.age = randomInt(18, 65);
+			draft.bio = 'Hello, I am a demo user!';
+			draft.website = `https://${randomId()}.com`;
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -114,8 +117,14 @@ const userSchema = z.object({
   );
 }
 
-const { data, state: { errors, hasErrors } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors } } = createSvState(sourceData, {
   validator: (source) => zodToSvstateErrors(userSchema, source, allFields)
+});
+
+// batch() runs the Zod schema once for the whole fill, not once per field
+batch((draft) => {
+  draft.username = 'user123';
+  draft.email = 'user123@example.com';
 });`;
 
 	const dynamicSourceCode = `// Pick a subset of fields for dynamic rendering

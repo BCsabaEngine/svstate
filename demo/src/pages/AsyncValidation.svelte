@@ -6,6 +6,7 @@
 	import FormField from '$components/FormField.svelte';
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import Spinner from '$components/Spinner.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
 	import { randomId } from '$lib/utilities';
 
@@ -22,6 +23,7 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty, asyncErrors, hasAsyncErrors, asyncValidating, hasCombinedErrors }
 	} = createSvState(
 		sourceData,
@@ -83,21 +85,25 @@
 	);
 
 	const fillWithValidData = () => {
-		data.username = `newuser${randomId()}`;
-		data.email = `${randomId()}@example.com`;
-		data.slug = `my-page-${randomId()}`;
+		batch((draft) => {
+			draft.username = `newuser${randomId()}`;
+			draft.email = `${randomId()}@example.com`;
+			draft.slug = `my-page-${randomId()}`;
+		});
 	};
 
 	const fillWithTakenData = () => {
-		data.username = 'admin';
-		data.email = 'admin@example.com';
-		data.slug = 'about';
+		batch((draft) => {
+			draft.username = 'admin';
+			draft.email = 'admin@example.com';
+			draft.slug = 'about';
+		});
 	};
 
 	// ─────────────────────────────────────────────
 	// Source code examples for the collapsible section
 	// ─────────────────────────────────────────────
-	const stateSourceCode = `const { data, state: { errors, asyncErrors, asyncValidating, hasCombinedErrors } } =
+	const stateSourceCode = `const { data, batch, state: { errors, asyncErrors, asyncValidating, hasCombinedErrors } } =
   createSvState(sourceData, {
     validator: (source) => ({
       username: stringValidator(source.username).required().minLength(3).noSpace().getError(),
@@ -121,6 +127,14 @@
   },
   { maxConcurrentAsyncValidations: 2 } // Only 2 async validations run at a time
 );`;
+
+	const batchSourceCode = `// One sync validation pass, and each async validator scheduled
+// at most once — instead of three separate rounds
+batch((draft) => {
+  draft.username = 'newuser';
+  draft.email = 'newuser@example.com';
+  draft.slug = 'my-page';
+});`;
 
 	const templateSourceCode = `<!-- Show loading spinner when validating -->
 {#if $asyncValidating.includes('username')}
@@ -181,14 +195,7 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 				/>
 				{#if $asyncValidating.includes('username')}
 					<div class="absolute right-3 top-9">
-						<svg class="h-5 w-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path
-								class="opacity-75"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								fill="currentColor"
-							></path>
-						</svg>
+						<Spinner class="h-5 w-5 text-blue-500" />
 					</div>
 				{/if}
 			</div>
@@ -204,14 +211,7 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 				/>
 				{#if $asyncValidating.includes('email')}
 					<div class="absolute right-3 top-9">
-						<svg class="h-5 w-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path
-								class="opacity-75"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								fill="currentColor"
-							></path>
-						</svg>
+						<Spinner class="h-5 w-5 text-blue-500" />
 					</div>
 				{/if}
 			</div>
@@ -226,14 +226,7 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 				/>
 				{#if $asyncValidating.includes('slug')}
 					<div class="absolute right-3 top-9">
-						<svg class="h-5 w-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path
-								class="opacity-75"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								fill="currentColor"
-							></path>
-						</svg>
+						<Spinner class="h-5 w-5 text-blue-500" />
 					</div>
 				{/if}
 			</div>
@@ -271,14 +264,7 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 			>
 				{#if $asyncValidating.length > 0}
 					<span class="inline-flex items-center gap-2">
-						<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path
-								class="opacity-75"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								fill="currentColor"
-							></path>
-						</svg>
+						<Spinner />
 						Validating...
 					</span>
 				{:else}
@@ -289,39 +275,40 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-80">
-			<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData} />
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Quick Fill</h6>
-				<button
-					class="w-full cursor-pointer rounded bg-orange-100 px-3 py-1.5 text-sm text-orange-800 hover:bg-orange-200"
-					onclick={fillWithTakenData}
-					type="button"
-				>
-					Fill with taken values
-				</button>
-			</div>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Async Validation State</h6>
-				<div class="space-y-1 text-xs text-gray-600">
-					<div><span class="font-medium">asyncValidating:</span> [{$asyncValidating.join(', ')}]</div>
-					<div><span class="font-medium">hasAsyncErrors:</span> {$hasAsyncErrors}</div>
-					<div><span class="font-medium">hasCombinedErrors:</span> {$hasCombinedErrors}</div>
+		<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData}>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Quick Fill</h6>
+					<button
+						class="w-full cursor-pointer rounded bg-orange-100 px-3 py-1.5 text-sm text-orange-800 hover:bg-orange-200"
+						onclick={fillWithTakenData}
+						type="button"
+					>
+						Fill with taken values
+					</button>
 				</div>
-			</div>
 
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Async Errors</h6>
-				<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify($asyncErrors, undefined, 2)}</pre>
-			</div>
-		</div>
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Async Validation State</h6>
+					<div class="space-y-1 text-xs text-gray-600">
+						<div><span class="font-medium">asyncValidating:</span> [{$asyncValidating.join(', ')}]</div>
+						<div><span class="font-medium">hasAsyncErrors:</span> {$hasAsyncErrors}</div>
+						<div><span class="font-medium">hasCombinedErrors:</span> {$hasCombinedErrors}</div>
+					</div>
+				</div>
+
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Async Errors</h6>
+					<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify($asyncErrors, undefined, 2)}</pre>
+				</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Async Validators" />
+			<CodeBlock code={batchSourceCode} title="Batching Field Updates" />
 			<CodeBlock code={templateSourceCode} title="Template Usage" />
 			<CodeBlock code={storesSourceCode} title="Available Stores" />
 		</SourceCodeSection>

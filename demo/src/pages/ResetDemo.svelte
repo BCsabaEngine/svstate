@@ -22,6 +22,7 @@
 
 	const {
 		data,
+		batch,
 		reset,
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(sourceData, {
@@ -35,11 +36,13 @@
 	});
 
 	const fillWithValidData = () => {
-		data.firstName = 'John';
-		data.lastName = `Doe${randomId()}`;
-		data.email = `john.doe.${randomId()}@example.com`;
-		data.phone = `555-${randomId().slice(0, 3)}-${randomId().slice(0, 4)}`;
-		data.bio = 'Software developer with a passion for clean code.';
+		batch((draft) => {
+			draft.firstName = 'John';
+			draft.lastName = `Doe${randomId()}`;
+			draft.email = `john.doe.${randomId()}@example.com`;
+			draft.phone = `555-${randomId().slice(0, 3)}-${randomId().slice(0, 4)}`;
+			draft.bio = 'Software developer with a passion for clean code.';
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -53,7 +56,7 @@
   bio: ''
 };
 
-const { data, reset, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+const { data, batch, reset, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
   validator: (source) => ({
     firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
     lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
@@ -61,6 +64,13 @@ const { data, reset, state: { errors, hasErrors, isDirty } } = createSvState(sou
     phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
     bio: stringValidator(source.bio).maxLength(200).getError()
   })
+});`;
+
+	const batchSourceCode = `// One validation pass for the whole fill
+batch((draft) => {
+  draft.firstName = 'John';
+  draft.lastName = 'Doe';
+  draft.email = 'john.doe@example.com';
 });`;
 
 	const resetButtonCode = `<!-- Reset button only appears when form is dirty -->
@@ -139,6 +149,7 @@ const { data, reset, state: { errors, hasErrors, isDirty } } = createSvState(sou
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Reset" />
+			<CodeBlock code={batchSourceCode} title="Batching Fill Updates" />
 			<CodeBlock code={resetButtonCode} title="Conditional Reset Button" />
 		</SourceCodeSection>
 	{/snippet}

@@ -10,7 +10,7 @@
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
-	import { randomId } from '$lib/utilities';
+	import { formatFieldName, randomId } from '$lib/utilities';
 
 	type SaveLogEntry = { id: string; timestamp: string; data: string };
 	type FlushLogEntry = { id: string; timestamp: string; eventCount: number; types: string };
@@ -18,6 +18,7 @@
 	let saveLog = $state<SaveLogEntry[]>([]);
 	let flushLog = $state<FlushLogEntry[]>([]);
 	let bufferedCount = $state(0);
+	let lastAnalyticsError = $state<string | undefined>();
 
 	const autosave = autosavePlugin<{ title: string; category: string; notes: string }>({
 		save: async (d) => {
@@ -41,11 +42,15 @@
 		},
 		batchSize: 10,
 		flushInterval: 10_000,
-		include: ['change', 'action', 'snapshot']
+		include: ['change', 'action', 'snapshot'],
+		onError: (error) => {
+			lastAnalyticsError = error instanceof Error ? error.message : String(error);
+		}
 	});
 
 	const {
 		data,
+		batch,
 		execute,
 		reset,
 		state: { errors, hasErrors, isDirty, actionInProgress }
@@ -58,8 +63,7 @@
 				notes: stringValidator(source.notes).maxLength(500).getError()
 			}),
 			effect: ({ snapshot, property }) => {
-				const label = property.charAt(0).toUpperCase() + property.slice(1);
-				snapshot(`Changed ${label}`);
+				snapshot(`Changed ${formatFieldName(property)}`);
 			},
 			action: async () => {
 				await new Promise((resolve) => setTimeout(resolve, 500));
@@ -69,9 +73,11 @@
 	);
 
 	const fillWithValidData = () => {
-		data.title = `Article ${randomId()}`;
-		data.category = 'tech';
-		data.notes = 'Some interesting notes about the topic that should pass validation.';
+		batch((draft) => {
+			draft.title = `Article ${randomId()}`;
+			draft.category = 'tech';
+			draft.notes = 'Some interesting notes about the topic that should pass validation.';
+		});
 	};
 
 	$effect(() => {
@@ -100,13 +106,24 @@ const analytics = analyticsPlugin({
   },
   batchSize: 10,       // Flush after 10 events
   flushInterval: 10000, // Or every 10 seconds
-  include: ['change', 'action', 'snapshot']  // Filter event types
+  include: ['change', 'action', 'snapshot'],  // Filter event types
+  onError: (error) => {
+    console.error('Analytics flush failed:', error);
+  }
 });
 
 const { data, execute, state } = createSvState(
   initialData, actuators,
   { plugins: [autosave, analytics] }
 );`;
+
+	const batchSourceCode = `// One validation pass, one buffered analytics 'change' event per
+// field (still per-mutation), but a single snapshot for the fill
+batch((draft) => {
+  draft.title = 'Article Title';
+  draft.category = 'tech';
+  draft.notes = 'Some notes.';
+});`;
 
 	const apiSourceCode = `// autosavePlugin API
 autosave.saveNow();   // Force immediate save
@@ -213,75 +230,80 @@ analytics.eventCount();  // Number of buffered events`;
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-96">
-			<DemoSidebar
-				{data}
-				errors={$errors}
-				hasErrors={$hasErrors}
-				isDirty={$isDirty}
-				onFill={fillWithValidData}
-				width="xl:w-96"
-			/>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Autosave Log</h6>
-				{#if saveLog.length === 0}
-					<p class="text-xs text-gray-500">No saves yet — edit the form and wait 2s</p>
-				{:else}
-					<ul class="max-h-40 space-y-1 overflow-y-auto">
-						{#each saveLog as entry (entry.id)}
-							<li class="flex items-center gap-2 text-xs text-gray-600">
-								<span
-									class="flex-shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
-								>
-									save
-								</span>
-								<span class="min-w-0 flex-1 truncate">{entry.data}</span>
-								<span class="flex-shrink-0 font-mono text-[10px] text-gray-400">{entry.timestamp}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Analytics Buffer</h6>
-				<div class="space-y-1 text-xs text-gray-600">
-					<div><span class="font-medium">Buffered:</span> {bufferedCount} event{bufferedCount === 1 ? '' : 's'}</div>
-					<div><span class="font-medium">Batch size:</span> 10</div>
-					<div><span class="font-medium">Flush interval:</span> 10s</div>
-					<div><span class="font-medium">Tracked:</span> change, action, snapshot</div>
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+			width="xl:w-96"
+		>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Autosave Log</h6>
+					{#if saveLog.length === 0}
+						<p class="text-xs text-gray-500">No saves yet — edit the form and wait 2s</p>
+					{:else}
+						<ul class="max-h-40 space-y-1 overflow-y-auto">
+							{#each saveLog as entry (entry.id)}
+								<li class="flex items-center gap-2 text-xs text-gray-600">
+									<span
+										class="flex-shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
+									>
+										save
+									</span>
+									<span class="min-w-0 flex-1 truncate">{entry.data}</span>
+									<span class="flex-shrink-0 font-mono text-[10px] text-gray-400">{entry.timestamp}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				</div>
-			</div>
 
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Flush History</h6>
-				{#if flushLog.length === 0}
-					<p class="text-xs text-gray-500">No flushes yet</p>
-				{:else}
-					<ul class="max-h-40 space-y-1 overflow-y-auto">
-						{#each flushLog as entry (entry.id)}
-							<li class="flex items-start gap-2 text-xs text-gray-600">
-								<span
-									class="mt-0.5 flex-shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800"
-								>
-									flush
-								</span>
-								<span class="min-w-0 flex-1">
-									{entry.eventCount} event{entry.eventCount === 1 ? '' : 's'} ({entry.types})
-								</span>
-								<span class="flex-shrink-0 font-mono text-[10px] text-gray-400">{entry.timestamp}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Analytics Buffer</h6>
+					<div class="space-y-1 text-xs text-gray-600">
+						<div><span class="font-medium">Buffered:</span> {bufferedCount} event{bufferedCount === 1 ? '' : 's'}</div>
+						<div><span class="font-medium">Batch size:</span> 10</div>
+						<div><span class="font-medium">Flush interval:</span> 10s</div>
+						<div><span class="font-medium">Tracked:</span> change, action, snapshot</div>
+						<div>
+							<span class="font-medium">Last onError:</span>
+							{lastAnalyticsError ?? 'none'}
+						</div>
+					</div>
+				</div>
+
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Flush History</h6>
+					{#if flushLog.length === 0}
+						<p class="text-xs text-gray-500">No flushes yet</p>
+					{:else}
+						<ul class="max-h-40 space-y-1 overflow-y-auto">
+							{#each flushLog as entry (entry.id)}
+								<li class="flex items-start gap-2 text-xs text-gray-600">
+									<span
+										class="mt-0.5 flex-shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800"
+									>
+										flush
+									</span>
+									<span class="min-w-0 flex-1">
+										{entry.eventCount} event{entry.eventCount === 1 ? '' : 's'} ({entry.types})
+									</span>
+									<span class="flex-shrink-0 font-mono text-[10px] text-gray-400">{entry.timestamp}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={setupSourceCode} title="autosavePlugin + analyticsPlugin Setup" />
+			<CodeBlock code={batchSourceCode} title="Batching Fill Updates" />
 			<CodeBlock code={apiSourceCode} title="Plugin API" />
 		</SourceCodeSection>
 	{/snippet}

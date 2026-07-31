@@ -10,7 +10,7 @@
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
-	import { randomId } from '$lib/utilities';
+	import { formatFieldName, randomId } from '$lib/utilities';
 
 	const sourceData = {
 		firstName: 'Alice',
@@ -20,12 +20,9 @@
 		bio: ''
 	};
 
-	const formatFieldName = (property: string) => {
-		return property.charAt(0).toUpperCase() + property.slice(1).replaceAll(/([A-Z])/g, ' $1');
-	};
-
 	const {
 		data,
+		batch,
 		reset,
 		rollback,
 		rollbackTo,
@@ -48,11 +45,13 @@
 	);
 
 	const fillWithValidData = () => {
-		data.firstName = 'John';
-		data.lastName = `Doe${randomId()}`;
-		data.email = `john.doe.${randomId()}@example.com`;
-		data.phone = `555-${randomId().slice(0, 3)}-${randomId().slice(0, 4)}`;
-		data.bio = 'Software developer with a passion for clean code.';
+		batch((draft) => {
+			draft.firstName = 'John';
+			draft.lastName = `Doe${randomId()}`;
+			draft.email = `john.doe.${randomId()}@example.com`;
+			draft.phone = `555-${randomId().slice(0, 3)}-${randomId().slice(0, 4)}`;
+			draft.bio = 'Software developer with a passion for clean code.';
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -62,7 +61,7 @@
   firstName: 'Alice', lastName: 'Smith', email: 'alice.smith@example.com', phone: '', bio: ''
 };
 
-const { data, reset, rollback, rollbackTo, state: { errors, hasErrors, isDirty, snapshots } } =
+const { data, batch, reset, rollback, rollbackTo, state: { errors, hasErrors, isDirty, snapshots } } =
   createSvState(sourceData, {
     validator: (source) => ({ /* validation rules */ }),
     effect: ({ snapshot, property }) => {
@@ -76,6 +75,17 @@ effect: ({ snapshot, property }) => {
   // If same title, replaces last snapshot (debouncing)
   // Use snapshot(title, false) to always create new
 }`;
+
+	const batchSourceCode = `// Inside batch(), effect still fires per mutation and calls snapshot()
+// per field, but those collapse into ONE snapshot for the whole batch,
+// titled after the first field it touched (shouldReplace is ignored).
+batch((draft) => {
+  draft.firstName = 'John';
+  draft.lastName = 'Doe';
+  draft.email = 'john.doe@example.com';
+});
+// Result: exactly one new snapshot, e.g. "Changed First Name"
+// (previously: five separate snapshots, one per field)`;
 
 	const rollbackSourceCode = `// Undo last change
 rollback();
@@ -177,49 +187,50 @@ reset();`;
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-96">
-			<DemoSidebar
-				{data}
-				errors={$errors}
-				hasErrors={$hasErrors}
-				isDirty={$isDirty}
-				onFill={fillWithValidData}
-				width="xl:w-96"
-			/>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Snapshot History</h6>
-				{#if $snapshots.length === 0}
-					<p class="text-xs text-gray-500">No snapshots yet</p>
-				{:else}
-					<ul class="max-h-48 space-y-1 overflow-y-auto">
-						{#each $snapshots as snap, index}
-							<li class="flex items-center gap-2 text-xs text-gray-600">
-								<span
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-200 text-xs font-medium text-purple-800"
-								>
-									{index + 1}
-								</span>
-								<button
-									class="cursor-pointer truncate hover:text-purple-700 hover:underline disabled:cursor-default disabled:no-underline disabled:hover:text-gray-600"
-									disabled={$snapshots.length <= 1}
-									onclick={() => rollbackTo(snap.title)}
-									type="button"
-								>
-									{snap.title}
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+			width="xl:w-96"
+		>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Snapshot History</h6>
+					{#if $snapshots.length === 0}
+						<p class="text-xs text-gray-500">No snapshots yet</p>
+					{:else}
+						<ul class="max-h-48 space-y-1 overflow-y-auto">
+							{#each $snapshots as snap, index}
+								<li class="flex items-center gap-2 text-xs text-gray-600">
+									<span
+										class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-200 text-xs font-medium text-purple-800"
+									>
+										{index + 1}
+									</span>
+									<button
+										class="cursor-pointer truncate hover:text-purple-700 hover:underline disabled:cursor-default disabled:no-underline disabled:hover:text-gray-600"
+										disabled={$snapshots.length <= 1}
+										onclick={() => rollbackTo(snap.title)}
+										type="button"
+									>
+										{snap.title}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Snapshots & maxSnapshots" />
 			<CodeBlock code={effectSourceCode} title="Effect with Snapshot Creation" />
+			<CodeBlock code={batchSourceCode} title="Batching Collapses Multiple Snapshots into One" />
 			<CodeBlock code={rollbackSourceCode} title="Rollback, RollbackTo & Reset Usage" />
 		</SourceCodeSection>
 	{/snippet}

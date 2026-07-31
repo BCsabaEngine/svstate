@@ -17,10 +17,15 @@
 		notifications: boolean;
 	};
 
+	let lastPersistError = $state<string | undefined>();
+
 	const persist = persistPlugin<Settings>({
 		key: 'svstate-demo-settings',
 		throttle: 300,
-		exclude: ['notifications']
+		exclude: ['notifications'],
+		onError: (error) => {
+			lastPersistError = error instanceof Error ? error.message : String(error);
+		}
 	});
 
 	const sync = syncPlugin<Settings>({
@@ -30,6 +35,7 @@
 
 	const {
 		data,
+		batch,
 		reset,
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(
@@ -53,10 +59,12 @@
 	};
 
 	const fillWithValidData = () => {
-		data.username = 'demo_user';
-		data.theme = 'dark';
-		data.fontSize = 16;
-		data.notifications = false;
+		batch((draft) => {
+			draft.username = 'demo_user';
+			draft.theme = 'dark';
+			draft.fontSize = 16;
+			draft.notifications = false;
+		});
 	};
 
 	let storedJson = $state('');
@@ -79,7 +87,10 @@
 const persist = persistPlugin({
   key: 'svstate-demo-settings',
   throttle: 300,
-  exclude: ['notifications']  // Don't persist this field
+  exclude: ['notifications'],  // Don't persist this field
+  onError: (error) => {
+    console.error('Failed to persist state:', error);
+  }
 });
 
 const sync = syncPlugin({
@@ -92,6 +103,13 @@ const { data, reset, state } = createSvState(
   { validator: (source) => ({ /* ... */ }) },
   { plugins: [persist, sync] }
 );`;
+
+	const batchSourceCode = `// One validation pass, one persisted write, for the whole fill
+batch((draft) => {
+  draft.username = 'demo_user';
+  draft.theme = 'dark';
+  draft.fontSize = 16;
+});`;
 
 	const apiSourceCode = `// persistPlugin API
 persist.isRestored();        // true if data was loaded from storage
@@ -181,44 +199,49 @@ persist.clearPersistedState(); // Remove stored data
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-96">
-			<DemoSidebar
-				{data}
-				errors={$errors}
-				hasErrors={$hasErrors}
-				isDirty={$isDirty}
-				onFill={fillWithValidData}
-				width="xl:w-96"
-			/>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Persistence Info</h6>
-				<div class="space-y-1 text-xs text-gray-600">
-					<div><span class="font-medium">Restored:</span> {isRestored}</div>
-					<div><span class="font-medium">Key:</span> svstate-demo-settings</div>
-					<div><span class="font-medium">Excluded:</span> notifications</div>
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+			width="xl:w-96"
+		>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Persistence Info</h6>
+					<div class="space-y-1 text-xs text-gray-600">
+						<div><span class="font-medium">Restored:</span> {isRestored}</div>
+						<div><span class="font-medium">Key:</span> svstate-demo-settings</div>
+						<div><span class="font-medium">Excluded:</span> notifications</div>
+						<div>
+							<span class="font-medium">Last onError:</span>
+							{lastPersistError ?? 'none'}
+						</div>
+					</div>
 				</div>
-			</div>
 
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Raw localStorage</h6>
-				<pre class="max-h-32 overflow-auto text-xs text-gray-600">{storedJson}</pre>
-			</div>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Sync Info</h6>
-				<div class="space-y-1 text-xs text-gray-600">
-					<div><span class="font-medium">Channel:</span> svstate-demo-sync</div>
-					<div><span class="font-medium">Throttle:</span> 200ms</div>
-					<div><span class="font-medium">Merge:</span> overwrite (default)</div>
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Raw localStorage</h6>
+					<pre class="max-h-32 overflow-auto text-xs text-gray-600">{storedJson}</pre>
 				</div>
-			</div>
-		</div>
+
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Sync Info</h6>
+					<div class="space-y-1 text-xs text-gray-600">
+						<div><span class="font-medium">Channel:</span> svstate-demo-sync</div>
+						<div><span class="font-medium">Throttle:</span> 200ms</div>
+						<div><span class="font-medium">Merge:</span> overwrite (default)</div>
+					</div>
+				</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={setupSourceCode} title="persistPlugin + syncPlugin Setup" />
+			<CodeBlock code={batchSourceCode} title="Batching Fill Updates" />
 			<CodeBlock code={apiSourceCode} title="Plugin API" />
 		</SourceCodeSection>
 	{/snippet}
