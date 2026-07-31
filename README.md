@@ -457,6 +457,19 @@ rollback(); // undoes all three at once
 
 `effect` and plugin `onChange` still fire once per mutation, so per-property side effects keep working.
 
+#### Handling plugin errors
+
+A throwing plugin hook is isolated — it doesn't abort the mutation or block later plugins. It's caught and reported through `onPluginError`, which defaults to `console.error`:
+
+```typescript
+const { data } = createSvState(formData, actuators, {
+  plugins: [thirdPartyPlugin, devtoolsPlugin()],
+  onPluginError: (error, pluginName, hook) => {
+    report(`plugin "${pluginName}" failed in ${hook}`, error);
+  }
+});
+```
+
 ---
 
 ### 6️⃣ State Objects with Methods
@@ -1119,6 +1132,7 @@ import type {
   Snapshot,
   SnapshotFunction,
   SvStateOptions,
+  ValidationResult,
   AsyncValidator,
   AsyncValidatorFunction,
   AsyncErrors,
@@ -1126,6 +1140,7 @@ import type {
   SvStatePlugin,
   PluginContext,
   PluginStores,
+  PluginHook,
   ChangeEvent,
   ActionEvent
 } from 'svstate';
@@ -1138,6 +1153,7 @@ import type {
 | `SnapshotFunction`          | Type for the `snapshot(title, shouldReplace?)` function used in effects                             |
 | `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
 | `SvStateOptions`            | Configuration options type for `createSvState`                                                      |
+| `ValidationResult<V>`       | Return type of `validate()`: `{ errors, hasErrors }`                                                |
 | `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                          |
 | `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                        |
 | `AsyncErrors`               | Object mapping property paths to error strings                                                      |
@@ -1145,6 +1161,7 @@ import type {
 | `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks (`onInit`, `onChange`, `onAction`, etc.)                      |
 | `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`                                    |
 | `PluginStores<T>`           | All readable stores exposed to plugins                                                              |
+| `PluginHook`                | Hook name passed to `onPluginError`, e.g. `'onChange'`                                              |
 | `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }`                              |
 | `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                                                |
 

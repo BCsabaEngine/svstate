@@ -50,6 +50,13 @@ state or leaked resources; fixing them changes observable behavior, hence the ma
 
 - Shared helpers moved to `src/internal/` (`clone.ts`, `paths.ts`, `errors.ts`), removing five duplicated copies of `deepClone`, `DANGEROUS_KEYS`, `getValueAtPath` and `setValueAtPath` — one of which (in `undoRedoPlugin`) was missing the prototype-pollution guard entirely.
 
+### Demo
+
+- Every demo page's "Fill with Valid Data" now uses `batch()` instead of sequential assignments — one validation pass per fill, and pages driven by an `effect` that calls `snapshot()` now produce a single undo point per fill instead of one per field.
+- Added a "Validate Now" control to the Options demo (`validate()` bypassing `debounceValidation`) and a plugin-error simulation to the Devtools demo (`onPluginError`, showing a throwing hook doesn't abort the mutation or block other plugins).
+- Wired `persistPlugin`'s and `analyticsPlugin`'s new `onError` option into the Persist/Sync and Autosave/Analytics demos.
+- Deduplicated repeated markup: a shared `Spinner` component replaces seven copy-pasted loading SVGs, a shared `formatFieldName` helper replaces four inline copies, and `DemoSidebar` gained an `extra` snippet prop so pages no longer double-wrap it to append custom sidebar panels.
+
 ## [1.5.6] - 2026-07-31
 
 ### Changed

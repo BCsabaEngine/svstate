@@ -176,6 +176,46 @@ createSvState(data, actuators, {
 
 ---
 
+### How do I force validation to run immediately, bypassing the debounce?
+
+Call `validate()`. It runs sync validation right away — no microtask, no debounce delay — and returns the result directly, so you can check it before submitting:
+
+```typescript
+const { data, validate, execute } = createSvState(form, { validator, action });
+
+function submit() {
+  const { errors, hasErrors } = validate();
+  if (hasErrors) return; // errors store is already up to date too
+  execute();
+}
+```
+
+This is the reliable way to know errors are current right before an action, even with a long `debounceValidation`.
+
+---
+
+### How do I apply several changes as a single validation pass and undo point?
+
+Use `batch(fn)`. Every mutation made inside the callback is applied normally (so `effect` and plugin `onChange` still fire once per property), but validation runs only once at the end, each async validator is scheduled at most once, and the whole group produces a single snapshot instead of one per field:
+
+```typescript
+const { data, batch, rollback } = createSvState(formData, {
+  effect: ({ snapshot, property }) => snapshot(`Changed ${property}`)
+});
+
+batch((draft) => {
+  draft.firstName = 'Ada';
+  draft.lastName = 'Lovelace';
+  draft.address.city = 'London';
+});
+
+rollback(); // undoes all three fields at once, not just the last one
+```
+
+This is the right tool for "fill form with sample data" buttons, bulk imports, or any place you'd otherwise mutate several fields back-to-back.
+
+---
+
 ### Can I use Zod, Yup, or other validation libraries instead of built-in validators?
 
 **Yes!** The `validator` function just needs to return an object matching your error structure. Use any validation library:
@@ -598,6 +638,7 @@ import type {
   Snapshot,
   SnapshotFunction,
   SvStateOptions,
+  ValidationResult,
   AsyncValidator,
   AsyncValidatorFunction,
   AsyncErrors,
@@ -605,6 +646,7 @@ import type {
   SvStatePlugin,
   PluginContext,
   PluginStores,
+  PluginHook,
   ChangeEvent,
   ActionEvent
 } from 'svstate';
@@ -620,6 +662,7 @@ import type { AnalyticsEvent } from 'svstate';
 | `SnapshotFunction`          | Type for the `snapshot` function parameter                             |
 | `Snapshot<T>`               | Type for snapshot history entries                                      |
 | `SvStateOptions`            | Type for configuration options                                         |
+| `ValidationResult<V>`       | Return type of `validate()`: `{ errors, hasErrors }`                   |
 | `AsyncValidator<T>`         | Object mapping property paths to async validator functions             |
 | `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`           |
 | `AsyncErrors`               | Object mapping property paths to error strings                         |
@@ -627,6 +670,7 @@ import type { AnalyticsEvent } from 'svstate';
 | `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks                                  |
 | `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`       |
 | `PluginStores<T>`           | All readable stores exposed to plugins                                 |
+| `PluginHook`                | Hook name passed to `onPluginError`, e.g. `'onChange'`                 |
 | `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }` |
 | `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                   |
 | `AnalyticsEvent`            | Event object buffered by `analyticsPlugin`                             |
@@ -829,6 +873,38 @@ const myPlugin: SvStatePlugin<MyState> = {
 ```
 
 **Hook execution order:** Hooks run in plugin array order (first to last), except `destroy` which runs last-to-first.
+
+---
+
+### What happens if a plugin hook throws an error?
+
+**It's isolated.** A throwing hook no longer aborts the mutation or blocks later plugins — it's caught and reported through the `onPluginError` option, which defaults to `console.error`:
+
+```typescript
+const { data } = createSvState(formData, actuators, {
+  plugins: [myFlakyPlugin, devtoolsPlugin()],
+  onPluginError: (error, pluginName, hook) => {
+    console.error(`Plugin "${pluginName}" failed in ${hook}:`, error);
+    // e.g. report(error) to your error tracker
+  }
+});
+```
+
+`data.name = 'new value'` still applies, `myFlakyPlugin`'s failing hook doesn't stop `devtoolsPlugin` from running, and you get told exactly which plugin and hook failed.
+
+`persistPlugin` and `analyticsPlugin` have their own `onError` option for storage/sink failures specifically (quota exceeded, `onFlush` rejecting), separate from `onPluginError`:
+
+```typescript
+persistPlugin({
+  key: 'my-form',
+  onError: (error) => report('persist failed', error) // e.g. QuotaExceededError
+});
+
+analyticsPlugin({
+  onFlush: (events) => sendToAnalytics(events),
+  onError: (error) => report('analytics flush failed', error) // onFlush threw or rejected
+});
+```
 
 ---
 
