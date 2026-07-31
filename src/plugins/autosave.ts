@@ -12,9 +12,14 @@ export type AutosaveOptions<T> = {
   onError?: (error: unknown) => void;
 };
 
+export type AutosavePluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
+  saveNow(): Promise<void>;
+  isSaving(): boolean;
+};
+
 export function autosavePlugin<T extends Record<string, unknown>>(
   options: AutosaveOptions<T>
-): SvStatePlugin<T> & { saveNow(): Promise<void>; isSaving(): boolean } {
+): AutosavePluginInstance<T> {
   const idleMs = options.idle ?? 1000;
   const intervalMs = options.interval ?? 0;
   const saveOnDestroy = options.saveOnDestroy ?? true;
@@ -25,11 +30,16 @@ export function autosavePlugin<T extends Record<string, unknown>>(
   let intervalTimer: ReturnType<typeof setInterval> | undefined;
   let isSaving = false;
   let isDestroyed = false;
+  let hasPendingSave = false;
 
   const doSave = async () => {
     if (!context) return;
     if (onlyWhenDirty && !get(context.state.isDirty)) return;
-    if (isSaving) return;
+    // A save requested mid-flight is not dropped — it runs once the current one settles
+    if (isSaving) {
+      hasPendingSave = true;
+      return;
+    }
 
     isSaving = true;
     try {
@@ -38,6 +48,11 @@ export function autosavePlugin<T extends Record<string, unknown>>(
       options.onError?.(error);
     } finally {
       isSaving = false;
+    }
+
+    if (hasPendingSave && !isDestroyed) {
+      hasPendingSave = false;
+      await doSave();
     }
   };
 
@@ -50,7 +65,7 @@ export function autosavePlugin<T extends Record<string, unknown>>(
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') doSave();
   };
 
-  const plugin: SvStatePlugin<T> & { saveNow(): Promise<void>; isSaving(): boolean } = {
+  const plugin: AutosavePluginInstance<T> = {
     name: 'autosave',
 
     onInit(context_) {
@@ -72,6 +87,7 @@ export function autosavePlugin<T extends Record<string, unknown>>(
 
     destroy() {
       isDestroyed = true;
+      hasPendingSave = false;
       clearTimeout(idleTimeout);
       if (intervalTimer !== undefined) clearInterval(intervalTimer);
 
@@ -99,6 +115,7 @@ export function autosavePlugin<T extends Record<string, unknown>>(
       if (isDestroyed) return;
       clearTimeout(idleTimeout);
       isSaving = false;
+      hasPendingSave = false;
       await doSave();
     },
 

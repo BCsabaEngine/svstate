@@ -1,18 +1,10 @@
+import { getValueAtPath, isPlainObject, safeMerge, setValueAtPath } from '../internal/paths';
 import type { SvStatePlugin } from '../plugin';
-
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const isValidStorageFormat = (value: unknown): value is StorageFormat =>
   isPlainObject(value) &&
   typeof (value as StorageFormat).version === 'number' &&
   isPlainObject((value as StorageFormat).data);
-
-const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
-  for (const [key, value] of Object.entries(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = value;
-};
 
 export type PersistOptions = {
   key: string;
@@ -26,34 +18,12 @@ export type PersistOptions = {
   migrate?: (persisted: unknown, version: number) => unknown;
   include?: string[];
   exclude?: string[];
+  onError?: (error: unknown) => void;
 };
 
 type StorageFormat = {
   version: number;
   data: Record<string, unknown>;
-};
-
-const getValueAtPath = (source: Record<string, unknown>, path: string): unknown => {
-  const parts = path.split('.');
-  let current: unknown = source;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-};
-
-const setValueAtPath = (target: Record<string, unknown>, path: string, value: unknown): void => {
-  const parts = path.split('.');
-  let current: Record<string, unknown> = target;
-  for (let index = 0; index < parts.length - 1; index++) {
-    const part = parts[index]!;
-    if (DANGEROUS_KEYS.has(part)) return;
-    if (current[part] === undefined || current[part] === null) current[part] = {};
-    current = current[part] as Record<string, unknown>;
-  }
-  const lastPart = parts.at(-1)!;
-  if (!DANGEROUS_KEYS.has(lastPart)) current[lastPart] = value;
 };
 
 const excludePath = (filtered: Record<string, unknown>, path: string): void => {
@@ -94,9 +64,12 @@ const filterData = (data: Record<string, unknown>, include?: string[], exclude?:
   return data;
 };
 
-export function persistPlugin<T extends Record<string, unknown>>(
-  options: PersistOptions
-): SvStatePlugin<T> & { clearPersistedState(): void; isRestored(): boolean } {
+export type PersistPluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
+  clearPersistedState(): void;
+  isRestored(): boolean;
+};
+
+export function persistPlugin<T extends Record<string, unknown>>(options: PersistOptions): PersistPluginInstance<T> {
   const storage = options.storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage);
   const throttleMs = options.throttle ?? 300;
   const version = options.version ?? 1;
@@ -107,9 +80,14 @@ export function persistPlugin<T extends Record<string, unknown>>(
 
   const writeToStorage = () => {
     if (!storage || !contextData) return;
-    const filtered = filterData(contextData as unknown as Record<string, unknown>, options.include, options.exclude);
-    const payload: StorageFormat = { version, data: filtered };
-    storage.setItem(options.key, JSON.stringify(payload));
+    try {
+      const filtered = filterData(contextData as unknown as Record<string, unknown>, options.include, options.exclude);
+      const payload: StorageFormat = { version, data: filtered };
+      storage.setItem(options.key, JSON.stringify(payload));
+    } catch (error) {
+      // Quota exceeded, unserializable state, blocked storage — never throw out of a timer
+      options.onError?.(error);
+    }
   };
 
   const scheduleWrite = () => {
@@ -117,7 +95,7 @@ export function persistPlugin<T extends Record<string, unknown>>(
     pendingTimeout = setTimeout(writeToStorage, throttleMs);
   };
 
-  const plugin: SvStatePlugin<T> & { clearPersistedState(): void; isRestored(): boolean } = {
+  const plugin: PersistPluginInstance<T> = {
     name: 'persist',
 
     onInit(context) {

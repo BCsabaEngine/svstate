@@ -1,9 +1,5 @@
+import { isPlainObject, safeMerge } from '../internal/paths';
 import type { PluginContext, SvStatePlugin } from '../plugin';
-
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const MAX_SYNC_DEPTH = 10;
 
@@ -11,10 +7,6 @@ const isWithinDepthLimit = (value: unknown, depth = 0): boolean => {
   if (depth > MAX_SYNC_DEPTH) return false;
   if (!isPlainObject(value)) return true;
   return Object.values(value).every((v) => isWithinDepthLimit(v, depth + 1));
-};
-
-const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
-  for (const [key, value] of Object.entries(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = value;
 };
 
 export type SyncOptions = {
@@ -36,6 +28,8 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
   let isReceiving = false;
   let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
   let lastReceivedAt = 0;
+  let pendingIncoming: Record<string, unknown> | undefined;
+  let incomingTimeout: ReturnType<typeof setTimeout> | undefined;
 
   const broadcast = () => {
     if (!channel || !context) return;
@@ -50,8 +44,43 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
     pendingTimeout = setTimeout(broadcast, throttleMs);
   };
 
+  const applyIncoming = (payload: Record<string, unknown>) => {
+    if (!context) return;
+    isReceiving = true;
+    try {
+      safeMerge(context.data as unknown as Record<string, unknown>, payload);
+    } finally {
+      isReceiving = false;
+    }
+  };
+
+  // Throttle inbound messages without dropping the newest one: bursts collapse to the last payload,
+  // which is applied when the window closes.
+  const queueIncoming = (payload: Record<string, unknown>) => {
+    const elapsed = Date.now() - lastReceivedAt;
+    if (elapsed >= throttleMs) {
+      lastReceivedAt = Date.now();
+      applyIncoming(payload);
+      return;
+    }
+
+    pendingIncoming = payload;
+    if (incomingTimeout !== undefined) return;
+    incomingTimeout = setTimeout(() => {
+      incomingTimeout = undefined;
+      const next = pendingIncoming;
+      pendingIncoming = undefined;
+      if (!next) return;
+      lastReceivedAt = Date.now();
+      applyIncoming(next);
+    }, throttleMs - elapsed);
+  };
+
   const closeChannel = () => {
     clearTimeout(pendingTimeout);
+    clearTimeout(incomingTimeout);
+    incomingTimeout = undefined;
+    pendingIncoming = undefined;
     if (channel) {
       channel.close();
       channel = undefined;
@@ -70,16 +99,10 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
         if (!context || merge === 'ignore') return;
         if (event.data?.type !== 'sync') return;
 
-        const now = Date.now();
-        if (now - lastReceivedAt < throttleMs) return;
-        lastReceivedAt = now;
-
         if (!isPlainObject(event.data.data)) return;
         if (!isWithinDepthLimit(event.data.data)) return;
 
-        isReceiving = true;
-        safeMerge(context.data as unknown as Record<string, unknown>, event.data.data);
-        isReceiving = false;
+        queueIncoming(event.data.data);
       });
     },
 

@@ -1,3 +1,4 @@
+import { hasAnyErrors } from '../internal/errors';
 import type { SvStatePlugin } from '../plugin';
 
 export type AnalyticsEvent = {
@@ -12,11 +13,17 @@ export type AnalyticsOptions = {
   flushInterval?: number;
   include?: AnalyticsEvent['type'][];
   redact?: string[];
+  onError?: (error: unknown) => void;
+};
+
+export type AnalyticsPluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
+  flush(): void;
+  eventCount(): number;
 };
 
 export function analyticsPlugin<T extends Record<string, unknown>>(
   options: AnalyticsOptions
-): SvStatePlugin<T> & { flush(): void; eventCount(): number } {
+): AnalyticsPluginInstance<T> {
   const batchSize = options.batchSize ?? 20;
   const flushInterval = options.flushInterval ?? 5000;
   const include = options.include;
@@ -26,20 +33,33 @@ export function analyticsPlugin<T extends Record<string, unknown>>(
 
   const shouldTrack = (type: AnalyticsEvent['type']) => !include || include.includes(type);
 
+  // A redacted path covers everything below it: redact 'user' also redacts 'user.ssn'
+  const isRedacted = (property: string) =>
+    options.redact?.some((path) => property === path || property.startsWith(path + '.')) ?? false;
+
   const addEvent = (type: AnalyticsEvent['type'], detail: Record<string, unknown>) => {
     if (!shouldTrack(type)) return;
     buffer.push({ type, timestamp: Date.now(), detail });
     if (buffer.length >= batchSize) doFlush();
   };
 
+  // A failing sink must never take down the state it is observing
+  const flushEvents = async (events: AnalyticsEvent[]) => {
+    try {
+      await options.onFlush(events);
+    } catch (error) {
+      options.onError?.(error);
+    }
+  };
+
   const doFlush = () => {
     if (buffer.length === 0) return;
     const events = buffer.slice();
     buffer.length = 0;
-    options.onFlush(events);
+    void flushEvents(events);
   };
 
-  const plugin: SvStatePlugin<T> & { flush(): void; eventCount(): number } = {
+  const plugin: AnalyticsPluginInstance<T> = {
     name: 'analytics',
 
     onInit() {
@@ -47,16 +67,16 @@ export function analyticsPlugin<T extends Record<string, unknown>>(
     },
 
     onChange(event) {
-      const isRedacted = options.redact?.includes(event.property);
+      const redacted = isRedacted(event.property);
       addEvent('change', {
         property: event.property,
-        currentValue: isRedacted ? '[redacted]' : event.currentValue,
-        oldValue: isRedacted ? '[redacted]' : event.oldValue
+        currentValue: redacted ? '[redacted]' : event.currentValue,
+        oldValue: redacted ? '[redacted]' : event.oldValue
       });
     },
 
     onValidation(errors) {
-      addEvent('validation', { hasErrors: errors !== undefined });
+      addEvent('validation', { hasErrors: hasAnyErrors(errors) });
     },
 
     onSnapshot(snapshot) {

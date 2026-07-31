@@ -1,3 +1,41 @@
+const EPSILON = 1e-9;
+
+// Counts decimal places for exponential notation too — String(1e-7) is '1e-7', not '0.0000001'
+const countDecimalPlaces = (value: number): number => {
+  if (Number.isSafeInteger(value)) return 0;
+  const text = String(value);
+  const exponentIndex = text.indexOf('e-');
+  if (exponentIndex === -1) return text.split('.', 2)[1]?.length ?? 0;
+  const mantissa = text.slice(0, exponentIndex);
+  const exponent = Number(text.slice(exponentIndex + 2));
+  return (mantissa.split('.', 2)[1]?.length ?? 0) + exponent;
+};
+
+// Tolerant divisibility: an exact `%` reports 0.3 as not a multiple of 0.1
+const isMultipleOf = (value: number, divisor: number): boolean => {
+  if (divisor === 0) return false;
+  const remainder = Math.abs(value % divisor);
+  return remainder < EPSILON || Math.abs(remainder - Math.abs(divisor)) < EPSILON;
+};
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
+  if (value instanceof Date) return `Date(${value.getTime()})`;
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).toSorted(([a], [b]) => (a < b ? -1 : 1));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(',')}}`;
+};
+
+// Type-tagged so 1 and '1' (or null and 'null') never collide, and key order never matters
+const toComparableKey = (value: unknown): string => {
+  if (value === null) return 'null';
+  if (typeof value === 'object') return `object:${stableStringify(value)}`;
+  return `${typeof value}:${String(value)}`;
+};
+
+const toDisplay = (value: unknown): string =>
+  value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value);
+
 type BaseOption = 'trim' | 'normalize';
 type PrepareOption = BaseOption | 'upper' | 'lower' | 'localeUpper' | 'localeLower';
 
@@ -188,6 +226,8 @@ type StringValidatorBuilder = {
 export function numberValidator(input: number | null | undefined): NumberValidatorBuilder {
   let error = '';
   const isNullish = input === null || input === undefined;
+  // NaN carries no comparable value — only required() reports it, every other rule skips it
+  const isMissing = isNullish || Number.isNaN(input);
   const setError = (message: string) => {
     if (!error) error = message;
   };
@@ -204,76 +244,73 @@ export function numberValidator(input: number | null | undefined): NumberValidat
     },
 
     min(n: number) {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input < n) setError(`Minimum ${n}`);
       return builder;
     },
 
     max(n: number) {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input > n) setError(`Maximum ${n}`);
       return builder;
     },
 
     between(min: number, max: number) {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && (input < min || input > max)) setError(`Must be between ${min} and ${max}`);
       return builder;
     },
 
     integer() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && !Number.isSafeInteger(input)) setError('Must be an integer');
       return builder;
     },
 
     positive() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input <= 0) setError('Must be positive');
       return builder;
     },
 
     negative() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input >= 0) setError('Must be negative');
       return builder;
     },
 
     nonNegative() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input < 0) setError('Must be non-negative');
       return builder;
     },
 
     notZero() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input === 0) setError('Must not be zero');
       return builder;
     },
 
     multipleOf(n: number) {
-      if (isNullish) return builder;
-      if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
+      if (isMissing) return builder;
+      if (!error && !isMultipleOf(input, n)) setError(`Must be a multiple of ${n}`);
       return builder;
     },
 
     step(n: number) {
-      if (isNullish) return builder;
-      if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
+      if (isMissing) return builder;
+      if (!error && !isMultipleOf(input, n)) setError(`Must be a multiple of ${n}`);
       return builder;
     },
 
     decimal(places: number) {
-      if (isNullish) return builder;
-      if (error || Number.isNaN(input)) return builder;
-      const parts = String(input).split('.');
-      const actualPlaces = parts[1]?.length ?? 0;
-      if (actualPlaces > places) setError(`Maximum ${places} decimal places`);
+      if (isMissing || error) return builder;
+      if (countDecimalPlaces(input) > places) setError(`Maximum ${places} decimal places`);
       return builder;
     },
 
     percentage() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && (input < 0 || input > 100)) setError('Must be between 0 and 100');
       return builder;
     },
@@ -341,7 +378,7 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
       if (error) return builder;
       const seen = new Set<string>();
       for (const item of array) {
-        const key = typeof item === 'object' ? JSON.stringify(item) : String(item);
+        const key = toComparableKey(item);
         if (seen.has(key)) {
           setError('Items must be unique');
           break;
@@ -360,41 +397,28 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
     includes(item: T) {
       if (isNullish) return builder;
       if (error) return builder;
-      const itemKey = typeof item === 'object' ? JSON.stringify(item) : String(item);
-      const found = array.some((element) => {
-        const elementKey = typeof element === 'object' ? JSON.stringify(element) : String(element);
-        return elementKey === itemKey;
-      });
-      if (!found) setError(`Must include ${itemKey}`);
+      const itemKey = toComparableKey(item);
+      const found = array.some((element) => toComparableKey(element) === itemKey);
+      if (!found) setError(`Must include ${toDisplay(item)}`);
       return builder;
     },
 
     includesAny(items: T[]) {
       if (isNullish) return builder;
       if (error) return builder;
-      const itemKeys = items.map((entry) => (typeof entry === 'object' ? JSON.stringify(entry) : String(entry)));
-      const found = array.some((element) => {
-        const elementKey = typeof element === 'object' ? JSON.stringify(element) : String(element);
-        return itemKeys.includes(elementKey);
-      });
-      if (!found) setError(`Must include at least one of: ${itemKeys.join(', ')}`);
+      const itemKeys = new Set(items.map((entry) => toComparableKey(entry)));
+      const found = array.some((element) => itemKeys.has(toComparableKey(element)));
+      if (!found) setError(`Must include at least one of: ${items.map((entry) => toDisplay(entry)).join(', ')}`);
       return builder;
     },
 
     includesAll(items: T[]) {
       if (isNullish) return builder;
       if (error) return builder;
-      const arrayKeys = new Set(
-        array.map((element) => (typeof element === 'object' ? JSON.stringify(element) : String(element)))
-      );
-      const missing = items.filter((entry) => {
-        const entryKey = typeof entry === 'object' ? JSON.stringify(entry) : String(entry);
-        return !arrayKeys.has(entryKey);
-      });
-      if (missing.length > 0) {
-        const missingKeys = missing.map((entry) => (typeof entry === 'object' ? JSON.stringify(entry) : String(entry)));
-        setError(`Missing required items: ${missingKeys.join(', ')}`);
-      }
+      const arrayKeys = new Set(array.map((element) => toComparableKey(element)));
+      const missing = items.filter((entry) => !arrayKeys.has(toComparableKey(entry)));
+      if (missing.length > 0)
+        setError(`Missing required items: ${missing.map((entry) => toDisplay(entry)).join(', ')}`);
       return builder;
     },
 
