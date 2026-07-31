@@ -40,7 +40,7 @@
 		const errorMap: Record<string, string> = {};
 		for (const issue of result.error.issues) {
 			const key = String(issue.path[0]);
-			if (!errorMap[key]) errorMap[key] = issue.message;
+			if (!Object.hasOwn(errorMap, key)) errorMap[key] = issue.message;
 		}
 
 		return Object.fromEntries(fields.map((f) => [f, errorMap[f] ?? '']));

@@ -37,11 +37,11 @@
 			}
 		}),
 		effect: ({ property }) => {
-			if (property === 'item.unitPrice' || property === 'item.quantity') {
-				data.subtotal = data.item.unitPrice * data.item.quantity;
-				data.tax = data.subtotal * TAX_RATE;
-				data.total = data.subtotal + data.tax;
-			}
+			if (!(property === 'item.unitPrice' || property === 'item.quantity')) return;
+
+			data.subtotal = data.item.unitPrice * data.item.quantity;
+			data.tax = data.subtotal * TAX_RATE;
+			data.total = data.subtotal + data.tax;
 		}
 	});
 
