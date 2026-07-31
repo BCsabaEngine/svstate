@@ -12,7 +12,7 @@
 		"build": "vite build",
 		"ts:check": "svelte-check --tsconfig ./tsconfig.json",
 		"format:check": "prettier --check .",
-		"format:fix": "prettier --write . | grep -v 'unchanged' | sed G",
+		"format:fix": "prettier --write --list-different .",
 		"lint:check": "eslint .",
 		"lint:fix": "eslint --fix .",
 		"npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i",
