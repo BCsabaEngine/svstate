@@ -420,8 +420,13 @@ The `property` is a dot-notation path string:
 | `data.billing.bank.iban = '...'` | `"billing.bank.iban"` |
 | `data.contacts[0].email = '...'` | `"contacts.email"`    |
 | `data.tags.push('new')`          | `"tags"`              |
+| `data.tags.length = 0`           | `"tags"`              |
+| `delete data.draft`              | `"draft"`             |
+| `data.users['123'].name = '...'` | `"users.123.name"`    |
 
-**Note:** Array indices are collapsed — you get `"contacts.email"` not `"contacts.0.email"`.
+**Note:** Array indices and array `length` writes are collapsed onto the array's own path — you get `"contacts.email"` not `"contacts.0.email"`. Numeric-looking keys on plain objects are _not_ collapsed, so a record keyed by id keeps its segment (`"users.123.name"`).
+
+Deleting a property (`delete data.draft`) also emits a change, with `currentValue` set to `undefined`.
 
 ---
 

@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-07-31
+
+A functional correctness pass over the whole library. Several long-standing bugs silently corrupted
+state or leaked resources; fixing them changes observable behavior, hence the major version.
+
+### Breaking
+
+- **`delete` now fires a change** — deleting a property through the reactive proxy (`delete data.draft`) previously bypassed dirty tracking, validation, persistence and every plugin hook. It now emits a change event with `currentValue: undefined`, so validators and plugins see it. Code that relied on deletes being invisible will now see extra events.
+- **Change paths keep numeric object keys** — a key like `data.users['123'].name` was reported as `users.name` because any numeric-looking key was treated as an array index. It is now reported as `users.123.name`. Only true array indices are collapsed. Async validator paths and `isDirtyByField` keys change accordingly.
+- **Array `length` writes report the array path** — `data.list.length = 0` (and `pop`/`splice`) reported `list.length`; they now report `list`, matching index writes.
+- **Proxy identity is stable** — `data.nested === data.nested` was `false` because a new proxy was created on every read. Child proxies are now cached, so identity comparisons and keyed `{#each}` blocks work.
+- **Assigning a nested value no longer stores a proxy** — `data.b = data.a` used to write the _proxy_ of `a` into `b`, after which `data.b.x = 1` fired twice, once with the stale path `a.x`. The raw value is now unwrapped before assignment, and self-assignment is a no-op.
+- **`actionError` is always an `Error`** — a thrown primitive (`throw 'boom'`) previously produced `undefined`, silently swallowing the failure. It is now wrapped, keeping the `.message` → `.body.message` → `String()` precedence.
+- **`NaN` no longer passes numeric rules** — `min`, `max`, `between`, `positive`, `negative`, `nonNegative`, `notZero`, `integer`, `multipleOf`, `step`, `decimal` and `percentage` skip `NaN` like they skip `null`/`undefined`; only `required()` reports it.
+- **State is re-baselined after plugin hydration** — `persistPlugin` and `historyPlugin` restore state in `onInit`, which used to mark every restored field dirty and leave the `Initial` snapshot holding pre-restore data (so `reset()` reverted past the restore). Restored state is now the baseline: `isDirty` is `false` and `reset()` returns to the restored values.
+
+### Added
+
+- **`validate()`** — runs sync validation immediately, bypassing the debounce, and returns `{ errors, hasErrors }`. Previously the only way to be sure errors were current before submitting was to wait for a microtask.
+- **`batch(fn)`** — applies many mutations as one unit: one validation pass, each async validator scheduled at most once, and a single snapshot (undo point) for the whole batch. `effect` and plugin `onChange` still fire per mutation.
+- **`onPluginError` option** — receives `(error, pluginName, hook)` when a plugin hook throws; defaults to `console.error`.
+- **`PersistOptions.onError` and `AnalyticsOptions.onError`** — surface storage and sink failures instead of letting them escape.
+- **New exports** — `UndoRedoOptions`, `ValidationResult`, `PluginHook`, and the `PersistPluginInstance`, `AutosavePluginInstance`, `AnalyticsPluginInstance` types.
+
+### Fixed
+
+- **Snapshots destroyed `Map`, `Set` and `RegExp`** — `deepClone` rebuilt them with `Object.create` plus own keys, producing objects that passed `instanceof` but threw on every method call (`clonedMap.get(k)` → `TypeError: called on incompatible receiver`). They are now reconstructed properly, and `Error`, `Promise`, `WeakMap`/`WeakSet`, `ArrayBuffer` and typed arrays are carried by reference instead of being mangled.
+- **Circular state crashed the clone** — a self-referencing object caused unbounded recursion during snapshot; already-cloned objects are now reused.
+- **Getters were flattened into values** by cloning; accessor descriptors are now preserved.
+- **`destroy()` leaked async validations** — despite being documented as cancelling them, it only called plugin `destroy` hooks. It now cancels in-flight and debounced async validations, clears the pending validation timer, ignores later mutations, and is safe to call twice.
+- **Rollback left keys added after the snapshot** — `rollback()`/`reset()` merged the snapshot over live state; keys that did not exist in the snapshot are now removed.
+- **A throwing plugin aborted the mutation** and skipped every later plugin; hooks are now isolated and reported through `onPluginError`.
+- **`redo()` wiped the rest of the redo stack** — applying a redo fired `onChange`, which cleared the stack, so only the first redo of a chain worked. Consecutive redos now step back correctly, each keeping its own snapshot.
+- **`analyticsPlugin` always reported `hasErrors: true`** — it checked `errors !== undefined`, which is true on every pass whenever a validator exists; it now inspects the actual error leaves. `redact` also covers nested paths (`redact: ['user']` redacts `user.ssn`), and a rejected `onFlush` no longer becomes an unhandled rejection.
+- **`persistPlugin` could throw out of a timer** — `JSON.stringify` and `setItem` ran unguarded, so a `QuotaExceededError` escaped asynchronously.
+- **`autosavePlugin` dropped overlapping saves** — a save requested while another was in flight was discarded; it now runs once the current one settles.
+- **`syncPlugin` dropped the newest inbound update** — messages arriving inside the throttle window were discarded, losing the final state. Bursts now collapse to the last payload, applied when the window closes.
+- **`decimal()` miscounted exponential notation** — `1e-7` counted as 0 decimal places.
+- **`multipleOf()`/`step()` failed on floats** — `0.3` was reported as not a multiple of `0.1` due to exact modulo; comparison is now epsilon-tolerant, and a zero divisor is rejected.
+- **Array item comparison collided across types** — `unique()`, `includes()`, `includesAny()` and `includesAll()` keyed items with `String()`/`JSON.stringify`, so `1` matched `'1'`, `null` matched `'null'`, and `{a:1,b:2}` differed from `{b:2,a:1}`. Keys are now type-tagged with stable key ordering, and `Date` values compare by time.
+
+### Internal
+
+- Shared helpers moved to `src/internal/` (`clone.ts`, `paths.ts`, `errors.ts`), removing five duplicated copies of `deepClone`, `DANGEROUS_KEYS`, `getValueAtPath` and `setValueAtPath` — one of which (in `undoRedoPlugin`) was missing the prototype-pollution guard entirely.
+
 ## [1.5.6] - 2026-07-31
 
 ### Changed
