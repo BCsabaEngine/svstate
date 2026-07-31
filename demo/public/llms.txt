@@ -2,6 +2,8 @@
 
 Interactive demo app showcasing svstate features - a Svelte 5 library for deep reactive state with validation, snapshot/undo, and side effects.
 
+Every page's "Fill with Valid Data" button uses `batch()` to set all its fields as one unit — one validation pass and, on pages with an effect-driven `snapshot()` call (SnapshotDemo, PluginUndoRedo, PluginDevtools, PluginAutosaveAnalytics), a single undo point for the whole fill instead of one per field.
+
 ## Demo Pages
 
 ### BasicValidation
@@ -196,9 +198,9 @@ const {
 
 ### SnapshotDemo
 
-Shows snapshot creation for undo functionality with rollback() support.
+Shows snapshot creation for undo functionality with rollback() support, and batch() for grouping several field changes into one undo point.
 
-**APIs:** createSvState(), snapshot(), rollback(), reset()
+**APIs:** createSvState(), snapshot(), rollback(), rollbackTo(), reset(), batch()
 **Stores:** errors, hasErrors, isDirty, snapshots
 
 ```typescript
@@ -212,21 +214,38 @@ const sourceData = {
 
 const {
   data,
+  batch,
   reset,
   rollback,
+  rollbackTo,
   state: { errors, hasErrors, isDirty, snapshots }
-} = createSvState(sourceData, {
-  validator: (source) => ({
-    firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
-    lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
-    email: stringValidator(source.email).prepare('trim').required().email().getError(),
-    phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
-    bio: stringValidator(source.bio).maxLength(200).getError()
-  }),
-  effect: ({ snapshot, property }) => {
-    snapshot(`Changed ${property}`);
-  }
-});
+} = createSvState(
+  sourceData,
+  {
+    validator: (source) => ({
+      firstName: stringValidator(source.firstName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+      lastName: stringValidator(source.lastName).prepare('trim').required().minLength(2).maxLength(30).getError(),
+      email: stringValidator(source.email).prepare('trim').required().email().getError(),
+      phone: stringValidator(source.phone).prepare('trim').required().minLength(10).getError(),
+      bio: stringValidator(source.bio).maxLength(200).getError()
+    }),
+    effect: ({ snapshot, property }) => {
+      snapshot(`Changed ${property}`);
+    }
+  },
+  { maxSnapshots: 5 }
+);
+
+// batch() applies several field changes as one unit: the effect still fires
+// per field, but the snapshot() calls it makes collapse into ONE snapshot,
+// titled after the first field touched — one undo point for the whole fill.
+const fillWithValidData = () => {
+  batch((draft) => {
+    draft.firstName = 'John';
+    draft.lastName = 'Doe';
+    draft.email = 'john.doe@example.com';
+  });
+};
 ```
 
 ```svelte
@@ -237,6 +256,9 @@ const {
 
 <!-- Rollback multiple steps -->
 <button onclick={() => rollback(3)}>Undo 3 Changes</button>
+
+<!-- Roll back to a named snapshot -->
+<button onclick={() => rollbackTo('Initial')}>Rollback To Initial</button>
 
 <!-- Reset to initial state -->
 <button onclick={reset}>Reset All</button>
@@ -344,13 +366,13 @@ const {
 
 ### OptionsDemo
 
-Interactive playground for configuring createSvState options like debouncing and error persistence.
+Interactive playground for configuring createSvState options like debouncing and error persistence, plus a validate() control that shows sync validation bypassing the debounce.
 
-**APIs:** createSvState() with options parameter
+**APIs:** createSvState() with options parameter, validate()
 **Options:** resetDirtyOnAction, debounceValidation, persistActionError
 
 ```typescript
-const { data, execute, state } = createSvState(
+const { data, execute, validate, state } = createSvState(
   sourceData,
   {
     validator: (source) => ({ /* ... */ }),
@@ -382,6 +404,12 @@ const { data, execute, state } = createSvState(
 // persistActionError behavior
 // With false (default): actionError clears when data changes
 // With true: actionError remains until next execute() call
+
+// validate() bypasses the debounce entirely — useful right before submit
+// even when debounceValidation is set to something long like 5000
+const handleValidateNow = () => {
+  const { errors, hasErrors } = validate();
+};
 ```
 
 ---
@@ -535,18 +563,23 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(createSour
 
 ### PluginDevtools
 
-Shows devtoolsPlugin console logging and a custom log-mirror plugin that captures all lifecycle events in-page.
+Shows devtoolsPlugin console logging, a custom log-mirror plugin that captures all lifecycle events in-page, and onPluginError demonstrating that a throwing plugin hook is isolated (caught, doesn't abort the mutation or block other plugins).
 
-**APIs:** createSvState(), devtoolsPlugin(), custom SvStatePlugin
+**APIs:** createSvState(), devtoolsPlugin(), custom SvStatePlugin, onPluginError option
 **Stores:** errors, hasErrors, isDirty, snapshots, actionInProgress
 
 ```typescript
 import { createSvState, devtoolsPlugin, type SvStatePlugin, type ChangeEvent } from 'svstate';
 
+let simulatePluginError = false;
+
 // Custom plugin that mirrors events to an in-page log
 const logMirrorPlugin: SvStatePlugin<State> = {
   name: 'log-mirror',
   onChange(event: ChangeEvent<State>) {
+    // A "Simulate plugin error" checkbox makes this hook throw on demand,
+    // to demonstrate plugin isolation without breaking the rest of the demo
+    if (simulatePluginError) throw new Error(`Simulated failure while mirroring "${event.property}"`);
     addLog('change', `${event.property}: "${event.oldValue}" → "${event.currentValue}"`);
   },
   onValidation(errors) {
@@ -579,7 +612,11 @@ const { data, execute, reset, rollback, state } = createSvState(
         logValidation: true   // Also log validation events
       }),
       logMirrorPlugin
-    ]
+    ],
+    // A throwing plugin hook doesn't abort the mutation — it's caught here
+    onPluginError: (error, pluginName, hook) => {
+      lastPluginError = `[${pluginName}/${hook}] ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
 );
 ```
@@ -588,7 +625,7 @@ const { data, execute, reset, rollback, state } = createSvState(
 
 ### PluginPersistSync
 
-Settings form with persistPlugin (localStorage) and syncPlugin (cross-tab sync via BroadcastChannel).
+Settings form with persistPlugin (localStorage) and syncPlugin (cross-tab sync via BroadcastChannel). Restored state becomes the new baseline — isDirty is false and reset() returns to the restored values, not the pre-restore defaults.
 
 **APIs:** createSvState(), persistPlugin(), syncPlugin()
 **Stores:** errors, hasErrors, isDirty
@@ -599,7 +636,11 @@ import { createSvState, persistPlugin, syncPlugin } from 'svstate';
 const persist = persistPlugin({
   key: 'svstate-demo-settings',
   throttle: 300,
-  exclude: ['notifications']  // Don't persist this field
+  exclude: ['notifications'], // Don't persist this field
+  onError: (error) => {
+    // Storage write failures (e.g. QuotaExceededError), surfaced in the sidebar
+    lastPersistError = error instanceof Error ? error.message : String(error);
+  }
 });
 
 const sync = syncPlugin({
@@ -688,7 +729,11 @@ const analytics = analyticsPlugin({
   },
   batchSize: 10,        // Flush after 10 events
   flushInterval: 10000, // Or every 10 seconds
-  include: ['change', 'action', 'snapshot']  // Filter event types
+  include: ['change', 'action', 'snapshot'],  // Filter event types
+  onError: (error) => {
+    // onFlush threw or rejected, surfaced in the sidebar
+    lastAnalyticsError = error instanceof Error ? error.message : String(error);
+  }
 });
 
 const { data, execute, state } = createSvState(
