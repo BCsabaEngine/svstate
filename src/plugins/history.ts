@@ -1,45 +1,20 @@
+import { asRecord, DANGEROUS_KEYS, getMatchingPaths, getValueAtPath, setValueAtPath } from '../internal/paths';
 import type { PluginContext, SvStatePlugin } from '../plugin';
-
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export type HistoryOptions = {
   fields: Record<string, string>;
   mode?: 'push' | 'replace';
   deserialize?: (parameter: string, field: string) => unknown;
   serialize?: (value: unknown, field: string) => string;
+  onError?: (error: unknown) => void;
 };
 
 export type HistoryPluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
   syncFromUrl(): void;
 };
 
-const isNullOrUndefined = (value: unknown): boolean => value === undefined || value === null;
-
 const defaultSerialize: (value: unknown, field: string) => string = String;
 const defaultDeserialize: (parameter: string, field: string) => unknown = (parameter) => parameter;
-
-const getValueAtPath = (source: Record<string, unknown>, path: string): unknown => {
-  const parts = path.split('.');
-  let current: unknown = source;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-};
-
-const setValueAtPath = (target: Record<string, unknown>, path: string, value: unknown): void => {
-  const parts = path.split('.');
-  let current: Record<string, unknown> = target;
-  for (let index = 0; index < parts.length - 1; index++) {
-    const part = parts[index]!;
-    if (DANGEROUS_KEYS.has(part)) return;
-    if (current[part] === undefined || current[part] === null) current[part] = {};
-    current = current[part] as Record<string, unknown>;
-  }
-  const lastPart = parts.at(-1)!;
-  if (!DANGEROUS_KEYS.has(lastPart)) current[lastPart] = value;
-};
 
 export function historyPlugin<T extends Record<string, unknown>>(options: HistoryOptions): HistoryPluginInstance<T> {
   const mode = options.mode ?? 'replace';
@@ -55,9 +30,12 @@ export function historyPlugin<T extends Record<string, unknown>>(options: Histor
     for (const [stateField, urlParameter] of Object.entries(options.fields)) {
       if (stateField.split('.').some((part) => DANGEROUS_KEYS.has(part))) continue;
       const parameterValue = parameters.get(urlParameter);
-      if (parameterValue !== null) {
-        const value = deserialize(parameterValue, stateField);
-        setValueAtPath(context.data as unknown as Record<string, unknown>, stateField, value);
+      if (parameterValue === null) continue;
+      try {
+        setValueAtPath(asRecord(context.data), stateField, deserialize(parameterValue, stateField));
+      } catch (error) {
+        // A throwing user deserializer must not break the remaining fields, nor escape popstate
+        options.onError?.(error);
       }
     }
   };
@@ -67,11 +45,16 @@ export function historyPlugin<T extends Record<string, unknown>>(options: Histor
     const urlParameter = options.fields[stateField];
     if (!urlParameter) return;
 
-    const value = getValueAtPath(context.data as unknown as Record<string, unknown>, stateField);
+    const value = getValueAtPath(asRecord(context.data), stateField);
     const url = new URL(window.location.href);
 
-    if (value === '' || isNullOrUndefined(value)) url.searchParams.delete(urlParameter);
-    else url.searchParams.set(urlParameter, serialize(value, stateField));
+    try {
+      if (value === '' || value == undefined) url.searchParams.delete(urlParameter);
+      else url.searchParams.set(urlParameter, serialize(value, stateField));
+    } catch (error) {
+      options.onError?.(error);
+      return;
+    }
 
     if (mode === 'push') window.history.pushState({}, '', url.href);
     else window.history.replaceState({}, '', url.href);
@@ -91,7 +74,10 @@ export function historyPlugin<T extends Record<string, unknown>>(options: Histor
     },
 
     onChange(event) {
-      if (Object.hasOwn(options.fields, event.property)) updateUrl(event.property);
+      // Dotted fields must react both ways: replacing `filters` affects the registered
+      // `filters.q`, and mutating `filters.q` affects a registered `filters`.
+      const affectedFields = getMatchingPaths(Object.keys(options.fields), event.property);
+      for (const stateField of affectedFields) updateUrl(stateField);
     },
 
     destroy() {

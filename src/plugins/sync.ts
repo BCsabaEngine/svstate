@@ -1,9 +1,6 @@
+import { asRecord, isPlainObject, safeMerge } from '../internal/paths';
+import { createDebouncer } from '../internal/timers';
 import type { PluginContext, SvStatePlugin } from '../plugin';
-
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const MAX_SYNC_DEPTH = 10;
 
@@ -13,14 +10,11 @@ const isWithinDepthLimit = (value: unknown, depth = 0): boolean => {
   return Object.values(value).every((v) => isWithinDepthLimit(v, depth + 1));
 };
 
-const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
-  for (const [key, value] of Object.entries(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = value;
-};
-
 export type SyncOptions = {
   key: string;
   throttle?: number;
   merge?: 'overwrite' | 'ignore';
+  onError?: (error: unknown) => void;
 };
 
 export type SyncPluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
@@ -34,24 +28,62 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
   let channel: BroadcastChannel | undefined;
   let context: PluginContext<T> | undefined;
   let isReceiving = false;
-  let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
   let lastReceivedAt = 0;
+  let pendingIncoming: Record<string, unknown> | undefined;
+  let incomingTimeout: ReturnType<typeof setTimeout> | undefined;
 
   const broadcast = () => {
     if (!channel || !context) return;
-    // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone fails on Svelte reactive proxies
-    const cloned = JSON.parse(JSON.stringify(context.data)) as T;
+    try {
+      // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone fails on Svelte reactive proxies
+      const cloned = JSON.parse(JSON.stringify(context.data)) as T;
 
-    channel.postMessage({ type: 'sync', data: cloned });
+      channel.postMessage({ type: 'sync', data: cloned });
+    } catch (error) {
+      // Circular structures, BigInt, a closed channel — never throw out of a timer
+      options.onError?.(error);
+    }
   };
 
-  const scheduleBroadcast = () => {
-    clearTimeout(pendingTimeout);
-    pendingTimeout = setTimeout(broadcast, throttleMs);
+  const broadcaster = createDebouncer(broadcast, throttleMs);
+
+  const applyIncoming = (payload: Record<string, unknown>) => {
+    if (!context) return;
+    isReceiving = true;
+    try {
+      safeMerge(asRecord(context.data), payload);
+    } finally {
+      isReceiving = false;
+    }
+  };
+
+  // Throttle inbound messages without dropping the newest one: bursts collapse to the last payload,
+  // which is applied when the window closes.
+  const queueIncoming = (payload: Record<string, unknown>) => {
+    const elapsed = Date.now() - lastReceivedAt;
+    if (elapsed >= throttleMs) {
+      lastReceivedAt = Date.now();
+      applyIncoming(payload);
+      return;
+    }
+
+    pendingIncoming = payload;
+    if (incomingTimeout !== undefined) return;
+    incomingTimeout = setTimeout(() => {
+      incomingTimeout = undefined;
+      const next = pendingIncoming;
+      pendingIncoming = undefined;
+      if (!next) return;
+      lastReceivedAt = Date.now();
+      applyIncoming(next);
+    }, throttleMs - elapsed);
   };
 
   const closeChannel = () => {
-    clearTimeout(pendingTimeout);
+    broadcaster.cancel();
+    clearTimeout(incomingTimeout);
+    incomingTimeout = undefined;
+    pendingIncoming = undefined;
     if (channel) {
       channel.close();
       channel = undefined;
@@ -70,22 +102,16 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
         if (!context || merge === 'ignore') return;
         if (event.data?.type !== 'sync') return;
 
-        const now = Date.now();
-        if (now - lastReceivedAt < throttleMs) return;
-        lastReceivedAt = now;
-
         if (!isPlainObject(event.data.data)) return;
         if (!isWithinDepthLimit(event.data.data)) return;
 
-        isReceiving = true;
-        safeMerge(context.data as unknown as Record<string, unknown>, event.data.data);
-        isReceiving = false;
+        queueIncoming(event.data.data);
       });
     },
 
     onChange() {
       if (isReceiving) return;
-      scheduleBroadcast();
+      broadcaster.schedule();
     },
 
     destroy() {

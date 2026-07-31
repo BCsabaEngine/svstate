@@ -48,6 +48,7 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty }
 	} = createSvState(createSourceData(), {
 		validator: (source) => ({
@@ -63,9 +64,11 @@
 	});
 
 	const fillWithValidData = () => {
-		data.productName = `Widget ${randomId()}`;
-		data.item.unitPrice = randomInt(10, 100);
-		data.item.quantity = randomInt(1, 10);
+		batch((draft) => {
+			draft.productName = `Widget ${randomId()}`;
+			draft.item.unitPrice = randomInt(10, 100);
+			draft.item.quantity = randomInt(1, 10);
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -103,7 +106,7 @@ const createSourceData = (): SourceData => ({
   }
 });`;
 
-	const stateSourceCode = `const { data, state: { errors, hasErrors, isDirty } } = createSvState(createSourceData(), {
+	const stateSourceCode = `const { data, batch, state: { errors, hasErrors, isDirty } } = createSvState(createSourceData(), {
   validator: (source) => ({
     productName: stringValidator(source.productName).prepare('trim').required().minLength(2).getError(),
     item: {
@@ -116,6 +119,13 @@ const createSourceData = (): SourceData => ({
       data.calculateTotals();  // Call method on state object!
     }
   }
+});`;
+
+	const batchSourceCode = `// One validation pass for the whole fill
+batch((draft) => {
+  draft.productName = 'Widget';
+  draft.item.unitPrice = 42;
+  draft.item.quantity = 3;
 });`;
 
 	const templateSourceCode = `<!-- Use class methods for formatting -->
@@ -200,6 +210,7 @@ const createSourceData = (): SourceData => ({
 		<SourceCodeSection>
 			<CodeBlock code={declarationSourceCode} title="Class Definition" />
 			<CodeBlock code={stateSourceCode} title="State Setup with Class Instance" />
+			<CodeBlock code={batchSourceCode} title="Batching Item Field Updates" />
 			<CodeBlock code={templateSourceCode} title="Template Usage" />
 		</SourceCodeSection>
 	{/snippet}

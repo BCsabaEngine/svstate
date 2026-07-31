@@ -1,6 +1,6 @@
 {
   "name": "svstate",
-  "version": "1.5.6",
+  "version": "2.0.0",
   "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
   "author": "BCsabaEngine",
   "license": "ISC",
@@ -37,7 +37,7 @@
     "clean": "tsc --build --clean",
     "build": "tsc --build --clean && tsc --build --force",
     "format:check": "prettier --check .",
-    "format:fix": "prettier --write . | grep -v 'unchanged' | sed G",
+    "format:fix": "prettier --write --list-different .",
     "lint:check": "eslint .",
     "lint:fix": "eslint --fix .",
     "fix": "node --run format:fix && node --run lint:fix && node --run format:fix",

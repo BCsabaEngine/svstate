@@ -1,3 +1,5 @@
+import { get } from 'svelte/store';
+
 import { persistPlugin } from '../src/plugins/persist';
 import { createSvState } from '../src/state.svelte';
 
@@ -139,5 +141,134 @@ describe('persistPlugin', () => {
     // onReset fires writeToStorage synchronously
     const stored = JSON.parse(storage.getItem('test')!);
     expect(stored.data.name).toBe('initial');
+  });
+});
+
+describe('persistPlugin hydration baseline', () => {
+  it('should not mark restored fields dirty', () => {
+    const storage = createMockStorage();
+    storage.setItem('form', JSON.stringify({ version: 1, data: { name: 'restored' } }));
+
+    const { data, state } = createSvState(
+      { name: 'default' },
+      {},
+      {
+        plugins: [persistPlugin({ key: 'form', storage })]
+      }
+    );
+
+    expect(data.name).toBe('restored');
+    expect(get(state.isDirty)).toBe(false);
+    expect(get(state.isDirtyByField)).toEqual({});
+  });
+
+  it('should reset to the restored values, not the pre-restore defaults', () => {
+    const storage = createMockStorage();
+    storage.setItem('form', JSON.stringify({ version: 1, data: { name: 'restored' } }));
+
+    const { data, reset, state } = createSvState(
+      { name: 'default' },
+      {},
+      {
+        plugins: [persistPlugin({ key: 'form', storage })]
+      }
+    );
+
+    data.name = 'edited';
+    reset();
+
+    expect(data.name).toBe('restored');
+    expect(get(state.snapshots)[0]?.data).toEqual({ name: 'restored' });
+  });
+
+  it('should report storage failures through onError instead of throwing', () => {
+    const errors: unknown[] = [];
+    const failingStorage = {
+      // eslint-disable-next-line unicorn/no-null
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+      removeItem: () => {}
+    };
+
+    const { data, destroy } = createSvState(
+      { name: 'a' },
+      {},
+      {
+        plugins: [
+          persistPlugin({
+            key: 'form',
+            storage: failingStorage,
+            throttle: 0,
+            onError: (error) => {
+              errors.push(error);
+            }
+          })
+        ]
+      }
+    );
+
+    data.name = 'b';
+    expect(() => destroy()).not.toThrow();
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('QuotaExceededError');
+  });
+
+  it('should write only once when destroy is called twice', () => {
+    const storage = createMockStorage();
+    let writes = 0;
+    const countingStorage = {
+      ...storage,
+      setItem: (key: string, value: string) => {
+        writes++;
+        storage.setItem(key, value);
+      }
+    };
+
+    const persist = persistPlugin({ key: 'test', storage: countingStorage, throttle: 50 });
+    const { data } = createSvState({ name: 'a' }, undefined, { plugins: [persist] });
+
+    data.name = 'b';
+
+    // createSvState.destroy() is idempotent, so the plugin hook is exercised directly here
+    persist.destroy?.();
+    expect(writes).toBe(1);
+
+    persist.destroy?.();
+    expect(writes).toBe(1);
+  });
+
+  it('should not write on destroy when nothing changed', () => {
+    const storage = createMockStorage();
+    let writes = 0;
+    const countingStorage = {
+      ...storage,
+      setItem: (key: string, value: string) => {
+        writes++;
+        storage.setItem(key, value);
+      }
+    };
+
+    const persist = persistPlugin({ key: 'test', storage: countingStorage, throttle: 50 });
+    const { destroy } = createSvState({ name: 'a' }, undefined, { plugins: [persist] });
+
+    destroy();
+    expect(writes).toBe(0);
+  });
+
+  it('should keep the pending write when destroy runs before the throttle elapses', async () => {
+    const storage = createMockStorage();
+    const persist = persistPlugin({ key: 'test', storage, throttle: 50 });
+    const { data, destroy } = createSvState({ name: 'a' }, undefined, { plugins: [persist] });
+
+    data.name = 'flushed';
+    destroy();
+
+    expect(JSON.parse(storage.getItem('test')!).data.name).toBe('flushed');
+
+    // The cancelled timer must not fire a second write afterwards
+    await new Promise((r) => setTimeout(r, 80));
+    expect(JSON.parse(storage.getItem('test')!).data.name).toBe('flushed');
   });
 });

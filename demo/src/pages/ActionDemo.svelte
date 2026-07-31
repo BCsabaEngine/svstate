@@ -6,6 +6,7 @@
 	import FormField from '$components/FormField.svelte';
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
+	import Spinner from '$components/Spinner.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
 	import { randomId, randomInt } from '$lib/utilities';
 
@@ -19,6 +20,7 @@
 
 	const {
 		data,
+		batch,
 		execute,
 		state: { errors, hasErrors, isDirty, actionInProgress, actionError }
 	} = createSvState(sourceData, {
@@ -45,8 +47,10 @@
 	});
 
 	const fillWithValidData = () => {
-		data.title = `Task ${randomId()}`;
-		data.description = `This is a sample task description with ID ${randomId()}`;
+		batch((draft) => {
+			draft.title = `Task ${randomId()}`;
+			draft.description = `This is a sample task description with ID ${randomId()}`;
+		});
 	};
 
 	const handleSubmit = () => {
@@ -57,7 +61,7 @@
 	// ─────────────────────────────────────────────
 	// Source code examples for the collapsible section
 	// ─────────────────────────────────────────────
-	const stateSourceCode = `const { data, execute, state: { errors, hasErrors, isDirty, actionInProgress, actionError } } =
+	const stateSourceCode = `const { data, batch, execute, state: { errors, hasErrors, isDirty, actionInProgress, actionError } } =
   createSvState(sourceData, {
     validator: (source) => ({
       title: stringValidator(source.title).prepare('trim').required().minLength(3).maxLength(50).getError(),
@@ -77,6 +81,14 @@
       console.log(error ? 'Action failed' : 'Action succeeded');
     }
   });`;
+
+	const batchSourceCode = `// One validation pass for the whole fill
+const fillWithValidData = () => {
+  batch((draft) => {
+    draft.title = 'Task 1';
+    draft.description = 'A sample task description.';
+  });
+};`;
 
 	const executeSourceCode = `// Execute the action
 <button onclick={() => execute()} disabled={$hasErrors || $actionInProgress}>
@@ -186,14 +198,7 @@ execute({ userId: 123 });`;
 			>
 				{#if $actionInProgress}
 					<span class="inline-flex items-center gap-2">
-						<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path
-								class="opacity-75"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								fill="currentColor"
-							></path>
-						</svg>
+						<Spinner />
 						Submitting...
 					</span>
 				{:else}
@@ -204,22 +209,23 @@ execute({ userId: 123 });`;
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-80">
-			<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData} />
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Action State</h6>
-				<div class="space-y-1 text-xs text-gray-600">
-					<div><span class="font-medium">actionInProgress:</span> {$actionInProgress}</div>
-					<div><span class="font-medium">actionError:</span> {$actionError?.message ?? 'none'}</div>
+		<DemoSidebar {data} errors={$errors} hasErrors={$hasErrors} isDirty={$isDirty} onFill={fillWithValidData}>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Action State</h6>
+					<div class="space-y-1 text-xs text-gray-600">
+						<div><span class="font-medium">actionInProgress:</span> {$actionInProgress}</div>
+						<div><span class="font-medium">actionError:</span> {$actionError?.message ?? 'none'}</div>
+					</div>
 				</div>
-			</div>
-		</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Action" />
+			<CodeBlock code={batchSourceCode} title="Batching Fill Updates" />
 			<CodeBlock code={executeSourceCode} title="Execute Action" />
 			<CodeBlock code={errorSourceCode} title="Error & Loading States" />
 		</SourceCodeSection>

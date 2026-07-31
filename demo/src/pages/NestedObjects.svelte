@@ -32,6 +32,7 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty, isDirtyByField }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
@@ -53,14 +54,16 @@
 	});
 
 	const fillWithValidData = () => {
-		data.name = `John ${randomId()}`;
-		data.address.street = `${randomInt(100, 9999)} Main Street`;
-		data.address.city = 'New York';
-		data.address.zip = String(randomInt(10_000, 99_999));
-		data.company.name = `Acme ${randomId()} Inc`;
-		data.company.department = 'Engineering';
-		data.company.contact.phone = `555-${randomInt(100, 999)}-${randomInt(1000, 9999)}`;
-		data.company.contact.email = `contact@${randomId()}.com`;
+		batch((draft) => {
+			draft.name = `John ${randomId()}`;
+			draft.address.street = `${randomInt(100, 9999)} Main Street`;
+			draft.address.city = 'New York';
+			draft.address.zip = String(randomInt(10_000, 99_999));
+			draft.company.name = `Acme ${randomId()} Inc`;
+			draft.company.department = 'Engineering';
+			draft.company.contact.phone = `555-${randomInt(100, 999)}-${randomInt(1000, 9999)}`;
+			draft.company.contact.email = `contact@${randomId()}.com`;
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -76,7 +79,7 @@
   }
 };
 
-const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
   validator: (source) => ({
     name: stringValidator(source.name).prepare('trim').required().minLength(2).maxLength(50).getError(),
     address: {
@@ -93,6 +96,16 @@ const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSv
       }
     }
   })
+});`;
+
+	const batchSourceCode = `// batch() runs validation once for the whole nested fill,
+// instead of once per touched field (8 fields here)
+batch((draft) => {
+  draft.name = 'John Doe';
+  draft.address.street = '123 Main Street';
+  draft.address.city = 'New York';
+  draft.company.contact.email = 'contact@acme.com';
+  // ...
 });`;
 
 	const formSourceCode = `<!-- 2-level nested binding -->
@@ -226,6 +239,7 @@ const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSv
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Nested Validation" />
+			<CodeBlock code={batchSourceCode} title="Batching Nested Field Updates" />
 			<CodeBlock code={formSourceCode} title="Nested Form Binding Examples" />
 		</SourceCodeSection>
 	{/snippet}

@@ -11,7 +11,7 @@
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
-	import { randomId } from '$lib/utilities';
+	import { formatFieldName, randomId } from '$lib/utilities';
 
 	const undoRedo = undoRedoPlugin<{
 		title: string;
@@ -19,12 +19,9 @@
 		priority: string;
 	}>();
 
-	const formatFieldName = (property: string) => {
-		return property.charAt(0).toUpperCase() + property.slice(1).replaceAll(/([A-Z])/g, ' $1');
-	};
-
 	const {
 		data,
+		batch,
 		reset,
 		rollback,
 		state: { errors, hasErrors, isDirty, snapshots }
@@ -44,9 +41,11 @@
 	);
 
 	const fillWithValidData = () => {
-		data.title = `Project Report ${randomId()}`;
-		data.content = 'This is a detailed document with enough content to pass validation requirements.';
-		data.priority = 'high';
+		batch((draft) => {
+			draft.title = `Project Report ${randomId()}`;
+			draft.content = 'This is a detailed document with enough content to pass validation requirements.';
+			draft.priority = 'high';
+		});
 	};
 
 	let redoStack = $state(get(undoRedo.redoStack));
@@ -72,6 +71,14 @@ const { data, reset, rollback, state } = createSvState(
   },
   { maxSnapshots: 10, plugins: [undoRedo] }
 );`;
+
+	const batchSourceCode = `// Effect-driven snapshots collapse into one for the whole batch
+batch((draft) => {
+  draft.title = 'Project Report';
+  draft.content = 'Detailed document content.';
+  draft.priority = 'high';
+});
+// Result: one new snapshot, not three`;
 
 	const usageSourceCode = `// Undo (built-in rollback)
 rollback();
@@ -169,61 +176,62 @@ undoRedo.redoStack; // Readable<Snapshot[]>`;
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-96">
-			<DemoSidebar
-				{data}
-				errors={$errors}
-				hasErrors={$hasErrors}
-				isDirty={$isDirty}
-				onFill={fillWithValidData}
-				width="xl:w-96"
-			/>
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+			width="xl:w-96"
+		>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Snapshot History</h6>
+					{#if $snapshots.length === 0}
+						<p class="text-xs text-gray-500">No snapshots yet</p>
+					{:else}
+						<ul class="max-h-48 space-y-1 overflow-y-auto">
+							{#each $snapshots as snap, index}
+								<li class="flex items-center gap-2 text-xs text-gray-600">
+									<span
+										class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-200 text-xs font-medium text-purple-800"
+									>
+										{index + 1}
+									</span>
+									<span class="truncate">{snap.title}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
 
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Snapshot History</h6>
-				{#if $snapshots.length === 0}
-					<p class="text-xs text-gray-500">No snapshots yet</p>
-				{:else}
-					<ul class="max-h-48 space-y-1 overflow-y-auto">
-						{#each $snapshots as snap, index}
-							<li class="flex items-center gap-2 text-xs text-gray-600">
-								<span
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-200 text-xs font-medium text-purple-800"
-								>
-									{index + 1}
-								</span>
-								<span class="truncate">{snap.title}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<h6 class="mb-2 text-sm font-medium text-gray-700">Redo Stack</h6>
-				{#if redoStack.length === 0}
-					<p class="text-xs text-gray-500">No redo entries — undo something first</p>
-				{:else}
-					<ul class="max-h-48 space-y-1 overflow-y-auto">
-						{#each redoStack as snap, index}
-							<li class="flex items-center gap-2 text-xs text-gray-600">
-								<span
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-200 text-xs font-medium text-blue-800"
-								>
-									{index + 1}
-								</span>
-								<span class="truncate">{snap.title}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">Redo Stack</h6>
+					{#if redoStack.length === 0}
+						<p class="text-xs text-gray-500">No redo entries — undo something first</p>
+					{:else}
+						<ul class="max-h-48 space-y-1 overflow-y-auto">
+							{#each redoStack as snap, index}
+								<li class="flex items-center gap-2 text-xs text-gray-600">
+									<span
+										class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-200 text-xs font-medium text-blue-800"
+									>
+										{index + 1}
+									</span>
+									<span class="truncate">{snap.title}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={setupSourceCode} title="Setup with undoRedoPlugin" />
+			<CodeBlock code={batchSourceCode} title="Batching Fill Updates" />
 			<CodeBlock code={usageSourceCode} title="Undo/Redo Usage" />
 		</SourceCodeSection>
 	{/snippet}

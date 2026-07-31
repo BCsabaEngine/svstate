@@ -1,5 +1,8 @@
 import { derived, get, type Readable, writable } from 'svelte/store';
 
+import { deepClone } from './internal/clone';
+import { hasAnyErrors, toError } from './internal/errors';
+import { getMatchingPaths, getValueAtPath, isPlainObject } from './internal/paths';
 import type { SvStatePlugin } from './plugin';
 import { ChangeProxy } from './proxy';
 
@@ -38,6 +41,11 @@ export type DirtyFields = {
   [propertyPath: string]: boolean;
 };
 
+export type ValidationResult<V> = {
+  errors: V | undefined;
+  hasErrors: boolean;
+};
+
 type Actuators<T extends Record<string, unknown>, V extends Validator, P extends object> = {
   validator?: (source: T) => V;
   effect?: (context: EffectContext<T>) => void;
@@ -46,7 +54,7 @@ type Actuators<T extends Record<string, unknown>, V extends Validator, P extends
   asyncValidator?: AsyncValidator<T>;
 };
 
-type StateResult<T, V> = {
+export type StateResult<T, V> = {
   errors: Readable<V | undefined>;
   hasErrors: Readable<boolean>;
   isDirty: Readable<boolean>;
@@ -60,62 +68,23 @@ type StateResult<T, V> = {
   hasCombinedErrors: Readable<boolean>;
 };
 
-// Helpers
-const hasValidatorErrors = (validator: Validator): boolean =>
-  Object.values(validator).some((item) => (typeof item === 'string' ? !!item : hasValidatorErrors(item)));
-const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && hasValidatorErrors($errors);
-
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-const deepClone = <T>(object: T): T => {
-  if (object === null || typeof object !== 'object') return object;
-  if (object instanceof Date) return new Date(object) as T;
-  if (Array.isArray(object)) return object.map((item) => deepClone(item)) as T;
-  const cloned = Object.create(Object.getPrototypeOf(object)) as T;
-  for (const key of Object.keys(object))
-    if (!DANGEROUS_KEYS.has(key)) cloned[key as keyof T] = deepClone(object[key as keyof T]);
-  return cloned;
-};
-
 // Async validation helpers
-const getValueAtPath = <T>(source: T, path: string): unknown => {
-  const parts = path.split('.');
-  let current: unknown = source;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
-};
-
+// Walks only through objects on purpose: a string ancestor means the error sits above this
+// path, not on it, and indexing into that string would yield a bogus single-character "error"
 const getSyncErrorForPath = (errors: Validator | undefined, path: string): string => {
-  if (!errors) return '';
-  const parts = path.split('.');
-  let current: string | Validator = errors;
-  for (const part of parts) {
-    if (typeof current === 'string') return '';
-    if (current[part] === undefined) return '';
+  let current: unknown = errors;
+  for (const part of path.split('.')) {
+    if (!isPlainObject(current)) return '';
     current = current[part];
   }
   return typeof current === 'string' ? current : '';
 };
 
-const getMatchingAsyncValidatorPaths = <T>(asyncValidator: AsyncValidator<T>, changedPath: string): string[] => {
-  const matches: string[] = [];
-  for (const registeredPath of Object.keys(asyncValidator))
-    // Exact match, changed path is a prefix of registered path, or changed path is nested
-    // within registered path (e.g., validator for 'user', changed 'user.name')
-    if (
-      registeredPath === changedPath ||
-      registeredPath.startsWith(changedPath + '.') ||
-      changedPath.startsWith(registeredPath + '.')
-    )
-      matches.push(registeredPath);
-
-  return matches;
-};
+const INITIAL_SNAPSHOT_TITLE = 'Initial';
 
 // Options
+export type PluginHook = Exclude<keyof SvStatePlugin<Record<string, unknown>>, 'name'>;
+
 export type SvStateOptions = {
   resetDirtyOnAction: boolean;
   debounceValidation: number;
@@ -126,6 +95,7 @@ export type SvStateOptions = {
   clearAsyncErrorsOnChange: boolean;
   maxConcurrentAsyncValidations: number;
   maxSnapshots: number;
+  onPluginError: (error: unknown, pluginName: string, hook: PluginHook) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins: SvStatePlugin<any>[];
 };
@@ -139,6 +109,7 @@ const defaultOptions: SvStateOptions = {
   clearAsyncErrorsOnChange: true,
   maxConcurrentAsyncValidations: 4,
   maxSnapshots: 50,
+  onPluginError: (error, pluginName, hook) => console.error(`svstate: plugin "${pluginName}" threw in ${hook}`, error),
   plugins: []
 };
 
@@ -158,7 +129,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   const isDirty = derived(dirtyFieldsStore, ($fields) => Object.keys($fields).length > 0);
   const actionInProgress = writable(false);
   const actionError = writable<Error | undefined>();
-  const snapshots = writable<Snapshot<T>[]>([{ title: 'Initial', data: deepClone(init) }]);
+  const snapshots = writable<Snapshot<T>[]>([{ title: INITIAL_SNAPSHOT_TITLE, data: deepClone(init) }]);
 
   // Async validation stores
   const asyncErrorsStore = writable<AsyncErrors>({});
@@ -172,14 +143,16 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     ([$hasErrors, $hasAsyncErrors]) => $hasErrors || $hasAsyncErrors
   );
 
-  // Async validation trackers for cancellation
-  const asyncValidationTrackers = new Map<
-    string,
-    { controller: AbortController; timeoutId: ReturnType<typeof setTimeout> }
-  >();
+  // Async validation trackers for cancellation. A path is either waiting out its debounce
+  // delay or already running — never both, so each phase carries only what it can cancel.
+  type AsyncTracker =
+    { kind: 'debounced'; timeoutId: ReturnType<typeof setTimeout> } | { kind: 'running'; controller: AbortController };
+  const asyncValidationTrackers = new Map<string, AsyncTracker>();
 
   // Queue for async validations waiting to run (when at concurrency limit)
   const asyncValidationQueue: string[] = [];
+
+  let isDestroyed = false;
 
   const markDirtyWithParents = (property: string) => {
     dirtyFieldsStore.update(($fields) => {
@@ -192,13 +165,29 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   const stateObject = $state<T>(init);
 
+  // Deferral state for batch() and for plugin hydration during onInit
+  let isBatching = false;
+  // Nothing can mutate before the onInit hook runs, so this stays false until hydration
+  let hasChanged = false;
+  let batchedSnapshotTitle: string | undefined;
+  const batchedAsyncPaths = new Set<string>();
+
   // Plugin system
   const plugins = usedOptions.plugins as SvStatePlugin<T>[];
-  const callPlugins = (hook: string, ...arguments_: unknown[]) => {
-    for (const plugin of plugins) {
-      const function_ = plugin[hook as keyof SvStatePlugin<T>];
-      if (typeof function_ === 'function') (function_ as (...a: unknown[]) => void).call(plugin, ...arguments_);
+
+  // A throwing plugin must not abort the mutation that triggered it, nor block later plugins.
+  const callPlugin = <H extends PluginHook>(plugin: SvStatePlugin<T>, hook: H, arguments_: unknown[]) => {
+    const function_ = plugin[hook];
+    if (typeof function_ !== 'function') return;
+    try {
+      (function_ as (...a: unknown[]) => void).apply(plugin, arguments_);
+    } catch (error) {
+      usedOptions.onPluginError(error, plugin.name, hook);
     }
+  };
+
+  const callPlugins = <H extends PluginHook>(hook: H, ...arguments_: Parameters<NonNullable<SvStatePlugin<T>[H]>>) => {
+    for (const plugin of plugins) callPlugin(plugin, hook, arguments_);
   };
 
   const runValidation = () => {
@@ -209,6 +198,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const createSnapshot: SnapshotFunction = (title: string, shouldReplace = true) => {
+    // Inside a batch every mutation still runs `effect`, but the batch yields one undo point
+    if (isBatching) {
+      batchedSnapshotTitle ??= title;
+      return;
+    }
+
     const currentSnapshots = get(snapshots);
     const createdSnapshot: Snapshot<T> = { title, data: deepClone(stateObject) };
     const lastSnapshot = currentSnapshots.at(-1);
@@ -230,20 +225,27 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   let isValidationScheduled = false;
   let validationTimeout: ReturnType<typeof setTimeout> | undefined;
 
+  const clearValidationTimer = () => {
+    if (validationTimeout === undefined) return;
+    clearTimeout(validationTimeout);
+    validationTimeout = undefined;
+  };
+
   const scheduleValidation = () => {
-    if (!validator) return;
+    if (!validator || isDestroyed) return;
 
     if (usedOptions.debounceValidation > 0) {
       clearTimeout(validationTimeout);
       validationTimeout = setTimeout(() => {
+        validationTimeout = undefined;
         runValidation();
       }, usedOptions.debounceValidation);
     } else {
       if (isValidationScheduled) return;
       isValidationScheduled = true;
       queueMicrotask(() => {
-        runValidation();
         isValidationScheduled = false;
+        if (!isDestroyed) runValidation();
       });
     }
   };
@@ -254,19 +256,24 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (index !== -1) asyncValidationQueue.splice(index, 1);
   };
 
+  const markValidating = (path: string) => asyncValidatingSet.update(($set) => new Set([...$set, path]));
+
+  const unmarkValidating = (path: string) =>
+    asyncValidatingSet.update(($set) => {
+      $set.delete(path);
+      return new Set($set);
+    });
+
   const cancelAsyncValidation = (path: string) => {
     // Remove from queue if waiting
     removeFromQueue(path);
 
     const tracker = asyncValidationTrackers.get(path);
     if (tracker) {
-      clearTimeout(tracker.timeoutId);
-      tracker.controller.abort();
+      if (tracker.kind === 'debounced') clearTimeout(tracker.timeoutId);
+      else tracker.controller.abort();
       asyncValidationTrackers.delete(path);
-      asyncValidatingSet.update(($set) => {
-        $set.delete(path);
-        return new Set($set);
-      });
+      unmarkValidating(path);
     }
   };
 
@@ -277,30 +284,17 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const executeAsyncValidation = async (path: string, onComplete: () => void) => {
-    if (!asyncValidator) {
-      onComplete();
-      return;
-    }
-
-    const asyncValidatorForPath = asyncValidator[path];
-    if (!asyncValidatorForPath) {
-      onComplete();
-      return;
-    }
-
-    // Check sync error for this path - skip if sync fails
-    const syncError = getSyncErrorForPath(get(errors), path);
-    if (syncError) {
+    const asyncValidatorForPath = asyncValidator?.[path];
+    // Nothing to run, torn down, or sync validation already failed for this path
+    if (!asyncValidatorForPath || isDestroyed || getSyncErrorForPath(get(errors), path)) {
       onComplete();
       return;
     }
 
     const controller = new AbortController();
-    // Store controller with a dummy timeoutId (validation already started)
-    asyncValidationTrackers.set(path, { controller, timeoutId: 0 as unknown as ReturnType<typeof setTimeout> });
+    asyncValidationTrackers.set(path, { kind: 'running', controller });
 
-    // Mark as validating
-    asyncValidatingSet.update(($set) => new Set([...$set, path]));
+    markValidating(path);
 
     try {
       const value = getValueAtPath(data, path);
@@ -315,16 +309,11 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
       // Store unexpected validator errors rather than re-throwing
-      if (!controller.signal.aborted) {
-        const message = error instanceof Error ? error.message : 'Async validation error';
-        asyncErrorsStore.update(($asyncErrors) => ({ ...$asyncErrors, [path]: message }));
-      }
+      if (!controller.signal.aborted)
+        asyncErrorsStore.update(($asyncErrors) => ({ ...$asyncErrors, [path]: toError(error).message }));
     } finally {
       asyncValidationTrackers.delete(path);
-      asyncValidatingSet.update(($set) => {
-        $set.delete(path);
-        return new Set($set);
-      });
+      unmarkValidating(path);
       onComplete();
     }
   };
@@ -340,7 +329,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const scheduleAsyncValidation = (path: string) => {
-    if (!asyncValidator || !Object.hasOwn(asyncValidator, path)) return;
+    if (isDestroyed || !asyncValidator || !Object.hasOwn(asyncValidator, path)) return;
 
     // Cancel any existing validation for this path
     cancelAsyncValidation(path);
@@ -353,7 +342,6 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
         return updated;
       });
 
-    const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       // Remove tracker since debounce is done
       asyncValidationTrackers.delete(path);
@@ -362,39 +350,87 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       const activeCount = get(asyncValidatingSet).size;
       if (activeCount < usedOptions.maxConcurrentAsyncValidations)
         executeAsyncValidation(path, processAsyncValidationQueue);
-      else {
-        // Remove any existing entry for this path and add to end of queue
-        removeFromQueue(path);
-        asyncValidationQueue.push(path);
-      }
+      else asyncValidationQueue.push(path);
     }, usedOptions.debounceAsyncValidation);
 
-    asyncValidationTrackers.set(path, { controller, timeoutId });
+    asyncValidationTrackers.set(path, { kind: 'debounced', timeoutId });
+  };
+
+  const flushDeferredValidation = () => {
+    const pendingPaths = [...batchedAsyncPaths];
+    batchedAsyncPaths.clear();
+    scheduleValidation();
+    for (const path of pendingPaths) scheduleAsyncValidation(path);
   };
 
   const scheduleAsyncValidationsForPath = (changedPath: string) => {
     if (!asyncValidator) return;
 
-    const matchingPaths = getMatchingAsyncValidatorPaths(asyncValidator, changedPath);
+    const matchingPaths = getMatchingPaths(Object.keys(asyncValidator), changedPath);
+    if (isBatching) {
+      for (const path of matchingPaths) batchedAsyncPaths.add(path);
+      return;
+    }
     for (const path of matchingPaths) scheduleAsyncValidation(path);
   };
 
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
+    if (isDestroyed) return;
+    hasChanged = true;
     if (!usedOptions.persistActionError) actionError.set(undefined);
     markDirtyWithParents(property);
     const effectResult: unknown = effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
     if (effectResult instanceof Promise)
       throw new Error('svstate: effect callback must be synchronous. Use action for async operations.');
     callPlugins('onChange', { target, property, currentValue, oldValue });
-    scheduleValidation();
+    if (!isBatching) scheduleValidation();
     scheduleAsyncValidationsForPath(property);
   });
 
   runValidation();
 
+  /** Runs sync validation immediately (bypassing debounce) and returns the result. */
+  const validate = (): ValidationResult<V> => {
+    clearValidationTimer();
+    runValidation();
+    const currentErrors = get(errors);
+    return { errors: currentErrors, hasErrors: hasAnyErrors(currentErrors) };
+  };
+
+  /**
+   * Applies many mutations as one unit: validation runs once at the end and each async
+   * validator is scheduled at most once. `effect` and plugin `onChange` still fire per mutation.
+   */
+  const batch = (mutate: (draft: T) => void) => {
+    if (isDestroyed) return;
+    if (isBatching) {
+      mutate(data);
+      return;
+    }
+
+    isBatching = true;
+    try {
+      mutate(data);
+    } finally {
+      isBatching = false;
+      if (batchedSnapshotTitle !== undefined) {
+        const title = batchedSnapshotTitle;
+        batchedSnapshotTitle = undefined;
+        createSnapshot(title, false);
+      }
+      flushDeferredValidation();
+    }
+  };
+
   // Run async validation on init if configured
   if (asyncValidator && usedOptions.runAsyncValidationOnInit)
     for (const path of Object.keys(asyncValidator)) scheduleAsyncValidation(path);
+
+  // Makes the current state the new starting point: one "Initial" snapshot, nothing dirty
+  const resetBaseline = (shouldClearDirty = true) => {
+    if (shouldClearDirty) dirtyFieldsStore.set({});
+    snapshots.set([{ title: INITIAL_SNAPSHOT_TITLE, data: deepClone(stateObject) }]);
+  };
 
   const execute = async (parameters?: P) => {
     if (!usedOptions.allowConcurrentActions && get(actionInProgress)) return;
@@ -404,26 +440,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     actionInProgress.set(true);
     try {
       await actuators?.action?.(parameters);
-      if (usedOptions.resetDirtyOnAction) dirtyFieldsStore.set({});
-      snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
+      resetBaseline(usedOptions.resetDirtyOnAction);
       await actuators?.actionCompleted?.();
       callPlugins('onAction', { phase: 'after', params: parameters });
     } catch (caughtError) {
       await actuators?.actionCompleted?.(caughtError);
-      const actionError_ =
-        caughtError instanceof Error
-          ? caughtError
-          : caughtError && typeof caughtError === 'object'
-            ? new Error(
-                String(
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  (caughtError as any).message ??
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (caughtError as any).body?.message ??
-                    caughtError
-                )
-              )
-            : undefined;
+      const actionError_ = toError(caughtError);
       actionError.set(actionError_);
       callPlugins('onAction', { phase: 'after', params: parameters, error: actionError_ });
     } finally {
@@ -431,23 +453,34 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     }
   };
 
+  // Replaces the live state with a snapshot, including removing keys added since it was taken
+  const replaceStateObject = (source: T) => {
+    const restored = deepClone(source);
+    for (const key of Object.keys(stateObject))
+      if (!Object.hasOwn(restored, key)) delete (stateObject as Record<string, unknown>)[key];
+    Object.assign(stateObject, restored);
+  };
+
   const restoreToSnapshot = (targetIndex: number, currentSnapshots: Snapshot<T>[]) => {
     const targetSnapshot = currentSnapshots[targetIndex];
     if (!targetSnapshot) return;
     cancelAllAsyncValidations();
     dirtyFieldsStore.set({});
-    Object.assign(stateObject, deepClone(targetSnapshot.data));
+    replaceStateObject(targetSnapshot.data);
     snapshots.set(currentSnapshots.slice(0, targetIndex + 1));
     runValidation();
     return targetSnapshot;
   };
 
+  const restoreAndNotify = (targetIndex: number, currentSnapshots: Snapshot<T>[]) => {
+    const targetSnapshot = restoreToSnapshot(targetIndex, currentSnapshots);
+    if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
+  };
+
   const rollback = (steps = 1) => {
     const currentSnapshots = get(snapshots);
     if (currentSnapshots.length <= 1) return;
-    const targetIndex = Math.max(0, currentSnapshots.length - 1 - steps);
-    const targetSnapshot = restoreToSnapshot(targetIndex, currentSnapshots);
-    if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
+    restoreAndNotify(Math.max(0, currentSnapshots.length - 1 - steps), currentSnapshots);
   };
 
   // eslint-disable-next-line unicorn/consistent-boolean-name -- rollbackTo is a public API method name, not a boolean flag
@@ -456,8 +489,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (currentSnapshots.length <= 1) return false;
     for (let index = currentSnapshots.length - 1; index >= 0; index--)
       if (currentSnapshots[index]!.title === title) {
-        const targetSnapshot = restoreToSnapshot(index, currentSnapshots);
-        if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
+        restoreAndNotify(index, currentSnapshots);
         return true;
       }
 
@@ -486,10 +518,35 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const destroy = () => {
-    for (let index = plugins.length - 1; index >= 0; index--) plugins[index]?.destroy?.();
+    if (isDestroyed) return;
+    isDestroyed = true;
+
+    clearValidationTimer();
+    cancelAllAsyncValidations();
+
+    for (let index = plugins.length - 1; index >= 0; index--) {
+      const plugin = plugins[index];
+      if (plugin) callPlugin(plugin, 'destroy', []);
+    }
   };
 
-  callPlugins('onInit', { data, state, options: usedOptions, snapshot: createSnapshot });
+  // Plugins such as persist/history hydrate state from onInit by writing through the proxy.
+  // Defer validation across the hook, then re-baseline so hydrated values count as the initial
+  // state instead of as a dirty change on top of it.
+  isBatching = true;
+  try {
+    callPlugins('onInit', { data, state, options: usedOptions, snapshot: createSnapshot });
+  } finally {
+    isBatching = false;
+  }
 
-  return { data, execute, state, rollback, rollbackTo, reset, destroy };
+  // Snapshots taken during hydration are superseded by the re-baseline below
+  batchedSnapshotTitle = undefined;
+
+  if (hasChanged) {
+    resetBaseline();
+    flushDeferredValidation();
+  } else batchedAsyncPaths.clear();
+
+  return { data, execute, state, rollback, rollbackTo, reset, destroy, validate, batch };
 }

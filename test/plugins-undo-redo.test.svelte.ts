@@ -106,3 +106,32 @@ describe('undoRedoPlugin', () => {
     expect(undoRedo.canRedo()).toBe(false);
   });
 });
+
+describe('undoRedoPlugin multi-step redo', () => {
+  it('should redo each rolled-back step in turn', () => {
+    const undoRedo = undoRedoPlugin<{ name: string; count: number }>();
+    const { data, rollback } = createSvState(
+      { name: 'initial', count: 0 },
+      { effect: ({ snapshot, property }) => snapshot(`Changed ${property}`) },
+      { plugins: [undoRedo] }
+    );
+
+    data.name = 'first';
+    data.count = 10;
+
+    rollback();
+    rollback();
+
+    expect(data.name).toBe('initial');
+    expect(data.count).toBe(0);
+    expect(get(undoRedo.redoStack)).toHaveLength(2);
+
+    undoRedo.redo();
+    expect(data.name).toBe('first');
+    expect(get(undoRedo.redoStack)).toHaveLength(1);
+
+    undoRedo.redo();
+    expect(data.count).toBe(10);
+    expect(undoRedo.canRedo()).toBe(false);
+  });
+});

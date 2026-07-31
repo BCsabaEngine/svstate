@@ -22,6 +22,7 @@
 
 	const {
 		data,
+		batch,
 		state: { errors, hasErrors, isDirty, isDirtyByField }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
@@ -40,11 +41,13 @@
 	});
 
 	const fillWithValidData = () => {
-		data.username = `user${randomId()}`;
-		data.email = `${randomId()}@example.com`;
-		data.age = randomInt(18, 65);
-		data.bio = 'Hello, I am a demo user!';
-		data.website = `https://${randomId()}.com`;
+		batch((draft) => {
+			draft.username = `user${randomId()}`;
+			draft.email = `${randomId()}@example.com`;
+			draft.age = randomInt(18, 65);
+			draft.bio = 'Hello, I am a demo user!';
+			draft.website = `https://${randomId()}.com`;
+		});
 	};
 
 	// ─────────────────────────────────────────────
@@ -58,7 +61,7 @@
   website: ''
 };
 
-const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
   validator: (source) => ({
     username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
     email: stringValidator(source.email).prepare('trim').required().email().getError(),
@@ -67,6 +70,18 @@ const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSv
     website: stringValidator(source.website).prepare('trim').website('required').getError()
   })
 });`;
+
+	const batchSourceCode = `// batch() applies many mutations as one unit:
+// one validation pass instead of five
+const fillWithValidData = () => {
+  batch((draft) => {
+    draft.username = 'user123';
+    draft.email = 'user123@example.com';
+    draft.age = 30;
+    draft.bio = 'Hello, I am a demo user!';
+    draft.website = 'https://user123.com';
+  });
+};`;
 
 	const formSourceCode = `<input
   id="username"
@@ -150,6 +165,7 @@ const { data, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSv
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup" />
+			<CodeBlock code={batchSourceCode} title="Batching Multiple Field Updates" />
 			<CodeBlock code={formSourceCode} title="Form Binding Example" />
 		</SourceCodeSection>
 	{/snippet}

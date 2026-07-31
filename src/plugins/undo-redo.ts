@@ -1,5 +1,6 @@
 import { get, type Readable, writable } from 'svelte/store';
 
+import { deepClone } from '../internal/clone';
 import type { PluginContext, SvStatePlugin } from '../plugin';
 import type { Snapshot } from '../state.svelte';
 
@@ -21,15 +22,7 @@ export function undoRedoPlugin<T extends Record<string, unknown>>(
   let context: PluginContext<T> | undefined;
   let unsubscribe: (() => void) | undefined;
   let previousTipSnapshot: Snapshot<T> | undefined;
-
-  const deepClone = <U>(object: U): U => {
-    if (object === null || typeof object !== 'object') return object;
-    if (object instanceof Date) return new Date(object) as U;
-    if (Array.isArray(object)) return object.map((item) => deepClone(item)) as U;
-    const cloned = Object.create(Object.getPrototypeOf(object)) as U;
-    for (const key of Object.keys(object)) cloned[key as keyof U] = deepClone(object[key as keyof U]);
-    return cloned;
-  };
+  let isApplyingRedo = false;
 
   const plugin: UndoRedoPluginInstance<T> = {
     name: 'undo-redo',
@@ -60,6 +53,8 @@ export function undoRedoPlugin<T extends Record<string, unknown>>(
     },
 
     onChange() {
+      // Applying a redo mutates state; that must not wipe the rest of the redo stack.
+      if (isApplyingRedo) return;
       redoStore.set([]);
     },
 
@@ -75,11 +70,16 @@ export function undoRedoPlugin<T extends Record<string, unknown>>(
       const targetSnapshot = stack.at(-1)!;
       redoStore.set(stack.slice(0, -1));
 
-      // Create a snapshot of current state before redo
-      context.snapshot('Undo');
-
-      // Apply the redo target data
-      Object.assign(context.data, deepClone(targetSnapshot.data));
+      isApplyingRedo = true;
+      try {
+        // Create a snapshot of current state before redo. Each redo step keeps its own
+        // snapshot, so a later rollback undoes one step at a time.
+        context.snapshot('Undo', false);
+        // Apply the redo target data
+        Object.assign(context.data, deepClone(targetSnapshot.data));
+      } finally {
+        isApplyingRedo = false;
+      }
     },
 
     canRedo() {

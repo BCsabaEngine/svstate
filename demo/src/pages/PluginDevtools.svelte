@@ -10,7 +10,7 @@
 	import PageLayout from '$components/PageLayout.svelte';
 	import SourceCodeSection from '$components/SourceCodeSection.svelte';
 	import StatusBadges from '$components/StatusBadges.svelte';
-	import { randomId } from '$lib/utilities';
+	import { formatFieldName, randomId } from '$lib/utilities';
 
 	type LogEntry = {
 		id: string;
@@ -20,6 +20,8 @@
 	};
 
 	let logEntries = $state<LogEntry[]>([]);
+	let simulatePluginError = $state(false);
+	let lastPluginError = $state<string | undefined>();
 
 	const addLog = (type: LogEntry['type'], message: string) => {
 		const timestamp = new Date().toISOString().slice(11, 23);
@@ -31,6 +33,7 @@
 	const logMirrorPlugin: SvStatePlugin<State> = {
 		name: 'log-mirror',
 		onChange(event: ChangeEvent<State>) {
+			if (simulatePluginError) throw new Error(`Simulated failure while mirroring "${event.property}"`);
 			addLog('change', `${event.property}: "${event.oldValue}" → "${event.currentValue}"`);
 		},
 		onValidation(errors) {
@@ -53,6 +56,7 @@
 
 	const {
 		data,
+		batch,
 		execute,
 		reset,
 		rollback,
@@ -66,22 +70,26 @@
 				message: stringValidator(source.message).prepare('trim').required().minLength(5).getError()
 			}),
 			effect: ({ snapshot, property }) => {
-				const label = property.charAt(0).toUpperCase() + property.slice(1);
-				snapshot(`Changed ${label}`);
+				snapshot(`Changed ${formatFieldName(property)}`);
 			},
 			action: async () => {
 				await new Promise((resolve) => setTimeout(resolve, 500));
 			}
 		},
 		{
-			plugins: [devtoolsPlugin({ name: 'demo-devtools', enabled: true, logValidation: true }), logMirrorPlugin]
+			plugins: [devtoolsPlugin({ name: 'demo-devtools', enabled: true, logValidation: true }), logMirrorPlugin],
+			onPluginError: (error, pluginName, hook) => {
+				lastPluginError = `[${pluginName}/${hook}] ${error instanceof Error ? error.message : String(error)}`;
+			}
 		}
 	);
 
 	const fillWithValidData = () => {
-		data.name = `John Doe ${randomId()}`;
-		data.email = `john.${randomId()}@example.com`;
-		data.message = 'Hello, this is a test message for the devtools demo.';
+		batch((draft) => {
+			draft.name = `John Doe ${randomId()}`;
+			draft.email = `john.${randomId()}@example.com`;
+			draft.message = 'Hello, this is a test message for the devtools demo.';
+		});
 	};
 
 	const clearLog = () => {
@@ -127,6 +135,15 @@ const { data, execute, reset, rollback, state } = createSvState(
 // - onAction:     action start/complete/error
 // - onRollback:   rollback with target snapshot title
 // - onReset:      state reset events`;
+
+	const pluginErrorSourceCode = `// A throwing plugin hook no longer aborts the mutation or blocks
+// later plugins — it's caught and reported via onPluginError.
+createSvState(sourceData, actuators, {
+  plugins: [devtoolsPlugin(), logMirrorPlugin],
+  onPluginError: (error, pluginName, hook) => {
+    console.error(\`Plugin "\${pluginName}" failed in \${hook}:\`, error);
+  }
+});`;
 </script>
 
 <PageLayout
@@ -156,6 +173,18 @@ const { data, execute, reset, rollback, state } = createSvState(
 				required={true}
 				bind:value={data.message}
 			/>
+		</div>
+
+		<div class="mt-4 flex items-center gap-2">
+			<input
+				id="simulatePluginError"
+				class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+				type="checkbox"
+				bind:checked={simulatePluginError}
+			/>
+			<label class="text-sm text-gray-700" for="simulatePluginError">
+				Simulate plugin error (log-mirror plugin throws on change)
+			</label>
 		</div>
 
 		<div class="mt-6 flex flex-wrap gap-3">
@@ -190,48 +219,58 @@ const { data, execute, reset, rollback, state } = createSvState(
 	{/snippet}
 
 	{#snippet sidebar()}
-		<div class="w-full flex-shrink-0 space-y-4 xl:w-96">
-			<DemoSidebar
-				{data}
-				errors={$errors}
-				hasErrors={$hasErrors}
-				isDirty={$isDirty}
-				onFill={fillWithValidData}
-				width="xl:w-96"
-			/>
-
-			<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
-				<div class="mb-2 flex items-center justify-between">
-					<h6 class="text-sm font-medium text-gray-700">Event Log</h6>
-					<button class="cursor-pointer text-xs text-gray-500 hover:text-gray-700" onclick={clearLog} type="button">
-						Clear
-					</button>
+		<DemoSidebar
+			{data}
+			errors={$errors}
+			hasErrors={$hasErrors}
+			isDirty={$isDirty}
+			onFill={fillWithValidData}
+			width="xl:w-96"
+		>
+			{#snippet extra()}
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<div class="mb-2 flex items-center justify-between">
+						<h6 class="text-sm font-medium text-gray-700">Event Log</h6>
+						<button class="cursor-pointer text-xs text-gray-500 hover:text-gray-700" onclick={clearLog} type="button">
+							Clear
+						</button>
+					</div>
+					{#if logEntries.length === 0}
+						<p class="text-xs text-gray-500">No events yet — interact with the form</p>
+					{:else}
+						<ul class="max-h-64 space-y-1 overflow-y-auto">
+							{#each logEntries as entry (entry.id)}
+								<li class="flex items-start gap-2 text-xs text-gray-600">
+									<span
+										class="mt-0.5 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badgeColors[entry.type]}"
+									>
+										{entry.type}
+									</span>
+									<span class="min-w-0 flex-1 break-words">{entry.message}</span>
+									<span class="flex-shrink-0 font-mono text-[10px] text-gray-400">{entry.timestamp}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				</div>
-				{#if logEntries.length === 0}
-					<p class="text-xs text-gray-500">No events yet — interact with the form</p>
-				{:else}
-					<ul class="max-h-64 space-y-1 overflow-y-auto">
-						{#each logEntries as entry (entry.id)}
-							<li class="flex items-start gap-2 text-xs text-gray-600">
-								<span
-									class="mt-0.5 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium {badgeColors[entry.type]}"
-								>
-									{entry.type}
-								</span>
-								<span class="min-w-0 flex-1 break-words">{entry.message}</span>
-								<span class="flex-shrink-0 font-mono text-[10px] text-gray-400">{entry.timestamp}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-		</div>
+
+				<div class="rounded-lg border border-gray-300 bg-gray-50 p-4 shadow-inner">
+					<h6 class="mb-2 text-sm font-medium text-gray-700">onPluginError</h6>
+					{#if lastPluginError}
+						<p class="text-xs text-red-600">{lastPluginError}</p>
+					{:else}
+						<p class="text-xs text-gray-500">No plugin errors caught yet</p>
+					{/if}
+				</div>
+			{/snippet}
+		</DemoSidebar>
 	{/snippet}
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={setupSourceCode} title="devtoolsPlugin Setup" />
 			<CodeBlock code={hooksSourceCode} title="What Gets Logged" />
+			<CodeBlock code={pluginErrorSourceCode} title="onPluginError — Plugin Isolation" />
 		</SourceCodeSection>
 	{/snippet}
 </PageLayout>

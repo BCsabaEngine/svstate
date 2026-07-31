@@ -1,3 +1,52 @@
+const EPSILON = 1e-9;
+
+// Counts decimal places for exponential notation too — String(1e-7) is '1e-7', not '0.0000001'
+const countDecimalPlaces = (value: number): number => {
+  if (Number.isSafeInteger(value)) return 0;
+  const text = String(value);
+  const exponentIndex = text.indexOf('e-');
+  if (exponentIndex === -1) return text.split('.', 2)[1]?.length ?? 0;
+  const mantissa = text.slice(0, exponentIndex);
+  const exponent = Number(text.slice(exponentIndex + 2));
+  return (mantissa.split('.', 2)[1]?.length ?? 0) + exponent;
+};
+
+// Tolerant divisibility: an exact `%` reports 0.3 as not a multiple of 0.1
+const isMultipleOf = (value: number, divisor: number): boolean => {
+  if (divisor === 0) return false;
+  const remainder = Math.abs(value % divisor);
+  return remainder < EPSILON || Math.abs(remainder - Math.abs(divisor)) < EPSILON;
+};
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
+  if (value instanceof Date) return `Date(${value.getTime()})`;
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).toSorted(([a], [b]) => (a < b ? -1 : 1));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(',')}}`;
+};
+
+// Type-tagged so 1 and '1' (or null and 'null') never collide, and key order never matters
+const toComparableKey = (value: unknown): string => {
+  if (value === null) return 'null';
+  if (typeof value === 'object') return `object:${stableStringify(value)}`;
+  return `${typeof value}:${String(value)}`;
+};
+
+const toDisplay = (value: unknown): string =>
+  value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+const toDate = (value: Date | string | number): Date => (value instanceof Date ? value : new Date(value));
+
+const isWeekendDay = (date: Date): boolean => date.getDay() === 0 || date.getDay() === 6;
+
+// Today shifted back N years — the cut-off an age constraint compares against
+const yearsAgo = (years: number): Date => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - years);
+  return date;
+};
+
 type BaseOption = 'trim' | 'normalize';
 type PrepareOption = BaseOption | 'upper' | 'lower' | 'localeUpper' | 'localeLower';
 
@@ -187,93 +236,90 @@ type StringValidatorBuilder = {
 // Number Validator
 export function numberValidator(input: number | null | undefined): NumberValidatorBuilder {
   let error = '';
-  const isNullish = input === null || input === undefined;
+  // NaN carries no comparable value — only required() reports it, every other rule skips it
+  const isMissing = input === null || input === undefined || Number.isNaN(input);
   const setError = (message: string) => {
     if (!error) error = message;
   };
 
   const builder: NumberValidatorBuilder = {
     required() {
-      if (!error && (isNullish || Number.isNaN(input))) setError('Required');
+      if (!error && isMissing) setError('Required');
       return builder;
     },
 
     requiredIf(shouldRequire: boolean) {
-      if (shouldRequire && !error && (isNullish || Number.isNaN(input))) setError('Required');
+      if (shouldRequire && !error && isMissing) setError('Required');
       return builder;
     },
 
     min(n: number) {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input < n) setError(`Minimum ${n}`);
       return builder;
     },
 
     max(n: number) {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input > n) setError(`Maximum ${n}`);
       return builder;
     },
 
     between(min: number, max: number) {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && (input < min || input > max)) setError(`Must be between ${min} and ${max}`);
       return builder;
     },
 
     integer() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && !Number.isSafeInteger(input)) setError('Must be an integer');
       return builder;
     },
 
     positive() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input <= 0) setError('Must be positive');
       return builder;
     },
 
     negative() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input >= 0) setError('Must be negative');
       return builder;
     },
 
     nonNegative() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input < 0) setError('Must be non-negative');
       return builder;
     },
 
     notZero() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && input === 0) setError('Must not be zero');
       return builder;
     },
 
     multipleOf(n: number) {
-      if (isNullish) return builder;
-      if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
+      if (isMissing) return builder;
+      if (!error && !isMultipleOf(input, n)) setError(`Must be a multiple of ${n}`);
       return builder;
     },
 
+    /** Alias of {@link multipleOf}. */
     step(n: number) {
-      if (isNullish) return builder;
-      if (!error && input % n !== 0) setError(`Must be a multiple of ${n}`);
-      return builder;
+      return builder.multipleOf(n);
     },
 
     decimal(places: number) {
-      if (isNullish) return builder;
-      if (error || Number.isNaN(input)) return builder;
-      const parts = String(input).split('.');
-      const actualPlaces = parts[1]?.length ?? 0;
-      if (actualPlaces > places) setError(`Maximum ${places} decimal places`);
+      if (isMissing) return builder;
+      if (!error && countDecimalPlaces(input) > places) setError(`Maximum ${places} decimal places`);
       return builder;
     },
 
     percentage() {
-      if (isNullish) return builder;
+      if (isMissing) return builder;
       if (!error && (input < 0 || input > 100)) setError('Must be between 0 and 100');
       return builder;
     },
@@ -337,11 +383,10 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
     },
 
     unique() {
-      if (isNullish) return builder;
-      if (error) return builder;
+      if (isNullish || error) return builder;
       const seen = new Set<string>();
       for (const item of array) {
-        const key = typeof item === 'object' ? JSON.stringify(item) : String(item);
+        const key = toComparableKey(item);
         if (seen.has(key)) {
           setError('Items must be unique');
           break;
@@ -358,43 +403,27 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
     },
 
     includes(item: T) {
-      if (isNullish) return builder;
-      if (error) return builder;
-      const itemKey = typeof item === 'object' ? JSON.stringify(item) : String(item);
-      const found = array.some((element) => {
-        const elementKey = typeof element === 'object' ? JSON.stringify(element) : String(element);
-        return elementKey === itemKey;
-      });
-      if (!found) setError(`Must include ${itemKey}`);
+      if (isNullish || error) return builder;
+      const itemKey = toComparableKey(item);
+      const found = array.some((element) => toComparableKey(element) === itemKey);
+      if (!found) setError(`Must include ${toDisplay(item)}`);
       return builder;
     },
 
     includesAny(items: T[]) {
-      if (isNullish) return builder;
-      if (error) return builder;
-      const itemKeys = items.map((entry) => (typeof entry === 'object' ? JSON.stringify(entry) : String(entry)));
-      const found = array.some((element) => {
-        const elementKey = typeof element === 'object' ? JSON.stringify(element) : String(element);
-        return itemKeys.includes(elementKey);
-      });
-      if (!found) setError(`Must include at least one of: ${itemKeys.join(', ')}`);
+      if (isNullish || error) return builder;
+      const itemKeys = new Set(items.map((entry) => toComparableKey(entry)));
+      const found = array.some((element) => itemKeys.has(toComparableKey(element)));
+      if (!found) setError(`Must include at least one of: ${items.map((entry) => toDisplay(entry)).join(', ')}`);
       return builder;
     },
 
     includesAll(items: T[]) {
-      if (isNullish) return builder;
-      if (error) return builder;
-      const arrayKeys = new Set(
-        array.map((element) => (typeof element === 'object' ? JSON.stringify(element) : String(element)))
-      );
-      const missing = items.filter((entry) => {
-        const entryKey = typeof entry === 'object' ? JSON.stringify(entry) : String(entry);
-        return !arrayKeys.has(entryKey);
-      });
-      if (missing.length > 0) {
-        const missingKeys = missing.map((entry) => (typeof entry === 'object' ? JSON.stringify(entry) : String(entry)));
-        setError(`Missing required items: ${missingKeys.join(', ')}`);
-      }
+      if (isNullish || error) return builder;
+      const arrayKeys = new Set(array.map((element) => toComparableKey(element)));
+      const missing = items.filter((entry) => !arrayKeys.has(toComparableKey(entry)));
+      if (missing.length > 0)
+        setError(`Missing required items: ${missing.map((entry) => toDisplay(entry)).join(', ')}`);
       return builder;
     },
 
@@ -427,7 +456,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
     if (!error) error = message;
   };
 
-  const date = isNullish ? new Date(NaN) : input instanceof Date ? input : new Date(input);
+  const date = isNullish ? new Date(NaN) : toDate(input);
   const isValid = !isNullish && !Number.isNaN(date.getTime());
 
   const builder: DateValidatorBuilder = {
@@ -443,7 +472,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
 
     before(target: Date | string | number) {
       if (!error && isValid) {
-        const targetDate = target instanceof Date ? target : new Date(target);
+        const targetDate = toDate(target);
         if (date >= targetDate) setError(`Must be before ${targetDate.toISOString()}`);
       }
       return builder;
@@ -451,7 +480,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
 
     after(target: Date | string | number) {
       if (!error && isValid) {
-        const targetDate = target instanceof Date ? target : new Date(target);
+        const targetDate = toDate(target);
         if (date <= targetDate) setError(`Must be after ${targetDate.toISOString()}`);
       }
       return builder;
@@ -459,8 +488,8 @@ export function dateValidator(input: Date | string | number | null | undefined):
 
     between(start: Date | string | number, end: Date | string | number) {
       if (!error && isValid) {
-        const startDate = start instanceof Date ? start : new Date(start);
-        const endDate = end instanceof Date ? end : new Date(end);
+        const startDate = toDate(start);
+        const endDate = toDate(end);
         if (date < startDate || date > endDate)
           setError(`Must be between ${startDate.toISOString()} and ${endDate.toISOString()}`);
       }
@@ -478,36 +507,22 @@ export function dateValidator(input: Date | string | number | null | undefined):
     },
 
     weekday() {
-      if (!error && isValid) {
-        const day = date.getDay();
-        if (day === 0 || day === 6) setError('Must be a weekday');
-      }
+      if (!error && isValid && isWeekendDay(date)) setError('Must be a weekday');
       return builder;
     },
 
     weekend() {
-      if (!error && isValid) {
-        const day = date.getDay();
-        if (day !== 0 && day !== 6) setError('Must be a weekend');
-      }
+      if (!error && isValid && !isWeekendDay(date)) setError('Must be a weekend');
       return builder;
     },
 
     minAge(years: number) {
-      if (!error && isValid) {
-        const minDate = new Date();
-        minDate.setFullYear(minDate.getFullYear() - years);
-        if (date > minDate) setError(`Must be at least ${years} years ago`);
-      }
+      if (!error && isValid && date > yearsAgo(years)) setError(`Must be at least ${years} years ago`);
       return builder;
     },
 
     maxAge(years: number) {
-      if (!error && isValid) {
-        const maxDate = new Date();
-        maxDate.setFullYear(maxDate.getFullYear() - years);
-        if (date < maxDate) setError(`Must be at most ${years} years ago`);
-      }
+      if (!error && isValid && date < yearsAgo(years)) setError(`Must be at most ${years} years ago`);
       return builder;
     },
 

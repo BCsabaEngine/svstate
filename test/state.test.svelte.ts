@@ -565,7 +565,7 @@ describe('actionError', () => {
     expect(get(state.actionError)?.message).toBe('Test error');
   });
 
-  it('should set actionError to undefined for non-Error throws', async () => {
+  it('should wrap thrown primitives into an Error', async () => {
     const { execute, state } = createSvState(
       { value: 0 },
       {
@@ -577,7 +577,8 @@ describe('actionError', () => {
 
     await execute();
 
-    expect(get(state.actionError)).toBeUndefined();
+    expect(get(state.actionError)).toBeInstanceOf(Error);
+    expect(get(state.actionError)?.message).toBe('string error');
   });
 
   it('should clear actionError on next action by default', async () => {
@@ -1582,5 +1583,264 @@ describe('maxSnapshots', () => {
     expect(snaps).toHaveLength(2);
     expect(snaps[0]!.title).toBe('Initial');
     expect(snaps[1]!.title).toBe('Same Title');
+  });
+});
+
+describe('non-plain values in state', () => {
+  it('should keep Map, Set and RegExp usable through snapshot and rollback', () => {
+    const { data, rollback } = createSvState(
+      { tags: new Set(['a']), meta: new Map([['k', 1]]), pattern: /ab+c/gi, label: 'x' },
+      { effect: ({ snapshot }) => snapshot('change') }
+    );
+
+    data.label = 'y';
+    rollback();
+
+    expect(data.label).toBe('x');
+    expect(data.tags.has('a')).toBe(true);
+    expect(data.meta.get('k')).toBe(1);
+    expect(data.pattern.source).toBe('ab+c');
+    expect(data.pattern.flags).toBe('gi');
+  });
+
+  it('should keep Map and Set usable through reset', () => {
+    const { data, reset } = createSvState(
+      { meta: new Map([['k', 1]]), label: 'x' },
+      { effect: ({ snapshot }) => snapshot('change') }
+    );
+
+    data.label = 'y';
+    reset();
+
+    expect(data.meta.get('k')).toBe(1);
+  });
+
+  it('should clone circular structures without recursing forever', () => {
+    type Node = { name: string; self?: Node };
+    const init: Node = { name: 'a' };
+    init.self = init;
+
+    const { data, rollback } = createSvState(init, { effect: ({ snapshot }) => snapshot('change') });
+
+    data.name = 'b';
+    rollback();
+
+    expect(data.name).toBe('a');
+    expect(data.self?.name).toBe('a');
+  });
+
+  it('should remove keys added after a snapshot when rolling back', () => {
+    const { data, rollback } = createSvState({ a: 1 } as { a: number; b?: number }, {
+      effect: ({ snapshot, property }) => snapshot(`Changed ${property}`)
+    });
+
+    data.b = 2;
+    rollback();
+
+    expect(Object.hasOwn(data, 'b')).toBe(false);
+  });
+});
+
+describe('destroy cleanup', () => {
+  it('should cancel pending async validation', async () => {
+    let calls = 0;
+    const { data, destroy, state } = createSvState(
+      { email: '' },
+      {
+        asyncValidator: {
+          email: async () => {
+            calls++;
+            return 'taken';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    data.email = 'a@b.c';
+    destroy();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(calls).toBe(0);
+    expect(get(state.asyncErrors)).toEqual({});
+  });
+
+  it('should ignore changes made after destroy', async () => {
+    let validations = 0;
+    const { data, destroy } = createSvState(
+      { value: 0 },
+      {
+        validator: () => {
+          validations++;
+          return {};
+        }
+      }
+    );
+
+    destroy();
+    const before = validations;
+    data.value = 1;
+    await Promise.resolve();
+
+    expect(validations).toBe(before);
+  });
+
+  it('should be safe to call twice', () => {
+    let destroyCalls = 0;
+    const { destroy } = createSvState(
+      { value: 0 },
+      {},
+      {
+        plugins: [
+          {
+            name: 'counter',
+            destroy: () => {
+              destroyCalls++;
+            }
+          }
+        ]
+      }
+    );
+
+    destroy();
+    destroy();
+
+    expect(destroyCalls).toBe(1);
+  });
+});
+
+describe('validate', () => {
+  it('should run validation synchronously and report a clean result', () => {
+    const { data, validate, state } = createSvState(
+      { name: '' },
+      { validator: (source) => ({ name: source.name ? '' : 'Required' }) }
+    );
+
+    data.name = 'ok';
+    const result = validate();
+
+    expect(result.hasErrors).toBe(false);
+    expect(result.errors).toEqual({ name: '' });
+    expect(get(state.errors)).toEqual({ name: '' });
+  });
+
+  it('should report errors without waiting for the debounce', () => {
+    const { data, validate } = createSvState(
+      { name: 'ok' },
+      { validator: (source) => ({ name: source.name ? '' : 'Required' }) },
+      { debounceValidation: 1000 }
+    );
+
+    data.name = '';
+    const result = validate();
+
+    expect(result.hasErrors).toBe(true);
+    expect(result.errors).toEqual({ name: 'Required' });
+  });
+
+  it('should return no errors when no validator is configured', () => {
+    const { validate } = createSvState({ value: 0 });
+
+    expect(validate()).toEqual({ errors: undefined, hasErrors: false });
+  });
+});
+
+describe('batch', () => {
+  it('should create a single snapshot for the whole batch', () => {
+    const { batch, state } = createSvState(
+      { a: 0, b: 0 },
+      { effect: ({ snapshot, property }) => snapshot(`Changed ${property}`) }
+    );
+
+    expect(get(state.snapshots)).toHaveLength(1);
+
+    batch((draft) => {
+      draft.a = 1;
+      draft.b = 2;
+    });
+
+    expect(get(state.snapshots)).toHaveLength(2);
+  });
+
+  it('should apply every mutation and mark each field dirty', () => {
+    const { data, batch, state } = createSvState({ a: 0, b: 0 });
+
+    batch((draft) => {
+      draft.a = 1;
+      draft.b = 2;
+    });
+
+    expect(data.a).toBe(1);
+    expect(data.b).toBe(2);
+    expect(get(state.isDirtyByField)).toEqual({ a: true, b: true });
+  });
+
+  it('should validate against the final state', async () => {
+    const { batch, state } = createSvState(
+      { a: 0, b: 0 },
+      { validator: (source) => ({ total: source.a + source.b > 2 ? '' : 'Too small' }) }
+    );
+
+    batch((draft) => {
+      draft.a = 2;
+      draft.b = 2;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(get(state.errors)).toEqual({ total: '' });
+  });
+
+  it('should support nested batches', () => {
+    const { data, batch, state } = createSvState(
+      { a: 0, b: 0 },
+      { effect: ({ snapshot, property }) => snapshot(`Changed ${property}`) }
+    );
+
+    batch((draft) => {
+      draft.a = 1;
+      batch((inner) => {
+        inner.b = 2;
+      });
+    });
+
+    expect(data.b).toBe(2);
+    expect(get(state.snapshots)).toHaveLength(2);
+  });
+});
+
+describe('plugin error isolation', () => {
+  it('should keep the mutation and later plugins working when a plugin throws', () => {
+    const seen: string[] = [];
+    const reported: string[] = [];
+
+    const { data } = createSvState(
+      { value: 0 },
+      {},
+      {
+        onPluginError: (_error, pluginName, hook) => {
+          reported.push(`${pluginName}:${hook}`);
+        },
+        plugins: [
+          {
+            name: 'thrower',
+            onChange: () => {
+              throw new Error('boom');
+            }
+          },
+          {
+            name: 'observer',
+            onChange: (event) => {
+              seen.push(event.property);
+            }
+          }
+        ]
+      }
+    );
+
+    data.value = 1;
+
+    expect(data.value).toBe(1);
+    expect(seen).toEqual(['value']);
+    expect(reported).toEqual(['thrower:onChange']);
   });
 });

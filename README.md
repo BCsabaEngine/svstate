@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-orange.svg)](https://svelte.dev/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
-[![Tests](https://img.shields.io/badge/tests-500%2B-brightgreen.svg)](<>)
+[![Tests](https://img.shields.io/badge/tests-600%2B-brightgreen.svg)](<>)
 [![Coverage](https://img.shields.io/badge/coverage-%3E98%25-brightgreen.svg)](<>)
 
 > **Deep reactive proxy with validation, snapshot/undo, side effects, and plugins — built for complex, real-world applications.**
@@ -413,18 +413,62 @@ const { data } = createSvState(formData, actuators, {
 });
 ```
 
-| Option                          | Default | Description                                |
-| ------------------------------- | ------- | ------------------------------------------ |
-| `resetDirtyOnAction`            | `true`  | Clear dirty flag after successful action   |
-| `debounceValidation`            | `0`     | Delay sync validation (0 = next microtask) |
-| `allowConcurrentActions`        | `false` | Block execute() while action runs          |
-| `persistActionError`            | `false` | Clear error on next change or action       |
-| `debounceAsyncValidation`       | `300`   | Delay async validation in ms               |
-| `runAsyncValidationOnInit`      | `false` | Run async validators on creation           |
-| `clearAsyncErrorsOnChange`      | `true`  | Clear async error when property changes    |
-| `maxConcurrentAsyncValidations` | `4`     | Max concurrent async validators            |
-| `maxSnapshots`                  | `50`    | Max snapshots to keep (0 = unlimited)      |
-| `plugins`                       | `[]`    | Array of plugins to extend behavior        |
+| Option                          | Default         | Description                                                     |
+| ------------------------------- | --------------- | --------------------------------------------------------------- |
+| `resetDirtyOnAction`            | `true`          | Clear dirty flag after successful action                        |
+| `debounceValidation`            | `0`             | Delay sync validation (0 = next microtask)                      |
+| `allowConcurrentActions`        | `false`         | Block execute() while action runs                               |
+| `persistActionError`            | `false`         | Clear error on next change or action                            |
+| `debounceAsyncValidation`       | `300`           | Delay async validation in ms                                    |
+| `runAsyncValidationOnInit`      | `false`         | Run async validators on creation                                |
+| `clearAsyncErrorsOnChange`      | `true`          | Clear async error when property changes                         |
+| `maxConcurrentAsyncValidations` | `4`             | Max concurrent async validators                                 |
+| `maxSnapshots`                  | `50`            | Max snapshots to keep (0 = unlimited)                           |
+| `onPluginError`                 | `console.error` | Called as `(error, pluginName, hook)` when a plugin hook throws |
+| `plugins`                       | `[]`            | Array of plugins to extend behavior                             |
+
+#### Validating before submit
+
+Validation is deferred (a microtask by default, or `debounceValidation` ms), so the `errors` store may lag a mutation that just happened. Call `validate()` to force a synchronous pass and get the result directly:
+
+```typescript
+const { data, validate, execute } = createSvState(form, { validator, action });
+
+function submit() {
+  const { hasErrors } = validate();
+  if (hasErrors) return;
+  execute();
+}
+```
+
+#### Applying many changes at once
+
+`batch()` applies a group of mutations as one unit — validation runs once at the end, each async validator is scheduled at most once, and the whole group produces a single snapshot (one undo point):
+
+```typescript
+batch((draft) => {
+  draft.firstName = 'Ada';
+  draft.lastName = 'Lovelace';
+  draft.address.city = 'London';
+});
+
+rollback(); // undoes all three at once
+```
+
+`effect` and plugin `onChange` still fire once per mutation, so per-property side effects keep working.
+
+#### Handling plugin errors
+
+A throwing plugin hook is isolated — it doesn't abort the mutation or block later plugins. It's caught and reported through `onPluginError`, which defaults to `console.error`:
+
+```typescript
+const { data } = createSvState(formData, actuators, {
+  plugins: [thirdPartyPlugin, devtoolsPlugin()],
+  onPluginError: (error, pluginName, hook) => {
+    report(`plugin "${pluginName}" failed in ${hook}`, error);
+  }
+});
+```
 
 ---
 
@@ -525,13 +569,16 @@ const persist = persistPlugin({
   version: 1, // Schema version (default: 1)
   migrate: (data, v) => data, // Migration on version mismatch
   include: ['name', 'email'], // Only persist these paths
-  exclude: ['password'] // Exclude these paths
+  exclude: ['password'], // Exclude these paths
+  onError: (error) => report(error) // Storage write failures (e.g. quota exceeded)
 });
 
 // Extra methods:
 persist.isRestored(); // Was state hydrated from storage?
 persist.clearPersistedState(); // Remove stored data
 ```
+
+Restored state becomes the baseline: after hydration `isDirty` is `false` and `reset()` returns to the restored values, not to the defaults passed to `createSvState`.
 
 **`autosavePlugin`** — Auto-save after idle period or on interval.
 
@@ -576,12 +623,17 @@ const history = historyPlugin({
   fields: { search: 'q', page: 'p' }, // { stateField: 'urlParam' }
   mode: 'replace', // 'push' | 'replace' (default: 'replace')
   serialize: (value) => String(value),
-  deserialize: (param) => param
+  deserialize: (param) => param,
+  onError: (error) => report(error) // serialize/deserialize threw
 });
 
 // Extra method:
 history.syncFromUrl(); // Manually re-read URL into state
 ```
+
+> **Nested fields:** field keys may be dot-notation paths (`{ 'filters.q': 'q' }`). Matching works in both
+> directions — replacing the parent (`data.filters = {...}`) and mutating the leaf (`data.filters.q = '…'`)
+> both update the URL, and a registered parent (`{ filters: 'f' }`) is updated when any of its children change.
 
 **`syncPlugin`** — Sync state across browser tabs via BroadcastChannel.
 
@@ -591,7 +643,8 @@ import { syncPlugin } from 'svstate';
 const sync = syncPlugin({
   key: 'my-form-sync', // Required: channel name
   throttle: 100, // Broadcast debounce ms (default: 100)
-  merge: 'overwrite' // 'overwrite' | 'ignore' (default: 'overwrite')
+  merge: 'overwrite', // 'overwrite' | 'ignore' (default: 'overwrite')
+  onError: (error) => report(error) // State could not be serialized or posted
 });
 
 // Extra method:
@@ -625,7 +678,8 @@ analyticsPlugin({
   batchSize: 20, // Flush at N events (default: 20)
   flushInterval: 5000, // Periodic flush ms (default: 5000)
   include: ['change', 'action'], // Filter event types
-  redact: ['password', 'creditCard'] // Replace values for these paths with '[redacted]'
+  redact: ['password', 'creditCard'], // Replace values for these paths (and everything below) with '[redacted]'
+  onError: (error) => report(error) // onFlush threw or rejected
 });
 ```
 
@@ -1032,25 +1086,27 @@ Creates a supercharged state object.
 
 **Returns:**
 
-| Property                  | Type                         | Description                                            |
-| ------------------------- | ---------------------------- | ------------------------------------------------------ |
-| `data`                    | `T`                          | Deep reactive proxy — bind directly, methods preserved |
-| `execute(params?)`        | `(P?) => Promise<void>`      | Run the configured action                              |
-| `rollback(steps?)`        | `(n?: number) => void`       | Undo N changes (default: 1)                            |
-| `rollbackTo(title)`       | `(title: string) => boolean` | Roll back to last snapshot with matching title         |
-| `reset()`                 | `() => void`                 | Return to initial state                                |
-| `destroy()`               | `() => void`                 | Cleanup plugins and cancel async validations           |
-| `state.errors`            | `Readable<V>`                | Sync validation errors store                           |
-| `state.hasErrors`         | `Readable<boolean>`          | Has sync errors?                                       |
-| `state.isDirty`           | `Readable<boolean>`          | Has state changed? (derived from `isDirtyByField`)     |
-| `state.isDirtyByField`    | `Readable<DirtyFields>`      | Per-field dirty tracking (dot-notation paths)          |
-| `state.actionInProgress`  | `Readable<boolean>`          | Is action running?                                     |
-| `state.actionError`       | `Readable<Error>`            | Last action error                                      |
-| `state.snapshots`         | `Readable<Snapshot[]>`       | Undo history                                           |
-| `state.asyncErrors`       | `Readable<AsyncErrors>`      | Async validation errors (keyed by path)                |
-| `state.hasAsyncErrors`    | `Readable<boolean>`          | Has async errors?                                      |
-| `state.asyncValidating`   | `Readable<string[]>`         | Paths currently validating                             |
-| `state.hasCombinedErrors` | `Readable<boolean>`          | Has sync OR async errors?                              |
+| Property                  | Type                           | Description                                                     |
+| ------------------------- | ------------------------------ | --------------------------------------------------------------- |
+| `data`                    | `T`                            | Deep reactive proxy — bind directly, methods preserved          |
+| `execute(params?)`        | `(P?) => Promise<void>`        | Run the configured action                                       |
+| `rollback(steps?)`        | `(n?: number) => void`         | Undo N changes (default: 1)                                     |
+| `rollbackTo(title)`       | `(title: string) => boolean`   | Roll back to last snapshot with matching title                  |
+| `reset()`                 | `() => void`                   | Return to initial state                                         |
+| `validate()`              | `() => ValidationResult<V>`    | Run sync validation now, returns `{ errors, hasErrors }`        |
+| `batch(fn)`               | `((draft: T) => void) => void` | Apply many mutations as one unit (one validation, one snapshot) |
+| `destroy()`               | `() => void`                   | Cleanup plugins and cancel async validations                    |
+| `state.errors`            | `Readable<V>`                  | Sync validation errors store                                    |
+| `state.hasErrors`         | `Readable<boolean>`            | Has sync errors?                                                |
+| `state.isDirty`           | `Readable<boolean>`            | Has state changed? (derived from `isDirtyByField`)              |
+| `state.isDirtyByField`    | `Readable<DirtyFields>`        | Per-field dirty tracking (dot-notation paths)                   |
+| `state.actionInProgress`  | `Readable<boolean>`            | Is action running?                                              |
+| `state.actionError`       | `Readable<Error>`              | Last action error                                               |
+| `state.snapshots`         | `Readable<Snapshot[]>`         | Undo history                                                    |
+| `state.asyncErrors`       | `Readable<AsyncErrors>`        | Async validation errors (keyed by path)                         |
+| `state.hasAsyncErrors`    | `Readable<boolean>`            | Has async errors?                                               |
+| `state.asyncValidating`   | `Readable<string[]>`           | Paths currently validating                                      |
+| `state.hasCombinedErrors` | `Readable<boolean>`            | Has sync OR async errors?                                       |
 
 ### Built-in Validators
 
@@ -1076,6 +1132,7 @@ import type {
   Snapshot,
   SnapshotFunction,
   SvStateOptions,
+  ValidationResult,
   AsyncValidator,
   AsyncValidatorFunction,
   AsyncErrors,
@@ -1083,6 +1140,7 @@ import type {
   SvStatePlugin,
   PluginContext,
   PluginStores,
+  PluginHook,
   ChangeEvent,
   ActionEvent
 } from 'svstate';
@@ -1095,6 +1153,7 @@ import type {
 | `SnapshotFunction`          | Type for the `snapshot(title, shouldReplace?)` function used in effects                             |
 | `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
 | `SvStateOptions`            | Configuration options type for `createSvState`                                                      |
+| `ValidationResult<V>`       | Return type of `validate()`: `{ errors, hasErrors }`                                                |
 | `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                          |
 | `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                        |
 | `AsyncErrors`               | Object mapping property paths to error strings                                                      |
@@ -1102,6 +1161,7 @@ import type {
 | `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks (`onInit`, `onChange`, `onAction`, etc.)                      |
 | `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`                                    |
 | `PluginStores<T>`           | All readable stores exposed to plugins                                                              |
+| `PluginHook`                | Hook name passed to `onPluginError`, e.g. `'onChange'`                                              |
 | `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }`                              |
 | `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                                                |
 

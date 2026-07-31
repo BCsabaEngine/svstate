@@ -145,4 +145,92 @@ describe('historyPlugin', () => {
     destroy();
     expect(popstateListeners.length).toBe(0);
   });
+
+  describe('nested fields', () => {
+    it('should update URL when a dotted field is mutated directly', () => {
+      const history = historyPlugin({ fields: { 'filters.q': 'q' } });
+      const { data } = createSvState({ filters: { q: '' } }, undefined, { plugins: [history] });
+
+      data.filters.q = 'nested';
+
+      expect(replaceStateCalls.length).toBe(1);
+      expect((replaceStateCalls[0] as unknown[])[2]).toContain('q=nested');
+    });
+
+    it('should update URL when the parent of a dotted field is replaced', () => {
+      const history = historyPlugin({ fields: { 'filters.q': 'q' } });
+      const { data } = createSvState({ filters: { q: '' } }, undefined, { plugins: [history] });
+
+      data.filters = { q: 'replaced' };
+
+      expect(replaceStateCalls.length).toBe(1);
+      expect((replaceStateCalls[0] as unknown[])[2]).toContain('q=replaced');
+    });
+
+    it('should update URL for a registered parent when a child changes', () => {
+      const history = historyPlugin({
+        fields: { filters: 'f' },
+        serialize: (value) => JSON.stringify(value)
+      });
+      const { data } = createSvState({ filters: { q: '' } }, undefined, { plugins: [history] });
+
+      data.filters.q = 'child';
+
+      expect(replaceStateCalls.length).toBe(1);
+      expect((replaceStateCalls[0] as unknown[])[2]).toContain('child');
+    });
+
+    it('should read a dotted field from the URL on init', () => {
+      mockUrl.search = '?q=fromurl';
+      mockUrl.href = 'http://localhost/?q=fromurl';
+
+      const history = historyPlugin({ fields: { 'filters.q': 'q' } });
+      const { data } = createSvState({ filters: { q: '' } }, undefined, { plugins: [history] });
+
+      expect(data.filters.q).toBe('fromurl');
+    });
+  });
+
+  describe('onError', () => {
+    it('should route a throwing serialize to onError instead of escaping', () => {
+      const errors: unknown[] = [];
+      const history = historyPlugin({
+        fields: { query: 'q' },
+        serialize: () => {
+          throw new Error('serialize failed');
+        },
+        onError: (error) => {
+          errors.push(error);
+        }
+      });
+      const { data } = createSvState({ query: '' }, undefined, { plugins: [history] });
+
+      expect(() => (data.query = 'boom')).not.toThrow();
+      expect(errors.length).toBe(1);
+      expect((errors[0] as Error).message).toBe('serialize failed');
+      expect(replaceStateCalls.length).toBe(0);
+    });
+
+    it('should route a throwing deserialize to onError and keep other fields', () => {
+      mockUrl.search = '?a=1&b=2';
+      mockUrl.href = 'http://localhost/?a=1&b=2';
+
+      const errors: unknown[] = [];
+      const history = historyPlugin({
+        fields: { alpha: 'a', beta: 'b' },
+        deserialize: (parameter, field) => {
+          if (field === 'alpha') throw new Error('deserialize failed');
+          return parameter;
+        },
+        onError: (error) => {
+          errors.push(error);
+        }
+      });
+      const { data } = createSvState({ alpha: '', beta: '' }, undefined, { plugins: [history] });
+
+      expect(errors.length).toBe(1);
+      expect(data.alpha).toBe('');
+      expect(data.beta).toBe('2');
+    });
+  });
 });

@@ -372,3 +372,91 @@ describe('ChangeProxy', () => {
     });
   });
 });
+
+describe('ChangeProxy identity, deletes and paths', () => {
+  it('should return the same proxy instance for repeated reads', () => {
+    const proxy = ChangeProxy({ nested: { value: 1 } }, vi.fn());
+
+    expect(proxy.nested).toBe(proxy.nested);
+  });
+
+  it('should report property deletion as a change', () => {
+    const changed = vi.fn();
+    const source: { name?: string; keep: number } = { name: 'test', keep: 1 };
+    const proxy = ChangeProxy(source, changed);
+
+    delete proxy.name;
+
+    expect(changed).toHaveBeenCalledWith(expect.any(Object), 'name', undefined, 'test');
+    expect(Object.hasOwn(source, 'name')).toBe(false);
+  });
+
+  it('should report nested deletion with the full path', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ user: { name: 'a' } as { name?: string } }, changed);
+
+    delete proxy.user.name;
+
+    expect(changed).toHaveBeenCalledWith(expect.any(Object), 'user.name', undefined, 'a');
+  });
+
+  it('should not fire when deleting a missing key', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ name: 'test' } as { name?: string; other?: string }, changed);
+
+    delete proxy.other;
+
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('should not store proxies in the raw tree', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ a: { x: 1 }, b: {} as { x?: number } }, changed);
+
+    proxy.b = proxy.a;
+    changed.mockClear();
+    proxy.b.x = 99;
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith(expect.any(Object), 'b.x', 99, 1);
+  });
+
+  it('should treat self-assignment as a no-op', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ nested: { x: 1 } }, changed);
+
+    const current = proxy.nested;
+    proxy.nested = current;
+
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('should not fire when NaN replaces NaN', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ value: NaN }, changed);
+
+    proxy.value = NaN;
+
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('should keep numeric-looking object keys in the path', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ users: { '123': { name: 'x' } } }, changed);
+
+    proxy.users['123']!.name = 'y';
+
+    expect(changed).toHaveBeenCalledWith(expect.any(Object), 'users.123.name', 'y', 'x');
+  });
+
+  it('should report array index and length writes on the array itself', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ list: [1, 2, 3] }, changed);
+
+    proxy.list[0] = 9;
+    proxy.list.length = 1;
+
+    expect(changed).toHaveBeenNthCalledWith(1, expect.any(Object), 'list', 9, 1);
+    expect(changed).toHaveBeenNthCalledWith(2, expect.any(Object), 'list', 1, 3);
+  });
+});

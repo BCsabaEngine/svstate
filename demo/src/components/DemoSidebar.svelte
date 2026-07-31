@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	interface Properties {
 		data: unknown;
 		errors: unknown;
@@ -7,9 +9,10 @@
 		isDirtyByField?: Record<string, boolean>;
 		onFill: () => void;
 		width?: 'xl:w-80' | 'xl:w-96';
+		extra?: Snippet;
 	}
 
-	let { data, errors, isDirty, hasErrors, isDirtyByField, onFill, width = 'xl:w-80' }: Properties = $props();
+	let { data, errors, isDirty, hasErrors, isDirtyByField, onFill, width = 'xl:w-80', extra }: Properties = $props();
 </script>
 
 <div class="w-full {width} flex-shrink-0 space-y-4">
@@ -49,4 +52,6 @@
 	>
 		Fill with Valid Data
 	</button>
+
+	{@render extra?.()}
 </div>

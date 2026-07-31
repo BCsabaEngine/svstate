@@ -4,7 +4,7 @@
 
 The library already uses a **hybrid approach**:
 
-- `$state<T>()` for the reactive data object (line 86)
+- `$state<T>()` for the reactive data object (`src/state.svelte.ts`, `stateObject`)
 - Svelte stores (`writable`, `derived`) for metadata: errors, hasErrors, isDirty, actionInProgress, actionError, snapshots
 
 ```typescript

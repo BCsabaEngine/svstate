@@ -1,4 +1,3 @@
- 
 /* eslint-disable unicorn/prefer-node-protocol */
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
