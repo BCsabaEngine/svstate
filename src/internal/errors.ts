@@ -1,7 +1,7 @@
 import type { Validator } from '../state.svelte';
 
 /** True when any leaf of the (possibly nested) validator result is a non-empty string. */
-export const hasValidatorErrors = (validator: Validator): boolean =>
+const hasValidatorErrors = (validator: Validator): boolean =>
   Object.values(validator).some((item) => (typeof item === 'string' ? !!item : hasValidatorErrors(item)));
 
 export const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && hasValidatorErrors($errors);

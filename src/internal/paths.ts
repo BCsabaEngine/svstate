@@ -6,6 +6,22 @@ export const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 export const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/** Views a typed state object as an indexable record for path walking. */
+export const asRecord = (value: object): Record<string, unknown> => value as Record<string, unknown>;
+
+/**
+ * Selects the registered dot-notation paths affected by a change at `changedPath`.
+ * A path matches when it is the changed path itself, a descendant of it (changing
+ * `user` affects `user.email`), or an ancestor of it (changing `user.email` affects `user`).
+ */
+export const getMatchingPaths = (registeredPaths: string[], changedPath: string): string[] =>
+  registeredPaths.filter(
+    (registeredPath) =>
+      registeredPath === changedPath ||
+      registeredPath.startsWith(changedPath + '.') ||
+      changedPath.startsWith(registeredPath + '.')
+  );
+
 export const getValueAtPath = (source: unknown, path: string): unknown => {
   const parts = path.split('.');
   let current: unknown = source;

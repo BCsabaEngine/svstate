@@ -1,4 +1,5 @@
-import { getValueAtPath, isPlainObject, safeMerge, setValueAtPath } from '../internal/paths';
+import { asRecord, getValueAtPath, isPlainObject, safeMerge, setValueAtPath } from '../internal/paths';
+import { createDebouncer } from '../internal/timers';
 import type { SvStatePlugin } from '../plugin';
 
 const isValidStorageFormat = (value: unknown): value is StorageFormat =>
@@ -75,13 +76,12 @@ export function persistPlugin<T extends Record<string, unknown>>(options: Persis
   const version = options.version ?? 1;
 
   let isRestored = false;
-  let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
   let contextData: T | undefined;
 
   const writeToStorage = () => {
     if (!storage || !contextData) return;
     try {
-      const filtered = filterData(contextData as unknown as Record<string, unknown>, options.include, options.exclude);
+      const filtered = filterData(asRecord(contextData), options.include, options.exclude);
       const payload: StorageFormat = { version, data: filtered };
       storage.setItem(options.key, JSON.stringify(payload));
     } catch (error) {
@@ -90,10 +90,7 @@ export function persistPlugin<T extends Record<string, unknown>>(options: Persis
     }
   };
 
-  const scheduleWrite = () => {
-    clearTimeout(pendingTimeout);
-    pendingTimeout = setTimeout(writeToStorage, throttleMs);
-  };
+  const writer = createDebouncer(writeToStorage, throttleMs);
 
   const plugin: PersistPluginInstance<T> = {
     name: 'persist',
@@ -116,7 +113,7 @@ export function persistPlugin<T extends Record<string, unknown>>(options: Persis
           parsed = { version, data: migrated };
         }
 
-        safeMerge(context.data as unknown as Record<string, unknown>, parsed.data);
+        safeMerge(asRecord(context.data), parsed.data);
         isRestored = true;
       } catch {
         // Invalid stored data — ignore
@@ -124,18 +121,16 @@ export function persistPlugin<T extends Record<string, unknown>>(options: Persis
     },
 
     onChange() {
-      scheduleWrite();
+      writer.schedule();
     },
 
     onReset() {
       writeToStorage();
     },
 
+    // Idempotent: only a still-pending write is flushed, so a second destroy() is a no-op
     destroy() {
-      if (pendingTimeout === undefined) return;
-
-      clearTimeout(pendingTimeout);
-      writeToStorage();
+      writer.flush();
     },
 
     clearPersistedState() {

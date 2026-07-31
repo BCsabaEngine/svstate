@@ -1,4 +1,5 @@
-import { isPlainObject, safeMerge } from '../internal/paths';
+import { asRecord, isPlainObject, safeMerge } from '../internal/paths';
+import { createDebouncer } from '../internal/timers';
 import type { PluginContext, SvStatePlugin } from '../plugin';
 
 const MAX_SYNC_DEPTH = 10;
@@ -13,6 +14,7 @@ export type SyncOptions = {
   key: string;
   throttle?: number;
   merge?: 'overwrite' | 'ignore';
+  onError?: (error: unknown) => void;
 };
 
 export type SyncPluginInstance<T extends Record<string, unknown>> = SvStatePlugin<T> & {
@@ -26,29 +28,30 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
   let channel: BroadcastChannel | undefined;
   let context: PluginContext<T> | undefined;
   let isReceiving = false;
-  let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
   let lastReceivedAt = 0;
   let pendingIncoming: Record<string, unknown> | undefined;
   let incomingTimeout: ReturnType<typeof setTimeout> | undefined;
 
   const broadcast = () => {
     if (!channel || !context) return;
-    // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone fails on Svelte reactive proxies
-    const cloned = JSON.parse(JSON.stringify(context.data)) as T;
+    try {
+      // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone fails on Svelte reactive proxies
+      const cloned = JSON.parse(JSON.stringify(context.data)) as T;
 
-    channel.postMessage({ type: 'sync', data: cloned });
+      channel.postMessage({ type: 'sync', data: cloned });
+    } catch (error) {
+      // Circular structures, BigInt, a closed channel — never throw out of a timer
+      options.onError?.(error);
+    }
   };
 
-  const scheduleBroadcast = () => {
-    clearTimeout(pendingTimeout);
-    pendingTimeout = setTimeout(broadcast, throttleMs);
-  };
+  const broadcaster = createDebouncer(broadcast, throttleMs);
 
   const applyIncoming = (payload: Record<string, unknown>) => {
     if (!context) return;
     isReceiving = true;
     try {
-      safeMerge(context.data as unknown as Record<string, unknown>, payload);
+      safeMerge(asRecord(context.data), payload);
     } finally {
       isReceiving = false;
     }
@@ -77,7 +80,7 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
   };
 
   const closeChannel = () => {
-    clearTimeout(pendingTimeout);
+    broadcaster.cancel();
     clearTimeout(incomingTimeout);
     incomingTimeout = undefined;
     pendingIncoming = undefined;
@@ -108,7 +111,7 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
 
     onChange() {
       if (isReceiving) return;
-      scheduleBroadcast();
+      broadcaster.schedule();
     },
 
     destroy() {

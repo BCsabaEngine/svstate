@@ -1,5 +1,6 @@
 import { get } from 'svelte/store';
 
+import { createDebouncer } from '../internal/timers';
 import type { PluginContext, SvStatePlugin } from '../plugin';
 
 export type AutosaveOptions<T> = {
@@ -26,8 +27,8 @@ export function autosavePlugin<T extends Record<string, unknown>>(
   const onlyWhenDirty = options.onlyWhenDirty ?? true;
 
   let context: PluginContext<T> | undefined;
-  let idleTimeout: ReturnType<typeof setTimeout> | undefined;
   let intervalTimer: ReturnType<typeof setInterval> | undefined;
+  let hasVisibilityListener = false;
   let isSaving = false;
   let isDestroyed = false;
   let hasPendingSave = false;
@@ -56,10 +57,7 @@ export function autosavePlugin<T extends Record<string, unknown>>(
     }
   };
 
-  const scheduleIdleSave = () => {
-    clearTimeout(idleTimeout);
-    idleTimeout = setTimeout(doSave, idleMs);
-  };
+  const idleSaver = createDebouncer(() => void doSave(), idleMs);
 
   const handleVisibility = () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') doSave();
@@ -73,47 +71,41 @@ export function autosavePlugin<T extends Record<string, unknown>>(
 
       if (intervalMs > 0) intervalTimer = setInterval(doSave, intervalMs);
 
-      if (typeof document !== 'undefined' && options.onVisibilityHidden)
+      if (typeof document !== 'undefined' && options.onVisibilityHidden) {
         document.addEventListener('visibilitychange', handleVisibility);
+        hasVisibilityListener = true;
+      }
     },
 
     onChange() {
-      scheduleIdleSave();
+      idleSaver.schedule();
     },
 
     onAction(event) {
-      if (event.phase === 'after' && !event.error) clearTimeout(idleTimeout);
+      if (event.phase === 'after' && !event.error) idleSaver.cancel();
     },
 
     destroy() {
       isDestroyed = true;
       hasPendingSave = false;
-      clearTimeout(idleTimeout);
+      idleSaver.cancel();
       if (intervalTimer !== undefined) clearInterval(intervalTimer);
 
-      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibility);
+      if (hasVisibilityListener) {
+        document.removeEventListener('visibilitychange', handleVisibility);
+        hasVisibilityListener = false;
+      }
 
+      // Fire-and-forget: doSave already applies the onlyWhenDirty check and the error guard
       if (saveOnDestroy && context) {
         isSaving = false;
-        const activeContext = context;
-        // Fire-and-forget save on destroy
-        const shouldSave = !onlyWhenDirty || get(activeContext.state.isDirty);
-        if (shouldSave) {
-          const trySave = async () => {
-            try {
-              await options.save(activeContext.data);
-            } catch (error) {
-              options.onError?.(error);
-            }
-          };
-          void trySave();
-        }
+        void doSave();
       }
     },
 
     async saveNow() {
       if (isDestroyed) return;
-      clearTimeout(idleTimeout);
+      idleSaver.cancel();
       isSaving = false;
       hasPendingSave = false;
       await doSave();

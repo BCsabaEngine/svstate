@@ -1,20 +1,7 @@
-import type { Readable } from 'svelte/store';
+import type { Snapshot, SnapshotFunction, StateResult, SvStateOptions, Validator } from './state.svelte';
 
-import type { AsyncErrors, DirtyFields, Snapshot, SnapshotFunction, SvStateOptions, Validator } from './state.svelte';
-
-export type PluginStores<T> = {
-  errors: Readable<Validator | undefined>;
-  hasErrors: Readable<boolean>;
-  isDirty: Readable<boolean>;
-  isDirtyByField: Readable<DirtyFields>;
-  actionInProgress: Readable<boolean>;
-  actionError: Readable<Error | undefined>;
-  snapshots: Readable<Snapshot<T>[]>;
-  asyncErrors: Readable<AsyncErrors>;
-  hasAsyncErrors: Readable<boolean>;
-  asyncValidating: Readable<string[]>;
-  hasCombinedErrors: Readable<boolean>;
-};
+/** The same stores `createSvState` returns, with errors widened to the untyped shape. */
+export type PluginStores<T> = StateResult<T, Validator>;
 
 export type PluginContext<T extends Record<string, unknown>> = {
   data: T;

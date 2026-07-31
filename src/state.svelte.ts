@@ -2,7 +2,7 @@ import { derived, get, type Readable, writable } from 'svelte/store';
 
 import { deepClone } from './internal/clone';
 import { hasAnyErrors, toError } from './internal/errors';
-import { getValueAtPath } from './internal/paths';
+import { getMatchingPaths, getValueAtPath, isPlainObject } from './internal/paths';
 import type { SvStatePlugin } from './plugin';
 import { ChangeProxy } from './proxy';
 
@@ -54,7 +54,7 @@ type Actuators<T extends Record<string, unknown>, V extends Validator, P extends
   asyncValidator?: AsyncValidator<T>;
 };
 
-type StateResult<T, V> = {
+export type StateResult<T, V> = {
   errors: Readable<V | undefined>;
   hasErrors: Readable<boolean>;
   isDirty: Readable<boolean>;
@@ -69,32 +69,18 @@ type StateResult<T, V> = {
 };
 
 // Async validation helpers
+// Walks only through objects on purpose: a string ancestor means the error sits above this
+// path, not on it, and indexing into that string would yield a bogus single-character "error"
 const getSyncErrorForPath = (errors: Validator | undefined, path: string): string => {
-  if (!errors) return '';
-  const parts = path.split('.');
-  let current: string | Validator = errors;
-  for (const part of parts) {
-    if (typeof current === 'string') return '';
-    if (current[part] === undefined) return '';
+  let current: unknown = errors;
+  for (const part of path.split('.')) {
+    if (!isPlainObject(current)) return '';
     current = current[part];
   }
   return typeof current === 'string' ? current : '';
 };
 
-const getMatchingAsyncValidatorPaths = <T>(asyncValidator: AsyncValidator<T>, changedPath: string): string[] => {
-  const matches: string[] = [];
-  for (const registeredPath of Object.keys(asyncValidator))
-    // Exact match, changed path is a prefix of registered path, or changed path is nested
-    // within registered path (e.g., validator for 'user', changed 'user.name')
-    if (
-      registeredPath === changedPath ||
-      registeredPath.startsWith(changedPath + '.') ||
-      changedPath.startsWith(registeredPath + '.')
-    )
-      matches.push(registeredPath);
-
-  return matches;
-};
+const INITIAL_SNAPSHOT_TITLE = 'Initial';
 
 // Options
 export type PluginHook = Exclude<keyof SvStatePlugin<Record<string, unknown>>, 'name'>;
@@ -143,7 +129,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   const isDirty = derived(dirtyFieldsStore, ($fields) => Object.keys($fields).length > 0);
   const actionInProgress = writable(false);
   const actionError = writable<Error | undefined>();
-  const snapshots = writable<Snapshot<T>[]>([{ title: 'Initial', data: deepClone(init) }]);
+  const snapshots = writable<Snapshot<T>[]>([{ title: INITIAL_SNAPSHOT_TITLE, data: deepClone(init) }]);
 
   // Async validation stores
   const asyncErrorsStore = writable<AsyncErrors>({});
@@ -157,11 +143,11 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     ([$hasErrors, $hasAsyncErrors]) => $hasErrors || $hasAsyncErrors
   );
 
-  // Async validation trackers for cancellation
-  const asyncValidationTrackers = new Map<
-    string,
-    { controller: AbortController; timeoutId: ReturnType<typeof setTimeout> }
-  >();
+  // Async validation trackers for cancellation. A path is either waiting out its debounce
+  // delay or already running — never both, so each phase carries only what it can cancel.
+  type AsyncTracker =
+    { kind: 'debounced'; timeoutId: ReturnType<typeof setTimeout> } | { kind: 'running'; controller: AbortController };
+  const asyncValidationTrackers = new Map<string, AsyncTracker>();
 
   // Queue for async validations waiting to run (when at concurrency limit)
   const asyncValidationQueue: string[] = [];
@@ -181,7 +167,8 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   // Deferral state for batch() and for plugin hydration during onInit
   let isBatching = false;
-  let changeCount = 0;
+  // Nothing can mutate before the onInit hook runs, so this stays false until hydration
+  let hasChanged = false;
   let batchedSnapshotTitle: string | undefined;
   const batchedAsyncPaths = new Set<string>();
 
@@ -238,6 +225,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   let isValidationScheduled = false;
   let validationTimeout: ReturnType<typeof setTimeout> | undefined;
 
+  const clearValidationTimer = () => {
+    if (validationTimeout === undefined) return;
+    clearTimeout(validationTimeout);
+    validationTimeout = undefined;
+  };
+
   const scheduleValidation = () => {
     if (!validator || isDestroyed) return;
 
@@ -263,19 +256,24 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (index !== -1) asyncValidationQueue.splice(index, 1);
   };
 
+  const markValidating = (path: string) => asyncValidatingSet.update(($set) => new Set([...$set, path]));
+
+  const unmarkValidating = (path: string) =>
+    asyncValidatingSet.update(($set) => {
+      $set.delete(path);
+      return new Set($set);
+    });
+
   const cancelAsyncValidation = (path: string) => {
     // Remove from queue if waiting
     removeFromQueue(path);
 
     const tracker = asyncValidationTrackers.get(path);
     if (tracker) {
-      clearTimeout(tracker.timeoutId);
-      tracker.controller.abort();
+      if (tracker.kind === 'debounced') clearTimeout(tracker.timeoutId);
+      else tracker.controller.abort();
       asyncValidationTrackers.delete(path);
-      asyncValidatingSet.update(($set) => {
-        $set.delete(path);
-        return new Set($set);
-      });
+      unmarkValidating(path);
     }
   };
 
@@ -286,30 +284,17 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const executeAsyncValidation = async (path: string, onComplete: () => void) => {
-    if (!asyncValidator || isDestroyed) {
-      onComplete();
-      return;
-    }
-
-    const asyncValidatorForPath = asyncValidator[path];
-    if (!asyncValidatorForPath) {
-      onComplete();
-      return;
-    }
-
-    // Check sync error for this path - skip if sync fails
-    const syncError = getSyncErrorForPath(get(errors), path);
-    if (syncError) {
+    const asyncValidatorForPath = asyncValidator?.[path];
+    // Nothing to run, torn down, or sync validation already failed for this path
+    if (!asyncValidatorForPath || isDestroyed || getSyncErrorForPath(get(errors), path)) {
       onComplete();
       return;
     }
 
     const controller = new AbortController();
-    // Store controller with a dummy timeoutId (validation already started)
-    asyncValidationTrackers.set(path, { controller, timeoutId: 0 as unknown as ReturnType<typeof setTimeout> });
+    asyncValidationTrackers.set(path, { kind: 'running', controller });
 
-    // Mark as validating
-    asyncValidatingSet.update(($set) => new Set([...$set, path]));
+    markValidating(path);
 
     try {
       const value = getValueAtPath(data, path);
@@ -328,10 +313,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
         asyncErrorsStore.update(($asyncErrors) => ({ ...$asyncErrors, [path]: toError(error).message }));
     } finally {
       asyncValidationTrackers.delete(path);
-      asyncValidatingSet.update(($set) => {
-        $set.delete(path);
-        return new Set($set);
-      });
+      unmarkValidating(path);
       onComplete();
     }
   };
@@ -360,7 +342,6 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
         return updated;
       });
 
-    const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       // Remove tracker since debounce is done
       asyncValidationTrackers.delete(path);
@@ -369,14 +350,10 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       const activeCount = get(asyncValidatingSet).size;
       if (activeCount < usedOptions.maxConcurrentAsyncValidations)
         executeAsyncValidation(path, processAsyncValidationQueue);
-      else {
-        // Remove any existing entry for this path and add to end of queue
-        removeFromQueue(path);
-        asyncValidationQueue.push(path);
-      }
+      else asyncValidationQueue.push(path);
     }, usedOptions.debounceAsyncValidation);
 
-    asyncValidationTrackers.set(path, { controller, timeoutId });
+    asyncValidationTrackers.set(path, { kind: 'debounced', timeoutId });
   };
 
   const flushDeferredValidation = () => {
@@ -389,7 +366,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   const scheduleAsyncValidationsForPath = (changedPath: string) => {
     if (!asyncValidator) return;
 
-    const matchingPaths = getMatchingAsyncValidatorPaths(asyncValidator, changedPath);
+    const matchingPaths = getMatchingPaths(Object.keys(asyncValidator), changedPath);
     if (isBatching) {
       for (const path of matchingPaths) batchedAsyncPaths.add(path);
       return;
@@ -399,7 +376,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
     if (isDestroyed) return;
-    changeCount++;
+    hasChanged = true;
     if (!usedOptions.persistActionError) actionError.set(undefined);
     markDirtyWithParents(property);
     const effectResult: unknown = effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
@@ -414,10 +391,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   /** Runs sync validation immediately (bypassing debounce) and returns the result. */
   const validate = (): ValidationResult<V> => {
-    if (validationTimeout !== undefined) {
-      clearTimeout(validationTimeout);
-      validationTimeout = undefined;
-    }
+    clearValidationTimer();
     runValidation();
     const currentErrors = get(errors);
     return { errors: currentErrors, hasErrors: hasAnyErrors(currentErrors) };
@@ -452,6 +426,12 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   if (asyncValidator && usedOptions.runAsyncValidationOnInit)
     for (const path of Object.keys(asyncValidator)) scheduleAsyncValidation(path);
 
+  // Makes the current state the new starting point: one "Initial" snapshot, nothing dirty
+  const resetBaseline = (shouldClearDirty = true) => {
+    if (shouldClearDirty) dirtyFieldsStore.set({});
+    snapshots.set([{ title: INITIAL_SNAPSHOT_TITLE, data: deepClone(stateObject) }]);
+  };
+
   const execute = async (parameters?: P) => {
     if (!usedOptions.allowConcurrentActions && get(actionInProgress)) return;
 
@@ -460,8 +440,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     actionInProgress.set(true);
     try {
       await actuators?.action?.(parameters);
-      if (usedOptions.resetDirtyOnAction) dirtyFieldsStore.set({});
-      snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
+      resetBaseline(usedOptions.resetDirtyOnAction);
       await actuators?.actionCompleted?.();
       callPlugins('onAction', { phase: 'after', params: parameters });
     } catch (caughtError) {
@@ -493,12 +472,15 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     return targetSnapshot;
   };
 
+  const restoreAndNotify = (targetIndex: number, currentSnapshots: Snapshot<T>[]) => {
+    const targetSnapshot = restoreToSnapshot(targetIndex, currentSnapshots);
+    if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
+  };
+
   const rollback = (steps = 1) => {
     const currentSnapshots = get(snapshots);
     if (currentSnapshots.length <= 1) return;
-    const targetIndex = Math.max(0, currentSnapshots.length - 1 - steps);
-    const targetSnapshot = restoreToSnapshot(targetIndex, currentSnapshots);
-    if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
+    restoreAndNotify(Math.max(0, currentSnapshots.length - 1 - steps), currentSnapshots);
   };
 
   // eslint-disable-next-line unicorn/consistent-boolean-name -- rollbackTo is a public API method name, not a boolean flag
@@ -507,8 +489,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (currentSnapshots.length <= 1) return false;
     for (let index = currentSnapshots.length - 1; index >= 0; index--)
       if (currentSnapshots[index]!.title === title) {
-        const targetSnapshot = restoreToSnapshot(index, currentSnapshots);
-        if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
+        restoreAndNotify(index, currentSnapshots);
         return true;
       }
 
@@ -540,10 +521,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (isDestroyed) return;
     isDestroyed = true;
 
-    if (validationTimeout !== undefined) {
-      clearTimeout(validationTimeout);
-      validationTimeout = undefined;
-    }
+    clearValidationTimer();
     cancelAllAsyncValidations();
 
     for (let index = plugins.length - 1; index >= 0; index--) {
@@ -555,7 +533,6 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   // Plugins such as persist/history hydrate state from onInit by writing through the proxy.
   // Defer validation across the hook, then re-baseline so hydrated values count as the initial
   // state instead of as a dirty change on top of it.
-  const changesBeforeInit = changeCount;
   isBatching = true;
   try {
     callPlugins('onInit', { data, state, options: usedOptions, snapshot: createSnapshot });
@@ -566,12 +543,10 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   // Snapshots taken during hydration are superseded by the re-baseline below
   batchedSnapshotTitle = undefined;
 
-  if (changeCount === changesBeforeInit) batchedAsyncPaths.clear();
-  else {
-    dirtyFieldsStore.set({});
-    snapshots.set([{ title: 'Initial', data: deepClone(stateObject) }]);
+  if (hasChanged) {
+    resetBaseline();
     flushDeferredValidation();
-  }
+  } else batchedAsyncPaths.clear();
 
   return { data, execute, state, rollback, rollbackTo, reset, destroy, validate, batch };
 }
