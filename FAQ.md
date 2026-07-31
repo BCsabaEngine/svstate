@@ -457,15 +457,15 @@ reset(); // Returns to original state
 
 ---
 
-### What does the `replace` parameter in `snapshot(title, replace)` do?
+### What does the `shouldReplace` parameter in `snapshot(title, shouldReplace)` do?
 
-When `replace` is `true` (default), consecutive snapshots with the same title replace each other instead of stacking. This prevents snapshot bloat during rapid typing:
+When `shouldReplace` is `true` (default), consecutive snapshots with the same title replace each other instead of stacking. This prevents snapshot bloat during rapid typing:
 
 ```typescript
 effect: ({ snapshot }) => {
   // User types "Hello" quickly
-  // Without replace: 5 snapshots ("H", "He", "Hel", "Hell", "Hello")
-  // With replace: 1 snapshot ("Hello")
+  // Without replacing: 5 snapshots ("H", "He", "Hel", "Hell", "Hello")
+  // With replacing: 1 snapshot ("Hello")
   snapshot('Typing in name field'); // Same title = replaces previous
 };
 

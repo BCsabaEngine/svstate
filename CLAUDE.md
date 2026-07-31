@@ -157,7 +157,7 @@ effect: ({ snapshot, property }) => {
 
 **Important:** The effect callback must be synchronous. Returning a Promise throws an error.
 
-- `snapshot(title, replace = true)` - Creates a snapshot; if `replace=true` and last snapshot has same title, replaces it (debouncing)
+- `snapshot(title, shouldReplace = true)` - Creates a snapshot; if `shouldReplace=true` and last snapshot has same title, replaces it (debouncing)
 - Initial state is saved as first snapshot with title `"Initial"`
 - Successful action execution resets snapshots with current state as new initial
 - `rollback()`, `rollbackTo()`, and `reset()` trigger validation after restoring state
