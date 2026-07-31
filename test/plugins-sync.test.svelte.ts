@@ -138,4 +138,52 @@ describe('syncPlugin inbound throttling', () => {
 
     expect(state.data.name).toBe('third');
   });
+
+  it('should route an unserializable broadcast to onError', async () => {
+    const errors: unknown[] = [];
+    const sync = syncPlugin({
+      key: 'unserializable',
+      throttle: 10,
+      onError: (error) => {
+        errors.push(error);
+      }
+    });
+    const { data } = createSvState<{ name: string; big: unknown }, never, never>(
+      { name: 'a', big: undefined },
+      undefined,
+      { plugins: [sync] }
+    );
+
+    // BigInt is not JSON-serializable — JSON.stringify throws inside the debounced broadcast
+    data.big = 1n;
+
+    await new Promise((r) => setTimeout(r, 40));
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(TypeError);
+  });
+
+  it('should route a circular structure to onError', async () => {
+    const errors: unknown[] = [];
+    const sync = syncPlugin({
+      key: 'circular',
+      throttle: 10,
+      onError: (error) => {
+        errors.push(error);
+      }
+    });
+    const { data } = createSvState<{ name: string; self: unknown }, never, never>(
+      { name: 'a', self: undefined },
+      undefined,
+      { plugins: [sync] }
+    );
+
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    data.self = cycle;
+
+    await new Promise((r) => setTimeout(r, 40));
+
+    expect(errors).toHaveLength(1);
+  });
 });
