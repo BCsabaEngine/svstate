@@ -169,3 +169,89 @@ describe('analyticsPlugin', () => {
     expect(snapshotEvents[0]!.detail.title).toBe('MySnapshot');
   });
 });
+
+describe('analyticsPlugin validation and redaction', () => {
+  it('should report hasErrors false when validation is clean', () => {
+    const flushed: AnalyticsEvent[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: (events) => {
+        flushed.push(...events);
+      },
+      include: ['validation'],
+      flushInterval: 0
+    });
+
+    createSvState(
+      { name: 'ok' },
+      { validator: (source) => ({ name: source.name ? '' : 'Required' }) },
+      {
+        plugins: [analytics]
+      }
+    );
+    analytics.flush();
+
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]?.detail['hasErrors']).toBe(false);
+  });
+
+  it('should report hasErrors true when validation fails', () => {
+    const flushed: AnalyticsEvent[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: (events) => {
+        flushed.push(...events);
+      },
+      include: ['validation'],
+      flushInterval: 0
+    });
+
+    createSvState(
+      { name: '' },
+      { validator: (source) => ({ name: source.name ? '' : 'Required' }) },
+      {
+        plugins: [analytics]
+      }
+    );
+    analytics.flush();
+
+    expect(flushed[0]?.detail['hasErrors']).toBe(true);
+  });
+
+  it('should redact nested paths under a redacted parent', () => {
+    const flushed: AnalyticsEvent[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: (events) => {
+        flushed.push(...events);
+      },
+      include: ['change'],
+      redact: ['user'],
+      flushInterval: 0
+    });
+
+    const { data } = createSvState({ user: { ssn: '', nickname: '' } }, {}, { plugins: [analytics] });
+    data.user.ssn = '123-45-6789';
+    analytics.flush();
+
+    expect(flushed[0]?.detail['property']).toBe('user.ssn');
+    expect(flushed[0]?.detail['currentValue']).toBe('[redacted]');
+  });
+
+  it('should report a rejected onFlush through onError', async () => {
+    const errors: unknown[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: () => Promise.reject(new Error('network down')),
+      onError: (error) => {
+        errors.push(error);
+      },
+      include: ['change'],
+      flushInterval: 0
+    });
+
+    const { data } = createSvState({ value: 0 }, {}, { plugins: [analytics] });
+    data.value = 1;
+    analytics.flush();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('network down');
+  });
+});

@@ -1628,3 +1628,77 @@ describe('dateValidator', () => {
     /* eslint-enable unicorn/no-null */
   });
 });
+
+describe('numberValidator NaN handling', () => {
+  it('should report NaN as required', () => {
+    expect(numberValidator(NaN).required().getError()).toBe('Required');
+  });
+
+  it('should skip comparison rules for NaN', () => {
+    expect(numberValidator(NaN).min(5).getError()).toBe('');
+    expect(numberValidator(NaN).max(5).getError()).toBe('');
+    expect(numberValidator(NaN).between(1, 5).getError()).toBe('');
+    expect(numberValidator(NaN).positive().getError()).toBe('');
+    expect(numberValidator(NaN).integer().getError()).toBe('');
+    expect(numberValidator(NaN).percentage().getError()).toBe('');
+    expect(numberValidator(NaN).decimal(2).getError()).toBe('');
+  });
+});
+
+describe('numberValidator precision', () => {
+  it('should count decimal places in exponential notation', () => {
+    expect(numberValidator(1e-7).decimal(2).getError()).toBe('Maximum 2 decimal places');
+    expect(numberValidator(1e-7).decimal(7).getError()).toBe('');
+  });
+
+  it('should accept float multiples that exact modulo rejects', () => {
+    expect(numberValidator(0.3).multipleOf(0.1).getError()).toBe('');
+    expect(numberValidator(0.3).step(0.1).getError()).toBe('');
+    expect(numberValidator(0.35).multipleOf(0.1).getError()).toBe('Must be a multiple of 0.1');
+  });
+
+  it('should reject a zero divisor', () => {
+    expect(numberValidator(5).multipleOf(0).getError()).toBe('Must be a multiple of 0');
+  });
+});
+
+describe('arrayValidator comparison keys', () => {
+  it('should not collide values of different types', () => {
+    expect(arrayValidator([1, '1']).unique().getError()).toBe('');
+    // eslint-disable-next-line unicorn/no-null
+    expect(arrayValidator([null, 'null']).unique().getError()).toBe('');
+  });
+
+  it('should treat objects with the same entries as equal regardless of key order', () => {
+    expect(
+      arrayValidator([
+        { a: 1, b: 2 },
+        { b: 2, a: 1 }
+      ])
+        .unique()
+        .getError()
+    ).toBe('Items must be unique');
+  });
+
+  it('should compare dates by value', () => {
+    expect(
+      arrayValidator([new Date('2020-01-01'), new Date('2020-01-01')])
+        .unique()
+        .getError()
+    ).toBe('Items must be unique');
+    expect(
+      arrayValidator([new Date('2020-01-01'), new Date('2021-01-01')])
+        .unique()
+        .getError()
+    ).toBe('');
+  });
+
+  it('should match includes by value not by type-coerced string', () => {
+    expect(arrayValidator([1, 2]).includes(1).getError()).toBe('');
+    expect(
+      arrayValidator(['1', '2'])
+        .includes(1 as unknown as string)
+        .getError()
+    ).toBe('Must include 1');
+  });
+});

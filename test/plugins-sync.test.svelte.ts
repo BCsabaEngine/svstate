@@ -114,3 +114,28 @@ describe('syncPlugin', () => {
     expect(channels?.length ?? 0).toBe(0);
   });
 });
+
+describe('syncPlugin inbound throttling', () => {
+  beforeEach(() => {
+    MockBroadcastChannel.reset();
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('should apply the newest payload of a burst instead of dropping it', async () => {
+    const receiver = syncPlugin({ key: 'burst', throttle: 30 });
+    const state = createSvState({ name: 'initial' }, undefined, { plugins: [receiver] });
+
+    const sender = new MockBroadcastChannel('burst');
+    sender.postMessage({ type: 'sync', data: { name: 'first' } });
+    sender.postMessage({ type: 'sync', data: { name: 'second' } });
+    sender.postMessage({ type: 'sync', data: { name: 'third' } });
+
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(state.data.name).toBe('third');
+  });
+});

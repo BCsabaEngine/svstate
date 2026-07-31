@@ -1,3 +1,5 @@
+import { get } from 'svelte/store';
+
 import { persistPlugin } from '../src/plugins/persist';
 import { createSvState } from '../src/state.svelte';
 
@@ -139,5 +141,77 @@ describe('persistPlugin', () => {
     // onReset fires writeToStorage synchronously
     const stored = JSON.parse(storage.getItem('test')!);
     expect(stored.data.name).toBe('initial');
+  });
+});
+
+describe('persistPlugin hydration baseline', () => {
+  it('should not mark restored fields dirty', () => {
+    const storage = createMockStorage();
+    storage.setItem('form', JSON.stringify({ version: 1, data: { name: 'restored' } }));
+
+    const { data, state } = createSvState(
+      { name: 'default' },
+      {},
+      {
+        plugins: [persistPlugin({ key: 'form', storage })]
+      }
+    );
+
+    expect(data.name).toBe('restored');
+    expect(get(state.isDirty)).toBe(false);
+    expect(get(state.isDirtyByField)).toEqual({});
+  });
+
+  it('should reset to the restored values, not the pre-restore defaults', () => {
+    const storage = createMockStorage();
+    storage.setItem('form', JSON.stringify({ version: 1, data: { name: 'restored' } }));
+
+    const { data, reset, state } = createSvState(
+      { name: 'default' },
+      {},
+      {
+        plugins: [persistPlugin({ key: 'form', storage })]
+      }
+    );
+
+    data.name = 'edited';
+    reset();
+
+    expect(data.name).toBe('restored');
+    expect(get(state.snapshots)[0]?.data).toEqual({ name: 'restored' });
+  });
+
+  it('should report storage failures through onError instead of throwing', () => {
+    const errors: unknown[] = [];
+    const failingStorage = {
+      // eslint-disable-next-line unicorn/no-null
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+      removeItem: () => {}
+    };
+
+    const { data, destroy } = createSvState(
+      { name: 'a' },
+      {},
+      {
+        plugins: [
+          persistPlugin({
+            key: 'form',
+            storage: failingStorage,
+            throttle: 0,
+            onError: (error) => {
+              errors.push(error);
+            }
+          })
+        ]
+      }
+    );
+
+    data.name = 'b';
+    expect(() => destroy()).not.toThrow();
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('QuotaExceededError');
   });
 });
