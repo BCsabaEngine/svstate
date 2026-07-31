@@ -4,7 +4,7 @@ import { createSvState, stringValidator } from '../src/index';
 
 describe('async validation - basic functionality', () => {
   it('should run async validator after sync passes', async () => {
-    let asyncValidatorCalled = false;
+    let isAsyncValidatorCalled = false;
 
     const { data, state } = createSvState(
       { username: '' },
@@ -14,7 +14,7 @@ describe('async validation - basic functionality', () => {
         }),
         asyncValidator: {
           username: async (value) => {
-            asyncValidatorCalled = true;
+            isAsyncValidatorCalled = true;
             return value === 'taken' ? 'Username already taken' : '';
           }
         }
@@ -26,12 +26,12 @@ describe('async validation - basic functionality', () => {
     data.username = 'validuser';
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(asyncValidatorCalled).toBe(true);
+    expect(isAsyncValidatorCalled).toBe(true);
     expect(get(state.asyncErrors)).toEqual({ username: '' });
   });
 
   it('should skip async validator when sync fails', async () => {
-    let asyncValidatorCalled = false;
+    let isAsyncValidatorCalled = false;
 
     const { data, state } = createSvState(
       { username: '' },
@@ -41,7 +41,7 @@ describe('async validation - basic functionality', () => {
         }),
         asyncValidator: {
           username: async () => {
-            asyncValidatorCalled = true;
+            isAsyncValidatorCalled = true;
             return '';
           }
         }
@@ -53,7 +53,7 @@ describe('async validation - basic functionality', () => {
     data.username = 'ab';
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(asyncValidatorCalled).toBe(false);
+    expect(isAsyncValidatorCalled).toBe(false);
     expect(get(state.hasErrors)).toBe(true);
   });
 
@@ -356,14 +356,14 @@ describe('async validation - rollback and reset', () => {
 
 describe('async validation - runAsyncValidationOnInit', () => {
   it('should run async validation on init when configured', async () => {
-    let asyncValidatorCalled = false;
+    let isAsyncValidatorCalled = false;
 
     createSvState(
       { username: 'testuser' },
       {
         asyncValidator: {
           username: async () => {
-            asyncValidatorCalled = true;
+            isAsyncValidatorCalled = true;
             return '';
           }
         }
@@ -373,18 +373,18 @@ describe('async validation - runAsyncValidationOnInit', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(asyncValidatorCalled).toBe(true);
+    expect(isAsyncValidatorCalled).toBe(true);
   });
 
   it('should not run async validation on init by default', async () => {
-    let asyncValidatorCalled = false;
+    let isAsyncValidatorCalled = false;
 
     createSvState(
       { username: 'testuser' },
       {
         asyncValidator: {
           username: async () => {
-            asyncValidatorCalled = true;
+            isAsyncValidatorCalled = true;
             return '';
           }
         }
@@ -394,7 +394,7 @@ describe('async validation - runAsyncValidationOnInit', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(asyncValidatorCalled).toBe(false);
+    expect(isAsyncValidatorCalled).toBe(false);
   });
 });
 
@@ -513,7 +513,7 @@ describe('async validation - multiple fields', () => {
 
 describe('async validation - nested paths', () => {
   it('should trigger async validator when nested property changes', async () => {
-    let asyncValidatorCalled = false;
+    let isAsyncValidatorCalled = false;
     let receivedValue: unknown;
 
     const { data, state } = createSvState(
@@ -521,7 +521,7 @@ describe('async validation - nested paths', () => {
       {
         asyncValidator: {
           'user.name': async (value) => {
-            asyncValidatorCalled = true;
+            isAsyncValidatorCalled = true;
             receivedValue = value;
             return value === 'taken' ? 'Name taken' : '';
           }
@@ -533,20 +533,20 @@ describe('async validation - nested paths', () => {
     data.user.name = 'testname';
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(asyncValidatorCalled).toBe(true);
+    expect(isAsyncValidatorCalled).toBe(true);
     expect(receivedValue).toBe('testname');
     expect(get(state.asyncErrors)).toEqual({ 'user.name': '' });
   });
 
   it('should trigger async validator when parent property changes', async () => {
-    let asyncValidatorCalled = false;
+    let isAsyncValidatorCalled = false;
 
     const { data, state } = createSvState(
       { user: { name: '' } },
       {
         asyncValidator: {
           user: async (value) => {
-            asyncValidatorCalled = true;
+            isAsyncValidatorCalled = true;
             const user = value as { name: string };
             return user.name === 'taken' ? 'User invalid' : '';
           }
@@ -558,7 +558,7 @@ describe('async validation - nested paths', () => {
     data.user.name = 'taken';
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(asyncValidatorCalled).toBe(true);
+    expect(isAsyncValidatorCalled).toBe(true);
     expect(get(state.asyncErrors)).toEqual({ user: 'User invalid' });
   });
 });
@@ -716,7 +716,7 @@ describe('async validation - maxConcurrentAsyncValidations', () => {
   });
 
   it('should remove cancelled validation from queue', async () => {
-    let fieldEValidatorCalled = false;
+    let isFieldEValidatorCalled = false;
 
     const { data } = createSvState(
       { a: '', b: '', c: '', d: '', e: '' },
@@ -739,7 +739,7 @@ describe('async validation - maxConcurrentAsyncValidations', () => {
             return '';
           },
           e: async () => {
-            fieldEValidatorCalled = true;
+            isFieldEValidatorCalled = true;
             return '';
           }
         }
@@ -764,7 +764,7 @@ describe('async validation - maxConcurrentAsyncValidations', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     // e should have been called (with the second value)
-    expect(fieldEValidatorCalled).toBe(true);
+    expect(isFieldEValidatorCalled).toBe(true);
   });
 
   it('should use default limit of 4 when not specified', async () => {

@@ -5,7 +5,9 @@ describe('analyticsPlugin', () => {
   it('should buffer events and flush at batch size', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 3,
       flushInterval: 0
     });
@@ -24,7 +26,9 @@ describe('analyticsPlugin', () => {
   it('should flush on interval', async () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 50
     });
@@ -40,7 +44,9 @@ describe('analyticsPlugin', () => {
   it('should filter by include types', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 0,
       include: ['action']
@@ -58,7 +64,9 @@ describe('analyticsPlugin', () => {
   it('should flush remaining on destroy', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 0
     });
@@ -75,7 +83,9 @@ describe('analyticsPlugin', () => {
   it('should flush all pending with flush()', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 0
     });
@@ -92,7 +102,9 @@ describe('analyticsPlugin', () => {
   it('should track action events', async () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 0
     });
@@ -110,7 +122,9 @@ describe('analyticsPlugin', () => {
   it('should track rollback and reset events', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 0
     });
@@ -135,7 +149,9 @@ describe('analyticsPlugin', () => {
   it('should track snapshot events', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({
-      onFlush: (events) => flushed.push([...events]),
+      onFlush: (events) => {
+        flushed.push([...events]);
+      },
       batchSize: 100,
       flushInterval: 0
     });

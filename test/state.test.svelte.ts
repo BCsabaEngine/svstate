@@ -450,19 +450,19 @@ describe('reset', () => {
 
 describe('action execution', () => {
   it('should execute action', async () => {
-    let actionCalled = false;
+    let isActionCalled = false;
     const { execute } = createSvState(
       { value: 0 },
       {
         action: async () => {
-          actionCalled = true;
+          isActionCalled = true;
         }
       }
     );
 
     await execute();
 
-    expect(actionCalled).toBe(true);
+    expect(isActionCalled).toBe(true);
   });
 
   it('should pass parameters to action', async () => {
@@ -482,12 +482,12 @@ describe('action execution', () => {
   });
 
   it('should set actionInProgress during execution', async () => {
-    let progressDuringAction = false;
+    let isProgressDuringAction = false;
     const { execute, state } = createSvState(
       { value: 0 },
       {
         action: async () => {
-          progressDuringAction = get(state.actionInProgress);
+          isProgressDuringAction = get(state.actionInProgress);
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
       }
@@ -500,7 +500,7 @@ describe('action execution', () => {
 
     await promise;
 
-    expect(progressDuringAction).toBe(true);
+    expect(isProgressDuringAction).toBe(true);
     expect(get(state.actionInProgress)).toBe(false);
   });
 
@@ -881,7 +881,7 @@ describe('async actionCompleted', () => {
   });
 
   it('should set actionInProgress to false only after async actionCompleted completes', async () => {
-    let actionInProgressDuringCallback = false;
+    let isActionInProgressDuringCallback = false;
 
     const { execute, state } = createSvState(
       { value: 0 },
@@ -890,7 +890,7 @@ describe('async actionCompleted', () => {
           await new Promise((resolve) => setTimeout(resolve, 5));
         },
         actionCompleted: async () => {
-          actionInProgressDuringCallback = get(state.actionInProgress);
+          isActionInProgressDuringCallback = get(state.actionInProgress);
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
       }
@@ -898,7 +898,7 @@ describe('async actionCompleted', () => {
 
     await execute();
 
-    expect(actionInProgressDuringCallback).toBe(true);
+    expect(isActionInProgressDuringCallback).toBe(true);
     expect(get(state.actionInProgress)).toBe(false);
   });
 });
@@ -920,13 +920,13 @@ describe('async effect rejection', () => {
   });
 
   it('should not throw error when effect callback is synchronous', () => {
-    let effectCalled = false;
+    let isEffectCalled = false;
 
     const { data } = createSvState(
       { value: 0 },
       {
         effect: () => {
-          effectCalled = true;
+          isEffectCalled = true;
         }
       }
     );
@@ -935,42 +935,42 @@ describe('async effect rejection', () => {
       data.value = 1;
     }).not.toThrow();
 
-    expect(effectCalled).toBe(true);
+    expect(isEffectCalled).toBe(true);
   });
 });
 
 describe('synchronous action', () => {
   it('should handle synchronous action', async () => {
-    let actionCalled = false;
+    let isActionCalled = false;
     const { execute } = createSvState(
       { value: 0 },
       {
         action: () => {
-          actionCalled = true;
+          isActionCalled = true;
         }
       }
     );
 
     await execute();
 
-    expect(actionCalled).toBe(true);
+    expect(isActionCalled).toBe(true);
   });
 
   it('should handle synchronous actionCompleted', async () => {
-    let completedCalled = false;
+    let isCompletedCalled = false;
     const { execute } = createSvState(
       { value: 0 },
       {
         action: () => {},
         actionCompleted: () => {
-          completedCalled = true;
+          isCompletedCalled = true;
         }
       }
     );
 
     await execute();
 
-    expect(completedCalled).toBe(true);
+    expect(isCompletedCalled).toBe(true);
   });
 });
 
@@ -1398,8 +1398,7 @@ describe('rollbackTo', () => {
       { value: 0 },
       {
         effect: ({ snapshot, currentValue }) => {
-          if (currentValue === 2) snapshot('Milestone', false);
-          else if (currentValue === 5) snapshot('Milestone', false);
+          if (currentValue === 2 || currentValue === 5) snapshot('Milestone', false);
           else snapshot(`Set to ${currentValue}`, false);
         }
       }
