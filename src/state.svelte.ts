@@ -13,7 +13,7 @@ export type Snapshot<T> = {
   data: T;
 };
 
-export type SnapshotFunction = (title: string, replace?: boolean) => void;
+export type SnapshotFunction = (title: string, shouldReplace?: boolean) => void;
 
 export type EffectContext<T> = {
   snapshot: SnapshotFunction;
@@ -61,9 +61,9 @@ type StateResult<T, V> = {
 };
 
 // Helpers
-const checkHasErrors = (validator: Validator): boolean =>
-  Object.values(validator).some((item) => (typeof item === 'string' ? !!item : checkHasErrors(item)));
-const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && checkHasErrors($errors);
+const hasValidatorErrors = (validator: Validator): boolean =>
+  Object.values(validator).some((item) => (typeof item === 'string' ? !!item : hasValidatorErrors(item)));
+const hasAnyErrors = ($errors: Validator | undefined): boolean => !!$errors && hasValidatorErrors($errors);
 
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -103,10 +103,14 @@ const getSyncErrorForPath = (errors: Validator | undefined, path: string): strin
 const getMatchingAsyncValidatorPaths = <T>(asyncValidator: AsyncValidator<T>, changedPath: string): string[] => {
   const matches: string[] = [];
   for (const registeredPath of Object.keys(asyncValidator))
-    // Exact match or changed path is a prefix of registered path
-    if (registeredPath === changedPath || registeredPath.startsWith(changedPath + '.')) matches.push(registeredPath);
-    // Changed path is nested within registered path (e.g., validator for 'user', changed 'user.name')
-    else if (changedPath.startsWith(registeredPath + '.')) matches.push(registeredPath);
+    // Exact match, changed path is a prefix of registered path, or changed path is nested
+    // within registered path (e.g., validator for 'user', changed 'user.name')
+    if (
+      registeredPath === changedPath ||
+      registeredPath.startsWith(changedPath + '.') ||
+      changedPath.startsWith(registeredPath + '.')
+    )
+      matches.push(registeredPath);
 
   return matches;
 };
@@ -204,13 +208,13 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     callPlugins('onValidation', result);
   };
 
-  const createSnapshot: SnapshotFunction = (title: string, replace = true) => {
+  const createSnapshot: SnapshotFunction = (title: string, shouldReplace = true) => {
     const currentSnapshots = get(snapshots);
     const createdSnapshot: Snapshot<T> = { title, data: deepClone(stateObject) };
     const lastSnapshot = currentSnapshots.at(-1);
 
     let updatedSnapshots: Snapshot<T>[] =
-      replace && lastSnapshot && lastSnapshot.title === title
+      shouldReplace && lastSnapshot && lastSnapshot.title === title
         ? [...currentSnapshots.slice(0, -1), createdSnapshot]
         : [...currentSnapshots, createdSnapshot];
 
@@ -223,7 +227,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     callPlugins('onSnapshot', createdSnapshot);
   };
 
-  let validationScheduled = false;
+  let isValidationScheduled = false;
   let validationTimeout: ReturnType<typeof setTimeout> | undefined;
 
   const scheduleValidation = () => {
@@ -235,11 +239,11 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
         runValidation();
       }, usedOptions.debounceValidation);
     } else {
-      if (validationScheduled) return;
-      validationScheduled = true;
+      if (isValidationScheduled) return;
+      isValidationScheduled = true;
       queueMicrotask(() => {
         runValidation();
-        validationScheduled = false;
+        isValidationScheduled = false;
       });
     }
   };
@@ -336,7 +340,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   };
 
   const scheduleAsyncValidation = (path: string) => {
-    if (!asyncValidator || !asyncValidator[path]) return;
+    if (!asyncValidator || !Object.hasOwn(asyncValidator, path)) return;
 
     // Cancel any existing validation for this path
     cancelAsyncValidation(path);
@@ -446,6 +450,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     if (targetSnapshot) callPlugins('onRollback', targetSnapshot);
   };
 
+  // eslint-disable-next-line unicorn/consistent-boolean-name -- rollbackTo is a public API method name, not a boolean flag
   const rollbackTo = (title: string): boolean => {
     const currentSnapshots = get(snapshots);
     if (currentSnapshots.length <= 1) return false;

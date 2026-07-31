@@ -49,14 +49,14 @@ export function undoRedoPlugin<T extends Record<string, unknown>>(
     onRollback() {
       // previousTipSnapshot is captured by the subscription (which fires synchronously
       // before onRollback) when it detects the snapshot list shrinking.
-      if (previousTipSnapshot) {
-        redoStore.update((stack) => {
-          const updated = [...stack, previousTipSnapshot!];
-          const max = options?.maxRedoStack;
-          return max && max > 0 ? updated.slice(-max) : updated;
-        });
-        previousTipSnapshot = undefined;
-      }
+      if (!previousTipSnapshot) return;
+
+      redoStore.update((stack) => {
+        const updated = [...stack, previousTipSnapshot!];
+        const max = options?.maxRedoStack;
+        return max && max > 0 ? updated.slice(-max) : updated;
+      });
+      previousTipSnapshot = undefined;
     },
 
     onChange() {

@@ -11,7 +11,7 @@ const isValidStorageFormat = (value: unknown): value is StorageFormat =>
   isPlainObject((value as StorageFormat).data);
 
 const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
-  for (const key of Object.keys(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = source[key];
+  for (const [key, value] of Object.entries(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = value;
 };
 
 export type PersistOptions = {
@@ -56,6 +56,27 @@ const setValueAtPath = (target: Record<string, unknown>, path: string, value: un
   if (!DANGEROUS_KEYS.has(lastPart)) current[lastPart] = value;
 };
 
+const excludePath = (filtered: Record<string, unknown>, path: string): void => {
+  const parts = path.split('.');
+  if (parts.length === 1) {
+    delete filtered[path];
+    return;
+  }
+  let current: Record<string, unknown> = filtered;
+  for (let index = 0; index < parts.length - 1; index++) {
+    const part = parts[index]!;
+    if (current[part] === undefined) return;
+    if (index === parts.length - 2) {
+      const parent = current[part] as Record<string, unknown>;
+      current[part] = { ...parent };
+      delete (current[part] as Record<string, unknown>)[parts.at(-1)!];
+    } else {
+      current[part] = { ...(current[part] as Record<string, unknown>) };
+      current = current[part] as Record<string, unknown>;
+    }
+  }
+};
+
 const filterData = (data: Record<string, unknown>, include?: string[], exclude?: string[]): Record<string, unknown> => {
   if (include) {
     const filtered: Record<string, unknown> = {};
@@ -67,25 +88,7 @@ const filterData = (data: Record<string, unknown>, include?: string[], exclude?:
   }
   if (exclude) {
     const filtered = { ...data };
-    for (const path of exclude) {
-      const parts = path.split('.');
-      if (parts.length === 1) delete filtered[path];
-      else {
-        let current: Record<string, unknown> = filtered;
-        for (let index = 0; index < parts.length - 1; index++) {
-          const part = parts[index]!;
-          if (current[part] === undefined) break;
-          if (index === parts.length - 2) {
-            const parent = current[part] as Record<string, unknown>;
-            current[part] = { ...parent };
-            delete (current[part] as Record<string, unknown>)[parts.at(-1)!];
-          } else {
-            current[part] = { ...(current[part] as Record<string, unknown>) };
-            current = current[part] as Record<string, unknown>;
-          }
-        }
-      }
-    }
+    for (const path of exclude) excludePath(filtered, path);
     return filtered;
   }
   return data;
@@ -98,7 +101,7 @@ export function persistPlugin<T extends Record<string, unknown>>(
   const throttleMs = options.throttle ?? 300;
   const version = options.version ?? 1;
 
-  let restored = false;
+  let isRestored = false;
   let pendingTimeout: ReturnType<typeof setTimeout> | undefined;
   let contextData: T | undefined;
 
@@ -136,7 +139,7 @@ export function persistPlugin<T extends Record<string, unknown>>(
         }
 
         safeMerge(context.data as unknown as Record<string, unknown>, parsed.data);
-        restored = true;
+        isRestored = true;
       } catch {
         // Invalid stored data — ignore
       }
@@ -151,10 +154,10 @@ export function persistPlugin<T extends Record<string, unknown>>(
     },
 
     destroy() {
-      if (pendingTimeout !== undefined) {
-        clearTimeout(pendingTimeout);
-        writeToStorage();
-      }
+      if (pendingTimeout === undefined) return;
+
+      clearTimeout(pendingTimeout);
+      writeToStorage();
     },
 
     clearPersistedState() {
@@ -162,7 +165,7 @@ export function persistPlugin<T extends Record<string, unknown>>(
     },
 
     isRestored() {
-      return restored;
+      return isRestored;
     }
   };
 

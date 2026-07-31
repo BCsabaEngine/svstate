@@ -14,7 +14,7 @@ const isWithinDepthLimit = (value: unknown, depth = 0): boolean => {
 };
 
 const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
-  for (const key of Object.keys(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = source[key];
+  for (const [key, value] of Object.entries(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = value;
 };
 
 export type SyncOptions = {
@@ -41,7 +41,7 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
     if (!channel || !context) return;
     // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone fails on Svelte reactive proxies
     const cloned = JSON.parse(JSON.stringify(context.data)) as T;
-    // eslint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel.postMessage has no targetOrigin
+
     channel.postMessage({ type: 'sync', data: cloned });
   };
 

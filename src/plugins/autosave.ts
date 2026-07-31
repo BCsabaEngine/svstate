@@ -23,21 +23,21 @@ export function autosavePlugin<T extends Record<string, unknown>>(
   let context: PluginContext<T> | undefined;
   let idleTimeout: ReturnType<typeof setTimeout> | undefined;
   let intervalTimer: ReturnType<typeof setInterval> | undefined;
-  let saving = false;
-  let destroyed = false;
+  let isSaving = false;
+  let isDestroyed = false;
 
   const doSave = async () => {
     if (!context) return;
     if (onlyWhenDirty && !get(context.state.isDirty)) return;
-    if (saving) return;
+    if (isSaving) return;
 
-    saving = true;
+    isSaving = true;
     try {
       await options.save(context.data);
     } catch (error) {
       options.onError?.(error);
     } finally {
-      saving = false;
+      isSaving = false;
     }
   };
 
@@ -58,7 +58,7 @@ export function autosavePlugin<T extends Record<string, unknown>>(
 
       if (intervalMs > 0) intervalTimer = setInterval(doSave, intervalMs);
 
-      if (options.onVisibilityHidden && typeof document !== 'undefined')
+      if (typeof document !== 'undefined' && options.onVisibilityHidden)
         document.addEventListener('visibilitychange', handleVisibility);
     },
 
@@ -71,35 +71,39 @@ export function autosavePlugin<T extends Record<string, unknown>>(
     },
 
     destroy() {
-      destroyed = true;
+      isDestroyed = true;
       clearTimeout(idleTimeout);
       if (intervalTimer !== undefined) clearInterval(intervalTimer);
 
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibility);
 
       if (saveOnDestroy && context) {
-        saving = false;
+        isSaving = false;
+        const activeContext = context;
         // Fire-and-forget save on destroy
-        const shouldSave = !onlyWhenDirty || get(context.state.isDirty);
-        if (shouldSave)
-          try {
-            const result = options.save(context.data);
-            if (result instanceof Promise) result.catch((error: unknown) => options.onError?.(error));
-          } catch (error) {
-            options.onError?.(error);
-          }
+        const shouldSave = !onlyWhenDirty || get(activeContext.state.isDirty);
+        if (shouldSave) {
+          const trySave = async () => {
+            try {
+              await options.save(activeContext.data);
+            } catch (error) {
+              options.onError?.(error);
+            }
+          };
+          void trySave();
+        }
       }
     },
 
     async saveNow() {
-      if (destroyed) return;
+      if (isDestroyed) return;
       clearTimeout(idleTimeout);
-      saving = false;
+      isSaving = false;
       await doSave();
     },
 
     isSaving() {
-      return saving;
+      return isSaving;
     }
   };
 

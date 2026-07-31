@@ -24,7 +24,7 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
         if (typeof property === 'symbol') return (object as Record<symbol, unknown>)[property];
         const value = (object as Record<string, unknown>)[property];
         if (isProxiable(value)) {
-          const pathSegment = Number.isInteger(Number(property)) ? '' : String(property);
+          const pathSegment = Number.isSafeInteger(Number(property)) ? '' : String(property);
           const childPath = pathSegment ? (parentPath ? `${parentPath}.${pathSegment}` : pathSegment) : parentPath;
           return createProxy(value as object, childPath);
         }
@@ -38,7 +38,7 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
         const oldValue = (object as Record<string, unknown>)[property];
         if (oldValue !== incomingValue) {
           (object as Record<string, unknown>)[property] = incomingValue;
-          const pathSegment = Number.isInteger(Number(property)) ? '' : String(property);
+          const pathSegment = Number.isSafeInteger(Number(property)) ? '' : String(property);
           const fullPath = pathSegment ? (parentPath ? `${parentPath}.${pathSegment}` : pathSegment) : parentPath;
           changed(data as T, fullPath, incomingValue, oldValue);
         }
