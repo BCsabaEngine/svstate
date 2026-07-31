@@ -610,12 +610,17 @@ const history = historyPlugin({
   fields: { search: 'q', page: 'p' }, // { stateField: 'urlParam' }
   mode: 'replace', // 'push' | 'replace' (default: 'replace')
   serialize: (value) => String(value),
-  deserialize: (param) => param
+  deserialize: (param) => param,
+  onError: (error) => report(error) // serialize/deserialize threw
 });
 
 // Extra method:
 history.syncFromUrl(); // Manually re-read URL into state
 ```
+
+> **Nested fields:** field keys may be dot-notation paths (`{ 'filters.q': 'q' }`). Matching works in both
+> directions — replacing the parent (`data.filters = {...}`) and mutating the leaf (`data.filters.q = '…'`)
+> both update the URL, and a registered parent (`{ filters: 'f' }`) is updated when any of its children change.
 
 **`syncPlugin`** — Sync state across browser tabs via BroadcastChannel.
 
@@ -625,7 +630,8 @@ import { syncPlugin } from 'svstate';
 const sync = syncPlugin({
   key: 'my-form-sync', // Required: channel name
   throttle: 100, // Broadcast debounce ms (default: 100)
-  merge: 'overwrite' // 'overwrite' | 'ignore' (default: 'overwrite')
+  merge: 'overwrite', // 'overwrite' | 'ignore' (default: 'overwrite')
+  onError: (error) => report(error) // State could not be serialized or posted
 });
 
 // Extra method:

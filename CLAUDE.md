@@ -87,11 +87,12 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 - `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system, async validation, and plugin integration
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
-- `src/plugin.ts` - Plugin type definitions (`SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`)
+- `src/plugin.ts` - Plugin type definitions (`SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`). `PluginStores<T>` is an alias of `StateResult<T, Validator>` — the same stores `createSvState` returns, with the error type widened
 - `src/internal/` - Internal helpers shared by the core and the plugins, not exported publicly:
   - `clone.ts` — `deepClone` (prototype-preserving, reconstructs `Map`/`Set`/`RegExp`, handles cycles)
-  - `paths.ts` — `DANGEROUS_KEYS`, `getValueAtPath`, `setValueAtPath`, `isPlainObject`, `safeMerge`
-  - `errors.ts` — `hasValidatorErrors`, `hasAnyErrors`, `toError`
+  - `paths.ts` — `DANGEROUS_KEYS`, `getValueAtPath`, `setValueAtPath`, `isPlainObject`, `safeMerge`, `asRecord`, `getMatchingPaths`
+  - `errors.ts` — `hasAnyErrors`, `toError`
+  - `timers.ts` — `createDebouncer` (trailing-edge debounce with `schedule`/`cancel`/`flush`/`isPending`), shared by `persist`, `autosave` and `sync`
 - `src/plugins/` - Built-in plugins: `persistPlugin`, `autosavePlugin`, `devtoolsPlugin`, `historyPlugin`, `syncPlugin`, `undoRedoPlugin`, `analyticsPlugin`
 
 ### createSvState Function (src/state.svelte.ts)
@@ -229,15 +230,15 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 
 **Built-in plugins (src/plugins/):**
 
-| Plugin            | File           | Purpose                                      | Key options                                                                                                                                                              |
-| ----------------- | -------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude`, `onError`                                                                                      |
-| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`                                                                                                  |
-| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`                                                                                                             |
-| `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`                                                                                                                  |
-| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
-| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                               |
-| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact` (covers nested paths), `onError`                                                                 |
+| Plugin            | File           | Purpose                                      | Key options                                                                                                                                                                         |
+| ----------------- | -------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude`, `onError`                                                                                                 |
+| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`                                                                                                             |
+| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`                                                                                                                        |
+| `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`, `onError`; dotted field paths match both ways (changing `filters` updates a registered `filters.q`, and vice versa)        |
+| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`, `onError`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
+| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                                          |
+| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact` (covers nested paths), `onError`                                                                            |
 
 ### Deep Clone System (src/internal/clone.ts)
 
