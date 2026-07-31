@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.6] - 2026-07-31
+
+### Changed
+
+- **Updated all development dependencies** — ESLint, eslint-plugin-unicorn, Vite, and related tooling bumped to their latest versions
+- **Renamed parameters for clarity** — `snapshot(title, replace)` is now `snapshot(title, shouldReplace)` and `requiredIf(cond)` is now `requiredIf(shouldRequire)`; both are positional parameters, so no code changes are required
+
+### Fixed
+
+- **`.integer()` validator now rejects unsafe integers** — `numberValidator().integer()` uses `Number.isSafeInteger()` instead of `Number.isInteger()`, so values outside the safe integer range are correctly flagged instead of silently passing
+- **Demo build no longer warns about deprecated Vite config** — the demo's `vite.config.ts` now uses `import.meta.dirname` and a JSON import attribute instead of `__dirname` and a bare JSON import
+
 ## [1.5.5] - 2026-06-02
 
 ### Fixed
