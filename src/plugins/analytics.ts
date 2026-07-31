@@ -34,7 +34,8 @@ export function analyticsPlugin<T extends Record<string, unknown>>(
 
   const doFlush = () => {
     if (buffer.length === 0) return;
-    const events = buffer.splice(0);
+    const events = buffer.slice();
+    buffer.length = 0;
     options.onFlush(events);
   };
 

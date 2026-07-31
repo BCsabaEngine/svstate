@@ -13,6 +13,8 @@ export type HistoryPluginInstance<T extends Record<string, unknown>> = SvStatePl
   syncFromUrl(): void;
 };
 
+const isNullOrUndefined = (value: unknown): boolean => value === undefined || value === null;
+
 const defaultSerialize: (value: unknown, field: string) => string = String;
 const defaultDeserialize: (parameter: string, field: string) => unknown = (parameter) => parameter;
 
@@ -68,11 +70,11 @@ export function historyPlugin<T extends Record<string, unknown>>(options: Histor
     const value = getValueAtPath(context.data as unknown as Record<string, unknown>, stateField);
     const url = new URL(window.location.href);
 
-    if (value === undefined || value === null || value === '') url.searchParams.delete(urlParameter);
+    if (value === '' || isNullOrUndefined(value)) url.searchParams.delete(urlParameter);
     else url.searchParams.set(urlParameter, serialize(value, stateField));
 
-    if (mode === 'push') window.history.pushState({}, '', url.toString());
-    else window.history.replaceState({}, '', url.toString());
+    if (mode === 'push') window.history.pushState({}, '', url.href);
+    else window.history.replaceState({}, '', url.href);
   };
 
   return {
@@ -89,7 +91,7 @@ export function historyPlugin<T extends Record<string, unknown>>(options: Histor
     },
 
     onChange(event) {
-      if (event.property in options.fields) updateUrl(event.property);
+      if (Object.hasOwn(options.fields, event.property)) updateUrl(event.property);
     },
 
     destroy() {

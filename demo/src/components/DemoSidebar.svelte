@@ -31,7 +31,7 @@
 			<h6 class="mb-2 text-sm font-medium text-gray-700">Dirty Fields</h6>
 			<pre class="overflow-auto text-xs text-gray-600">{JSON.stringify(
 					isDirtyByField,
-					Object.keys(isDirtyByField).toSorted(),
+					Object.keys(isDirtyByField).toSorted((a, b) => a.localeCompare(b)),
 					2
 				)}</pre>
 		</div>

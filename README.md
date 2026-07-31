@@ -5,8 +5,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-orange.svg)](https://svelte.dev/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
-[![Tests](https://img.shields.io/badge/tests-500%2B-brightgreen.svg)]()
-[![Coverage](https://img.shields.io/badge/coverage-%3E98%25-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-500%2B-brightgreen.svg)](<>)
+[![Coverage](https://img.shields.io/badge/coverage-%3E98%25-brightgreen.svg)](<>)
 
 > **Deep reactive proxy with validation, snapshot/undo, side effects, and plugins — built for complex, real-world applications.**
 
@@ -82,9 +82,7 @@ const customer = $state({
 import { createSvState, stringValidator, numberValidator } from 'svstate';
 
 const { data, state, rollback, rollbackTo, reset, execute } = createSvState(customer, {
-  validator: (source) => ({
-    /* validation that mirrors your structure */
-  }),
+  validator: (source) => ({/* validation that mirrors your structure */}),
   effect: ({ snapshot, property, currentValue, oldValue }) => {
     console.log(`${property} changed from ${oldValue} to ${currentValue}`);
     snapshot(`Changed ${property}`); // Create undo point
@@ -367,7 +365,7 @@ $snapshots.forEach((s, i) => console.log(`${i}: ${s.title}`));
 
 **Key features:**
 
-- 📸 `snapshot(title, replace?)` — create undo points
+- 📸 `snapshot(title, shouldReplace?)` — create undo points
 - ⏪ `rollback(steps)` — undo N changes
 - 🏷️ `rollbackTo(title)` — jump to a named snapshot
 - 🔄 `reset()` — return to initial state
@@ -1033,25 +1031,26 @@ function removeTag(index: number) {
 Creates a supercharged state object.
 
 **Returns:**
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | `T` | Deep reactive proxy — bind directly, methods preserved |
-| `execute(params?)` | `(P?) => Promise<void>` | Run the configured action |
-| `rollback(steps?)` | `(n?: number) => void` | Undo N changes (default: 1) |
-| `rollbackTo(title)` | `(title: string) => boolean` | Roll back to last snapshot with matching title |
-| `reset()` | `() => void` | Return to initial state |
-| `destroy()` | `() => void` | Cleanup plugins and cancel async validations |
-| `state.errors` | `Readable<V>` | Sync validation errors store |
-| `state.hasErrors` | `Readable<boolean>` | Has sync errors? |
-| `state.isDirty` | `Readable<boolean>` | Has state changed? (derived from `isDirtyByField`) |
-| `state.isDirtyByField` | `Readable<DirtyFields>` | Per-field dirty tracking (dot-notation paths) |
-| `state.actionInProgress` | `Readable<boolean>` | Is action running? |
-| `state.actionError` | `Readable<Error>` | Last action error |
-| `state.snapshots` | `Readable<Snapshot[]>` | Undo history |
-| `state.asyncErrors` | `Readable<AsyncErrors>` | Async validation errors (keyed by path) |
-| `state.hasAsyncErrors` | `Readable<boolean>` | Has async errors? |
-| `state.asyncValidating` | `Readable<string[]>` | Paths currently validating |
-| `state.hasCombinedErrors` | `Readable<boolean>` | Has sync OR async errors? |
+
+| Property                  | Type                         | Description                                            |
+| ------------------------- | ---------------------------- | ------------------------------------------------------ |
+| `data`                    | `T`                          | Deep reactive proxy — bind directly, methods preserved |
+| `execute(params?)`        | `(P?) => Promise<void>`      | Run the configured action                              |
+| `rollback(steps?)`        | `(n?: number) => void`       | Undo N changes (default: 1)                            |
+| `rollbackTo(title)`       | `(title: string) => boolean` | Roll back to last snapshot with matching title         |
+| `reset()`                 | `() => void`                 | Return to initial state                                |
+| `destroy()`               | `() => void`                 | Cleanup plugins and cancel async validations           |
+| `state.errors`            | `Readable<V>`                | Sync validation errors store                           |
+| `state.hasErrors`         | `Readable<boolean>`          | Has sync errors?                                       |
+| `state.isDirty`           | `Readable<boolean>`          | Has state changed? (derived from `isDirtyByField`)     |
+| `state.isDirtyByField`    | `Readable<DirtyFields>`      | Per-field dirty tracking (dot-notation paths)          |
+| `state.actionInProgress`  | `Readable<boolean>`          | Is action running?                                     |
+| `state.actionError`       | `Readable<Error>`            | Last action error                                      |
+| `state.snapshots`         | `Readable<Snapshot[]>`       | Undo history                                           |
+| `state.asyncErrors`       | `Readable<AsyncErrors>`      | Async validation errors (keyed by path)                |
+| `state.hasAsyncErrors`    | `Readable<boolean>`          | Has async errors?                                      |
+| `state.asyncValidating`   | `Readable<string[]>`         | Paths currently validating                             |
+| `state.hasCombinedErrors` | `Readable<boolean>`          | Has sync OR async errors?                              |
 
 ### Built-in Validators
 
@@ -1093,7 +1092,7 @@ import type {
 | --------------------------- | --------------------------------------------------------------------------------------------------- |
 | `Validator`                 | Nested object type for validation errors — leaf values are error strings (empty = valid)            |
 | `EffectContext<T>`          | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }` |
-| `SnapshotFunction`          | Type for the `snapshot(title, replace?)` function used in effects                                   |
+| `SnapshotFunction`          | Type for the `snapshot(title, shouldReplace?)` function used in effects                             |
 | `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
 | `SvStateOptions`            | Configuration options type for `createSvState`                                                      |
 | `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                          |

@@ -4,8 +4,13 @@ import { createSvState } from '../src/state.svelte';
 // Mock BroadcastChannel
 class MockBroadcastChannel {
   static channels = new Map<string, MockBroadcastChannel[]>();
-  name: string;
+
+  static reset() {
+    this.channels.clear();
+  }
+
   private listeners: ((event: MessageEvent) => void)[] = [];
+  name: string;
 
   constructor(name: string) {
     this.name = name;
@@ -32,20 +37,16 @@ class MockBroadcastChannel {
     }
     this.listeners = [];
   }
-
-  static reset() {
-    MockBroadcastChannel.channels.clear();
-  }
 }
 
 describe('syncPlugin', () => {
   beforeEach(() => {
     MockBroadcastChannel.reset();
-    (globalThis as Record<string, unknown>).BroadcastChannel = MockBroadcastChannel;
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
   });
 
   afterEach(() => {
-    delete (globalThis as Record<string, unknown>).BroadcastChannel;
+    vi.unstubAllGlobals();
   });
 
   it('should broadcast changes to other tabs', async () => {

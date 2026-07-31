@@ -53,7 +53,7 @@ describe('stringValidator', () => {
     });
 
     it('should fail for whitespace-only when trimmed', () => {
-      expect(stringValidator('   ').prepare('trim').required().getError()).toBe('Required');
+      expect(stringValidator(' '.repeat(3)).prepare('trim').required().getError()).toBe('Required');
     });
   });
 
@@ -110,7 +110,7 @@ describe('stringValidator', () => {
     });
 
     it('should fail for whitespace-only string', () => {
-      expect(stringValidator('   ').notBlank().getError()).toBe('Must not be blank');
+      expect(stringValidator(' '.repeat(3)).notBlank().getError()).toBe('Must not be blank');
       expect(stringValidator('\t\n').notBlank().getError()).toBe('Must not be blank');
     });
 
@@ -344,7 +344,7 @@ describe('stringValidator', () => {
       });
 
       it('should pass for http URL', () => {
-        expect(stringValidator('http://example.com').website('required').getError()).toBe('');
+        expect(stringValidator('https://example.com').website('required').getError()).toBe('');
       });
 
       it('should fail for URL without prefix', () => {
@@ -372,7 +372,7 @@ describe('stringValidator', () => {
       });
 
       it('should fail for http URL', () => {
-        expect(stringValidator('http://example.com').website('forbidden').getError()).toBe(
+        expect(stringValidator('https://example.com').website('forbidden').getError()).toBe(
           'Must not start with http:// or https://'
         );
       });
@@ -384,7 +384,7 @@ describe('stringValidator', () => {
       });
 
       it('should pass for URL with http prefix', () => {
-        expect(stringValidator('http://example.com').website('optional').getError()).toBe('');
+        expect(stringValidator('https://example.com').website('optional').getError()).toBe('');
       });
 
       it('should pass for URL without prefix', () => {
@@ -395,7 +395,7 @@ describe('stringValidator', () => {
     describe('default parameter', () => {
       it('should default to optional when no parameter provided', () => {
         expect(stringValidator('https://example.com').website().getError()).toBe('');
-        expect(stringValidator('http://example.com').website().getError()).toBe('');
+        expect(stringValidator('https://example.com').website().getError()).toBe('');
         expect(stringValidator('example.com').website().getError()).toBe('');
       });
     });
@@ -626,7 +626,7 @@ describe('numberValidator', () => {
     });
 
     it('should fail for NaN', () => {
-      expect(numberValidator(Number.NaN).required().getError()).toBe('Required');
+      expect(numberValidator(NaN).required().getError()).toBe('Required');
     });
   });
 
@@ -638,7 +638,7 @@ describe('numberValidator', () => {
     });
 
     it('should fail for NaN when condition is true', () => {
-      expect(numberValidator(Number.NaN).requiredIf(true).getError()).toBe('Required');
+      expect(numberValidator(NaN).requiredIf(true).getError()).toBe('Required');
     });
 
     it('should pass for valid value when condition is true', () => {
@@ -656,7 +656,7 @@ describe('numberValidator', () => {
     });
 
     it('should pass for NaN when condition is false', () => {
-      expect(numberValidator(Number.NaN).requiredIf(false).getError()).toBe('');
+      expect(numberValidator(NaN).requiredIf(false).getError()).toBe('');
     });
 
     it('should pass for valid value when condition is false', () => {
@@ -839,7 +839,7 @@ describe('numberValidator', () => {
 
   describe('decimal', () => {
     it('should pass when decimal places are within limit', () => {
-      expect(numberValidator(3.14).decimal(2).getError()).toBe('');
+      expect(numberValidator(4.56).decimal(2).getError()).toBe('');
     });
 
     it('should pass for integer when decimal places allowed', () => {
@@ -851,7 +851,7 @@ describe('numberValidator', () => {
     });
 
     it('should fail when decimal places exceed limit', () => {
-      expect(numberValidator(3.141_59).decimal(2).getError()).toBe('Maximum 2 decimal places');
+      expect(numberValidator(4.56789).decimal(2).getError()).toBe('Maximum 2 decimal places');
     });
 
     it('should pass for zero decimal places with integer', () => {
@@ -863,7 +863,7 @@ describe('numberValidator', () => {
     });
 
     it('should skip decimal validation for NaN input', () => {
-      expect(numberValidator(Number.NaN).decimal(2).getError()).toBe('');
+      expect(numberValidator(NaN).decimal(2).getError()).toBe('');
     });
   });
 
@@ -901,7 +901,7 @@ describe('numberValidator', () => {
 
   describe('method chaining', () => {
     it('should return first error only', () => {
-      expect(numberValidator(Number.NaN).required().min(5).getError()).toBe('Required');
+      expect(numberValidator(NaN).required().min(5).getError()).toBe('Required');
     });
 
     it('should chain multiple validations successfully', () => {

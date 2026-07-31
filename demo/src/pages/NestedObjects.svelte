@@ -56,7 +56,7 @@
 		data.name = `John ${randomId()}`;
 		data.address.street = `${randomInt(100, 9999)} Main Street`;
 		data.address.city = 'New York';
-		data.address.zip = `${randomInt(10_000, 99_999)}`;
+		data.address.zip = String(randomInt(10_000, 99_999));
 		data.company.name = `Acme ${randomId()} Inc`;
 		data.company.department = 'Engineering';
 		data.company.contact.phone = `555-${randomInt(100, 999)}-${randomInt(1000, 9999)}`;

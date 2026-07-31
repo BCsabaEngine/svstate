@@ -1,11 +1,11 @@
-/* eslint-disable unicorn/prefer-module */
+ 
 /* eslint-disable unicorn/prefer-node-protocol */
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-import package_ from '../package.json';
+import package_ from '../package.json' with { type: 'json' };
 
 export default defineConfig({
 	plugins: [svelte(), tailwindcss()],
@@ -30,9 +30,9 @@ export default defineConfig({
 	base: process.env.NODE_ENV === 'production' ? '/svstate' : '',
 	resolve: {
 		alias: {
-			svstate: path.resolve(__dirname, '../src/index.ts'),
-			$components: path.resolve(__dirname, './src/components'),
-			$lib: path.resolve(__dirname, './src/lib')
+			svstate: path.resolve(import.meta.dirname, '../src/index.ts'),
+			$components: path.resolve(import.meta.dirname, './src/components'),
+			$lib: path.resolve(import.meta.dirname, './src/lib')
 		}
 	},
 	define: {

@@ -86,7 +86,9 @@ describe('autosavePlugin', () => {
       },
       idle: 50,
       onlyWhenDirty: false,
-      onError: (error) => errors.push(error)
+      onError: (error) => {
+        errors.push(error);
+      }
     });
     const { data } = createSvState({ name: 'test' }, undefined, { plugins: [autosave] });
 

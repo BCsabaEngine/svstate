@@ -35,7 +35,7 @@ export default [
 	},
 	...compat.extends('eslint:recommended', 'plugin:@typescript-eslint/recommended', 'prettier'),
 	...svelte.configs.recommended,
-	unicorn.configs.all,
+	unicorn.configs.recommended,
 	{
 		plugins: {
 			'@typescript-eslint': typescriptEslint,
@@ -66,6 +66,20 @@ export default [
 			'svelte/prefer-const': 'error',
 			'unicorn/filename-case': 'off',
 			'unicorn/prefer-global-this': 'off',
+			// Svelte store auto-subscriptions (e.g. `$errors`) aren't declared JS variables,
+			// so this rule can't see them and flags every optional-chain access as unbound.
+			'unicorn/no-optional-chaining-on-undeclared-variable': 'off',
+			// Reassigning top-level `$state`/`let` bindings from event handlers and effects
+			// is the standard Svelte 5 component pattern, not the module-level mutation
+			// anti-pattern this rule targets.
+			'unicorn/no-top-level-assignment-in-function': 'off',
+			// The demo pages intentionally show plain object literals with methods that use
+			// `this` (see CalculatedClass.svelte) to demonstrate svstate's prototype-preserving
+			// deep clone — a valid, common JS pattern this rule doesn't allow.
+			'unicorn/no-this-outside-of-class': 'off',
+			// Several pages embed Svelte template snippets as documentation strings (e.g.
+			// `formSourceCode`), whose `{expr}` markup this rule misreads as a forgotten `$`.
+			'unicorn/no-incorrect-template-string-interpolation': 'off',
 			'no-alert': 'error',
 			'no-console': 'error',
 			'no-debugger': 'error'

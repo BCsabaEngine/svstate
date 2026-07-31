@@ -30,8 +30,8 @@ export function stringValidator(input: string | null | undefined): StringValidat
       return builder;
     },
 
-    requiredIf(cond: boolean) {
-      if (cond && !error && (isNullish || !processedInput)) setError('Required');
+    requiredIf(shouldRequire: boolean) {
+      if (shouldRequire && !error && (isNullish || !processedInput)) setError('Required');
       return builder;
     },
 
@@ -74,7 +74,7 @@ export function stringValidator(input: string | null | undefined): StringValidat
     startsWith(prefix: string | string[]) {
       if (error) return builder;
       const prefixes = Array.isArray(prefix) ? prefix : [prefix];
-      if (processedInput && !prefixes.some((p) => processedInput.startsWith(p)))
+      if (processedInput && prefixes.every((p) => !processedInput.startsWith(p)))
         setError(`Must start with ${prefixes.join(', ')}`);
       return builder;
     },
@@ -116,7 +116,7 @@ export function stringValidator(input: string | null | undefined): StringValidat
     endsWith(suffix: string | string[]) {
       if (error || !processedInput) return builder;
       const suffixes = Array.isArray(suffix) ? suffix : [suffix];
-      if (!suffixes.some((s) => processedInput.endsWith(s))) setError(`Must end with ${suffixes.join(', ')}`);
+      if (suffixes.every((s) => !processedInput.endsWith(s))) setError(`Must end with ${suffixes.join(', ')}`);
       return builder;
     },
 
@@ -162,7 +162,7 @@ type StringValidatorBuilder = {
   prepare(...prepares: (BaseOption | 'localeLower')[]): StringValidatorBuilder;
   prepare(...prepares: BaseOption[]): StringValidatorBuilder;
   required(): StringValidatorBuilder;
-  requiredIf(cond: boolean): StringValidatorBuilder;
+  requiredIf(shouldRequire: boolean): StringValidatorBuilder;
   noSpace(): StringValidatorBuilder;
   notBlank(): StringValidatorBuilder;
   minLength(length: number): StringValidatorBuilder;
@@ -198,8 +198,8 @@ export function numberValidator(input: number | null | undefined): NumberValidat
       return builder;
     },
 
-    requiredIf(cond: boolean) {
-      if (cond && !error && (isNullish || Number.isNaN(input))) setError('Required');
+    requiredIf(shouldRequire: boolean) {
+      if (shouldRequire && !error && (isNullish || Number.isNaN(input))) setError('Required');
       return builder;
     },
 
@@ -223,7 +223,7 @@ export function numberValidator(input: number | null | undefined): NumberValidat
 
     integer() {
       if (isNullish) return builder;
-      if (!error && !Number.isInteger(input)) setError('Must be an integer');
+      if (!error && !Number.isSafeInteger(input)) setError('Must be an integer');
       return builder;
     },
 
@@ -288,7 +288,7 @@ export function numberValidator(input: number | null | undefined): NumberValidat
 
 type NumberValidatorBuilder = {
   required(): NumberValidatorBuilder;
-  requiredIf(cond: boolean): NumberValidatorBuilder;
+  requiredIf(shouldRequire: boolean): NumberValidatorBuilder;
   min(n: number): NumberValidatorBuilder;
   max(n: number): NumberValidatorBuilder;
   between(min: number, max: number): NumberValidatorBuilder;
@@ -319,8 +319,8 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
       return builder;
     },
 
-    requiredIf(cond: boolean) {
-      if (cond && !error && (isNullish || array.length === 0)) setError('Required');
+    requiredIf(shouldRequire: boolean) {
+      if (shouldRequire && !error && (isNullish || array.length === 0)) setError('Required');
       return builder;
     },
 
@@ -408,7 +408,7 @@ export function arrayValidator<T>(input: T[] | null | undefined): ArrayValidator
 
 type ArrayValidatorBuilder<T> = {
   required(): ArrayValidatorBuilder<T>;
-  requiredIf(cond: boolean): ArrayValidatorBuilder<T>;
+  requiredIf(shouldRequire: boolean): ArrayValidatorBuilder<T>;
   minLength(n: number): ArrayValidatorBuilder<T>;
   maxLength(n: number): ArrayValidatorBuilder<T>;
   unique(): ArrayValidatorBuilder<T>;
@@ -427,7 +427,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
     if (!error) error = message;
   };
 
-  const date = isNullish ? new Date(Number.NaN) : input instanceof Date ? input : new Date(input);
+  const date = isNullish ? new Date(NaN) : input instanceof Date ? input : new Date(input);
   const isValid = !isNullish && !Number.isNaN(date.getTime());
 
   const builder: DateValidatorBuilder = {
@@ -436,8 +436,8 @@ export function dateValidator(input: Date | string | number | null | undefined):
       return builder;
     },
 
-    requiredIf(cond: boolean) {
-      if (cond && !error && !isValid) setError('Required');
+    requiredIf(shouldRequire: boolean) {
+      if (shouldRequire && !error && !isValid) setError('Required');
       return builder;
     },
 
@@ -521,7 +521,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
 
 type DateValidatorBuilder = {
   required(): DateValidatorBuilder;
-  requiredIf(cond: boolean): DateValidatorBuilder;
+  requiredIf(shouldRequire: boolean): DateValidatorBuilder;
   before(target: Date | string | number): DateValidatorBuilder;
   after(target: Date | string | number): DateValidatorBuilder;
   between(start: Date | string | number, end: Date | string | number): DateValidatorBuilder;

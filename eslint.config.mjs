@@ -32,7 +32,7 @@ export default [
     ]
   },
   ...compat.extends('eslint:recommended', 'plugin:@typescript-eslint/recommended', 'prettier'),
-  unicorn.configs.all,
+  unicorn.configs.recommended,
   {
     plugins: {
       '@typescript-eslint': typescriptEslint,
