@@ -6,7 +6,9 @@ export const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 export const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** Views a typed state object as an indexable record for path walking. */
+/**
+Views a typed state object as an indexable record for path walking.
+*/
 export const asRecord = (value: object): Record<string, unknown> => value as Record<string, unknown>;
 
 /**

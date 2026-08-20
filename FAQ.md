@@ -71,7 +71,7 @@ svstate requires **Svelte 5** because it uses the `$state()` rune internally. It
 **Requirements:**
 
 - Svelte 5
-- Node.js >= 20
+- Node.js >= 22
 - npm >= 9
 
 ---

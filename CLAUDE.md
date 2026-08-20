@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-**Requires Node >=20, npm >=9**
+**Requires Node >=22, npm >=9**
 
 ### Testing
 
