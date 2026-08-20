@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-08-20
+
+### Fixed
+
+- **Reactive proxy could be used to pollute `Object.prototype`** — reading, writing, or deleting `__proto__`, `constructor`, or `prototype` through `data` behaved like any other property, so `data.__proto__ = { isAdmin: true }` (or an unguarded `Object.assign(data, JSON.parse(untrustedInput))`) could reach the shared `Object.prototype` and affect every object in the app. These keys are now blocked at the proxy itself, matching the guard already used for path-based updates and merges.
+
+### Demo
+
+- Widened a couple of validators and reactive stores shown in the demo pages, and refreshed the built demo site.
+
 ## [2.0.1] - 2026-08-20
 
 ### Changed
