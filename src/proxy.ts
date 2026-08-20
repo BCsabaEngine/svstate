@@ -1,3 +1,5 @@
+import { DANGEROUS_KEYS } from './internal/paths';
+
 export type ProxyChanged<T extends object> = (
   target: T,
   property: string,
@@ -58,6 +60,10 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
       get(object, property) {
         if (property === RAW) return object;
         if (typeof property === 'symbol') return (object as Record<symbol, unknown>)[property];
+        // Never hand back a reactive wrapper around __proto__/constructor/prototype: for
+        // __proto__ that value is the real, shared Object.prototype, and wrapping it would let
+        // a write through the returned proxy pollute every object in the process.
+        if (DANGEROUS_KEYS.has(property)) return (object as Record<string, unknown>)[property];
         const value = (object as Record<string, unknown>)[property];
         if (isProxiable(value)) return createProxy(value as object, resolvePath(object, property, parentPath));
         return value;
@@ -68,6 +74,10 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
           (object as Record<symbol, unknown>)[property] = incomingValue;
           return true;
         }
+        // Silently reject writes to __proto__/constructor/prototype, same as setValueAtPath and
+        // safeMerge do, so an untrusted payload (e.g. Object.assign(data, JSON.parse(input)))
+        // can't repoint the state object's prototype.
+        if (DANGEROUS_KEYS.has(property)) return true;
         // Storing a proxy inside the raw tree would make later mutations report the path the
         // value was read from rather than the one it was written to.
         const nextValue = unwrap(incomingValue);
@@ -81,6 +91,7 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
 
       deleteProperty(object, property) {
         if (typeof property === 'symbol') return Reflect.deleteProperty(object, property);
+        if (DANGEROUS_KEYS.has(property)) return true;
         if (!Object.hasOwn(object, property)) return true;
 
         const oldValue = (object as Record<string, unknown>)[property];

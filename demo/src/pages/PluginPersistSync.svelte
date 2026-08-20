@@ -109,6 +109,7 @@ batch((draft) => {
   draft.username = 'demo_user';
   draft.theme = 'dark';
   draft.fontSize = 16;
+  draft.notifications = false;
 });`;
 
 	const apiSourceCode = `// persistPlugin API

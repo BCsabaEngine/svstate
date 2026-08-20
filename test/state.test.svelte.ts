@@ -49,6 +49,20 @@ class ParentClass {
   }
 }
 
+// Plain-object accessors (unlike a class's get/set, which live on the shared prototype) are own
+// properties of the instance, so deepClone must special-case them to avoid flattening into a value.
+const createAccessorState = (cents = 0) => ({
+  cents,
+  get dollars(): number {
+    // eslint-disable-next-line unicorn/no-this-outside-of-class -- own-property accessor on a plain object, not a class
+    return this.cents / 100;
+  },
+  set dollars(value: number) {
+    // eslint-disable-next-line unicorn/no-this-outside-of-class -- own-property accessor on a plain object, not a class
+    this.cents = Math.round(value * 100);
+  }
+});
+
 describe('createSvState basic functionality', () => {
   it('should create state with initial data', () => {
     const { data } = createSvState({ name: 'test', count: 5 });
@@ -372,6 +386,26 @@ describe('rollback', () => {
     expect(get(state.snapshots)).toHaveLength(1);
   });
 
+  it('should do nothing when steps is negative enough to target a non-existent snapshot', () => {
+    const { data, rollback, state } = createSvState(
+      { value: 0 },
+      {
+        effect: ({ snapshot }) => {
+          snapshot('Changed', false);
+        }
+      }
+    );
+
+    data.value = 1;
+    const snapshotsBefore = get(state.snapshots);
+
+    // steps=-5 targets an index past the end of the snapshot history
+    rollback(-5);
+
+    expect(data.value).toBe(1);
+    expect(get(state.snapshots)).toEqual(snapshotsBefore);
+  });
+
   it('should trigger validation after rollback', () => {
     const { data, rollback, state } = createSvState(
       { name: 'initial' },
@@ -615,6 +649,54 @@ describe('actionError', () => {
 
     data.value = 1;
     expect(get(state.actionError)).toBeUndefined();
+  });
+
+  it('should read .message off a thrown non-Error object', async () => {
+    const { execute, state } = createSvState(
+      { value: 0 },
+      {
+        action: async () => {
+          throw { message: 'Object error' };
+        }
+      }
+    );
+
+    await execute();
+
+    expect(get(state.actionError)).toBeInstanceOf(Error);
+    expect(get(state.actionError)?.message).toBe('Object error');
+  });
+
+  it('should fall back to .body.message when .message is absent', async () => {
+    const { execute, state } = createSvState(
+      { value: 0 },
+      {
+        action: async () => {
+          throw { body: { message: 'Nested body error' } };
+        }
+      }
+    );
+
+    await execute();
+
+    expect(get(state.actionError)).toBeInstanceOf(Error);
+    expect(get(state.actionError)?.message).toBe('Nested body error');
+  });
+
+  it('should stringify a thrown object with neither .message nor .body.message', async () => {
+    const { execute, state } = createSvState(
+      { value: 0 },
+      {
+        action: async () => {
+          throw { code: 500 };
+        }
+      }
+    );
+
+    await execute();
+
+    expect(get(state.actionError)).toBeInstanceOf(Error);
+    expect(get(state.actionError)?.message).toBe('[object Object]');
   });
 
   it('should persist actionError when persistActionError is true', async () => {
@@ -1639,6 +1721,58 @@ describe('non-plain values in state', () => {
 
     expect(Object.hasOwn(data, 'b')).toBe(false);
   });
+
+  it('should carry Promise/WeakMap/Error fields by reference through rollback', () => {
+    const promise = Promise.resolve(1);
+    const weakMap = new WeakMap();
+    const error = new Error('boom');
+
+    const { data, rollback } = createSvState(
+      { promise, weakMap, error, label: 'x' },
+      { effect: ({ snapshot }) => snapshot('change') }
+    );
+
+    data.label = 'y';
+    rollback();
+
+    expect(data.promise).toBe(promise);
+    expect(data.weakMap).toBe(weakMap);
+    expect(data.error).toBe(error);
+  });
+
+  it('should preserve an own getter/setter through rollback instead of flattening it to a value', () => {
+    const { data, rollback } = createSvState(createAccessorState(150), {
+      effect: ({ snapshot }) => snapshot('change')
+    });
+
+    expect(data.dollars).toBe(1.5);
+
+    data.dollars = 9.99;
+    expect(data.cents).toBe(999);
+
+    rollback();
+
+    expect(data.cents).toBe(150);
+    expect(data.dollars).toBe(1.5);
+
+    // The setter must still run through the accessor, not a plain flattened value
+    data.dollars = 2;
+    expect(data.cents).toBe(200);
+  });
+
+  it('should drop an own constructor/prototype key when snapshotting', () => {
+    const init = { name: 'x', constructor: 'hijacked', prototype: 'hijacked' } as unknown as { name: string };
+    const { data, rollback } = createSvState(init, { effect: ({ snapshot }) => snapshot('change') });
+
+    expect(Object.hasOwn(data, 'constructor')).toBe(true);
+
+    data.name = 'y';
+    rollback();
+
+    expect(data.name).toBe('x');
+    expect(Object.hasOwn(data, 'constructor')).toBe(false);
+    expect(Object.hasOwn(data, 'prototype')).toBe(false);
+  });
 });
 
 describe('destroy cleanup', () => {
@@ -1680,6 +1814,28 @@ describe('destroy cleanup', () => {
     destroy();
     const before = validations;
     data.value = 1;
+    await Promise.resolve();
+
+    expect(validations).toBe(before);
+  });
+
+  it('should skip a validation microtask scheduled before destroy runs before it fires', async () => {
+    let validations = 0;
+    const { data, destroy } = createSvState(
+      { value: 0 },
+      {
+        validator: () => {
+          validations++;
+          return {};
+        }
+      }
+    );
+
+    const before = validations;
+    // debounceValidation defaults to 0, so this schedules the pending run via queueMicrotask
+    data.value = 1;
+    destroy();
+    await Promise.resolve();
     await Promise.resolve();
 
     expect(validations).toBe(before);
@@ -1806,6 +1962,44 @@ describe('batch', () => {
     expect(data.b).toBe(2);
     expect(get(state.snapshots)).toHaveLength(2);
   });
+
+  it('should schedule each async validator at most once for the whole batch', async () => {
+    let callCount = 0;
+    const { batch, state } = createSvState(
+      { a: '', b: '' },
+      {
+        asyncValidator: {
+          a: async () => {
+            callCount++;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    batch((draft) => {
+      draft.a = 'one';
+      draft.a = 'two';
+      draft.a = 'three';
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(callCount).toBe(1);
+    expect(get(state.asyncErrors)).toEqual({ a: '' });
+  });
+
+  it('should do nothing when called after destroy', () => {
+    const { data, batch, destroy } = createSvState({ a: 0 });
+
+    destroy();
+    batch((draft) => {
+      draft.a = 1;
+    });
+
+    expect(data.a).toBe(0);
+  });
 });
 
 describe('plugin error isolation', () => {
@@ -1842,5 +2036,30 @@ describe('plugin error isolation', () => {
     expect(data.value).toBe(1);
     expect(seen).toEqual(['value']);
     expect(reported).toEqual(['thrower:onChange']);
+  });
+
+  it('should log through console.error by default when onPluginError is not provided', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { data } = createSvState(
+      { value: 0 },
+      {},
+      {
+        plugins: [
+          {
+            name: 'thrower',
+            onChange: () => {
+              throw new Error('boom');
+            }
+          }
+        ]
+      }
+    );
+
+    data.value = 1;
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('svstate: plugin "thrower" threw in onChange', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
   });
 });

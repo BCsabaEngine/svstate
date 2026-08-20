@@ -15,6 +15,19 @@ function createMockStorage() {
 }
 
 describe('persistPlugin', () => {
+  it('should stay a safe no-op when no storage option is given and no global localStorage exists', () => {
+    const persist = persistPlugin({ key: 'test', throttle: 10 });
+
+    expect(() => {
+      const { data } = createSvState({ name: 'initial' }, undefined, { plugins: [persist] });
+      expect(data.name).toBe('initial');
+      expect(persist.isRestored()).toBe(false);
+
+      data.name = 'changed';
+      persist.clearPersistedState();
+    }).not.toThrow();
+  });
+
   it('should hydrate state from storage on init', () => {
     const storage = createMockStorage();
     storage.setItem('test', JSON.stringify({ version: 1, data: { name: 'stored' } }));
@@ -25,6 +38,20 @@ describe('persistPlugin', () => {
     expect(data.name).toBe('stored');
     expect(data.count).toBe(0);
     expect(persist.isRestored()).toBe(true);
+  });
+
+  it('should ignore a __proto__ key in stored data instead of merging it', () => {
+    const storage = createMockStorage();
+    // A raw JSON string (not an object literal) is required: JSON.parse gives "__proto__" a real
+    // own property, whereas `{ __proto__: ... }` as a literal would just set the prototype.
+    storage.setItem('test', '{"version":1,"data":{"name":"stored","__proto__":{"polluted":true}}}');
+
+    const persist = persistPlugin({ key: 'test', storage });
+    const { data } = createSvState({ name: 'initial' }, undefined, { plugins: [persist] });
+
+    expect(data.name).toBe('stored');
+    expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
   it('should not restore if no stored data', () => {
@@ -67,6 +94,40 @@ describe('persistPlugin', () => {
     expect(stored.data.count).toBeUndefined();
   });
 
+  it('should persist a nested include path, creating intermediate objects as needed', async () => {
+    const storage = createMockStorage();
+    const persist = persistPlugin({ key: 'test', storage, throttle: 10, include: ['user.address.city'] });
+    const { data } = createSvState({ user: { address: { city: 'Berlin', zip: '10115' } }, count: 0 }, undefined, {
+      plugins: [persist]
+    });
+
+    data.user.address.city = 'Vienna';
+    await new Promise((r) => setTimeout(r, 50));
+
+    const stored = JSON.parse(storage.getItem('test')!);
+    expect(stored.data).toEqual({ user: { address: { city: 'Vienna' } } });
+  });
+
+  it('should skip include paths that are or traverse through a dangerous key', async () => {
+    const storage = createMockStorage();
+    const persist = persistPlugin({
+      key: 'test',
+      storage,
+      throttle: 10,
+      // 'constructor' alone and 'constructor.name' both resolve to a defined value (the real
+      // Object constructor / its name), so this exercises setValueAtPath's own guard rather
+      // than being filtered out earlier by "value === undefined".
+      include: ['name', 'constructor', 'constructor.name']
+    });
+    const { data } = createSvState({ name: 'test' }, undefined, { plugins: [persist] });
+
+    data.name = 'updated';
+    await new Promise((r) => setTimeout(r, 50));
+
+    const stored = JSON.parse(storage.getItem('test')!);
+    expect(stored.data).toEqual({ name: 'updated' });
+  });
+
   it('should respect exclude paths', async () => {
     const storage = createMockStorage();
     const persist = persistPlugin({ key: 'test', storage, throttle: 10, exclude: ['secret'] });
@@ -78,6 +139,47 @@ describe('persistPlugin', () => {
     const stored = JSON.parse(storage.getItem('test')!);
     expect(stored.data.name).toBe('updated');
     expect(stored.data.secret).toBeUndefined();
+  });
+
+  it('should respect a nested exclude path without disturbing its siblings', async () => {
+    const storage = createMockStorage();
+    const persist = persistPlugin({ key: 'test', storage, throttle: 10, exclude: ['user.secret'] });
+    const { data } = createSvState({ user: { name: 'test', secret: 'hidden' }, count: 0 }, undefined, {
+      plugins: [persist]
+    });
+
+    data.count = 1;
+    await new Promise((r) => setTimeout(r, 50));
+
+    const stored = JSON.parse(storage.getItem('test')!);
+    expect(stored.data).toEqual({ user: { name: 'test' }, count: 1 });
+  });
+
+  it('should ignore stored data that is not a valid StorageFormat', () => {
+    const storage = createMockStorage();
+    storage.setItem('test', JSON.stringify({ notAVersion: true }));
+
+    const persist = persistPlugin({ key: 'test', storage });
+    const { data } = createSvState({ name: 'initial' }, undefined, { plugins: [persist] });
+
+    expect(data.name).toBe('initial');
+    expect(persist.isRestored()).toBe(false);
+  });
+
+  it('should ignore migration output that is not a plain object', () => {
+    const storage = createMockStorage();
+    storage.setItem('test', JSON.stringify({ version: 1, data: { fullName: 'John Doe' } }));
+
+    const persist = persistPlugin({
+      key: 'test',
+      storage,
+      version: 2,
+      migrate: () => 'not-an-object'
+    });
+    const { data } = createSvState({ name: 'initial' }, undefined, { plugins: [persist] });
+
+    expect(data.name).toBe('initial');
+    expect(persist.isRestored()).toBe(false);
   });
 
   it('should run migration when version changes', () => {

@@ -105,6 +105,43 @@ describe('undoRedoPlugin', () => {
     destroy();
     expect(undoRedo.canRedo()).toBe(false);
   });
+
+  it('should not push a redo entry when rollback(0) leaves the snapshot list unchanged', () => {
+    const { data, rollback, undoRedo } = createTestState();
+
+    data.name = 'updated';
+    // steps=0 targets the current tip, so restoreToSnapshot doesn't shrink the snapshot list
+    // and the plugin's subscription never captures a "previous tip" to push onto the redo stack
+    rollback(0);
+
+    expect(data.name).toBe('updated');
+    expect(undoRedo.canRedo()).toBe(false);
+  });
+});
+
+describe('undoRedoPlugin maxRedoStack', () => {
+  it('should drop the oldest redo entry once the configured maximum is exceeded', () => {
+    const undoRedo = undoRedoPlugin<{ a: number; b: number; c: number }>({ maxRedoStack: 2 });
+    const { data, rollback } = createSvState(
+      { a: 0, b: 0, c: 0 },
+      { effect: ({ snapshot, property }) => snapshot(`Changed ${property}`) },
+      { plugins: [undoRedo] }
+    );
+
+    data.a = 1; // Changed a
+    data.b = 2; // Changed b
+    data.c = 3; // Changed c
+
+    // Each rollback undoes the current tip and pushes it onto the redo stack, so the push order
+    // is the reverse of the change order: "Changed c" first, then "Changed b", then "Changed a"
+    rollback();
+    rollback();
+    rollback();
+
+    const stack = get(undoRedo.redoStack);
+    // "Changed c" (pushed first) is dropped once the stack exceeds maxRedoStack
+    expect(stack.map((s) => s.title)).toEqual(['Changed b', 'Changed a']);
+  });
 });
 
 describe('undoRedoPlugin multi-step redo', () => {

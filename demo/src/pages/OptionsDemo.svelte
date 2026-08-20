@@ -113,7 +113,7 @@
 	// ─────────────────────────────────────────────
 	const optionsSourceCode = `const { data, execute, state } = createSvState(
   sourceData,
-  { validator, effect, action },
+  { validator, effect, action, actionCompleted },
   {
     // Reset isDirty to false after successful action
     resetDirtyOnAction: true,    // default: true

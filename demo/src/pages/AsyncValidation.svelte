@@ -103,12 +103,12 @@
 	// ─────────────────────────────────────────────
 	// Source code examples for the collapsible section
 	// ─────────────────────────────────────────────
-	const stateSourceCode = `const { data, batch, state: { errors, asyncErrors, asyncValidating, hasCombinedErrors } } =
+	const stateSourceCode = `const { data, batch, state: { errors, hasErrors, isDirty, asyncErrors, asyncValidating, hasCombinedErrors } } =
   createSvState(sourceData, {
     validator: (source) => ({
-      username: stringValidator(source.username).required().minLength(3).noSpace().getError(),
-      email: stringValidator(source.email).required().email().getError(),
-      slug: stringValidator(source.slug).required().minLength(2).slug().getError()
+      username: stringValidator(source.username).prepare('trim').required().minLength(3).maxLength(20).noSpace().getError(),
+      email: stringValidator(source.email).prepare('trim').required().email().getError(),
+      slug: stringValidator(source.slug).prepare('trim').required().minLength(2).slug().getError()
     }),
     asyncValidator: {
       username: async (value, source, signal) => {

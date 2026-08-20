@@ -117,6 +117,52 @@ describe('autosavePlugin', () => {
     expect(saved.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('should run a save requested while one is already in flight instead of dropping it', async () => {
+    const saveCalls: string[] = [];
+    const { promise: inFlight, resolve: resolveInFlight } = Promise.withResolvers<void>();
+    const autosave = autosavePlugin({
+      save: async (data) => {
+        saveCalls.push((data as { name: string }).name);
+        if (saveCalls.length === 1) await inFlight;
+      },
+      idle: 5000,
+      interval: 15,
+      onlyWhenDirty: false,
+      saveOnDestroy: false
+    });
+    const { data, destroy } = createSvState({ name: 'a' }, undefined, { plugins: [autosave] });
+
+    // First interval tick starts the save and hangs on the unresolved promise
+    await new Promise((r) => setTimeout(r, 25));
+    expect(autosave.isSaving()).toBe(true);
+
+    data.name = 'b';
+    // A later interval tick requests a save while the first is still in flight, and must not be
+    // dropped even though `isSaving` was true at request time
+    await new Promise((r) => setTimeout(r, 25));
+
+    resolveInFlight();
+    await new Promise((r) => setTimeout(r, 15));
+    destroy();
+
+    expect(saveCalls[0]).toBe('a');
+    expect(saveCalls).toContain('b');
+    expect(autosave.isSaving()).toBe(false);
+  });
+
+  it('should not touch document when onVisibilityHidden is set but document is unavailable', () => {
+    const autosave = autosavePlugin({
+      save: () => {},
+      onVisibilityHidden: true,
+      saveOnDestroy: false
+    });
+
+    expect(() => {
+      const { destroy } = createSvState({ name: 'a' }, undefined, { plugins: [autosave] });
+      destroy();
+    }).not.toThrow();
+  });
+
   it('should clear idle timer after successful action', async () => {
     const saved: unknown[] = [];
     const autosave = autosavePlugin({

@@ -185,6 +185,13 @@ describe('stringValidator', () => {
     it('should fail for mixed case string', () => {
       expect(stringValidator('Hello').lowercase().getError()).toBe('Lowercase only');
     });
+
+    it('should skip validation for nullish values', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(stringValidator(null).lowercase().getError()).toBe('');
+      expect(stringValidator().lowercase().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+    });
   });
 
   describe('startsWith', () => {
@@ -206,6 +213,10 @@ describe('stringValidator', () => {
 
     it('should skip validation for empty string', () => {
       expect(stringValidator('').startsWith('hello').getError()).toBe('');
+    });
+
+    it('should keep the earlier error instead of overwriting it', () => {
+      expect(stringValidator('bye world').minLength(20).startsWith('hello').getError()).toBe('Min length 20');
     });
   });
 
@@ -270,6 +281,10 @@ describe('stringValidator', () => {
       expect(stringValidator().in(['apple', 'banana']).getError()).toBe('');
       /* eslint-enable unicorn/no-null */
     });
+
+    it('should keep the earlier error instead of overwriting it', () => {
+      expect(stringValidator('orange').minLength(20).in(['apple', 'banana']).getError()).toBe('Min length 20');
+    });
   });
 
   describe('notIn', () => {
@@ -300,6 +315,10 @@ describe('stringValidator', () => {
       expect(stringValidator(null).notIn(['apple', 'banana']).getError()).toBe('');
       expect(stringValidator().notIn(['apple', 'banana']).getError()).toBe('');
       /* eslint-enable unicorn/no-null */
+    });
+
+    it('should keep the earlier error instead of overwriting it', () => {
+      expect(stringValidator('apple').minLength(20).notIn(['apple', 'banana']).getError()).toBe('Min length 20');
     });
   });
 
@@ -765,6 +784,14 @@ describe('numberValidator', () => {
     it('should fail for positive number', () => {
       expect(numberValidator(5).negative().getError()).toBe('Must be negative');
     });
+
+    it('should skip validation for null/undefined/NaN', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).negative().getError()).toBe('');
+      expect(numberValidator().negative().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+      expect(numberValidator(NaN).negative().getError()).toBe('');
+    });
   });
 
   describe('nonNegative', () => {
@@ -778,6 +805,14 @@ describe('numberValidator', () => {
 
     it('should fail for negative number', () => {
       expect(numberValidator(-5).nonNegative().getError()).toBe('Must be non-negative');
+    });
+
+    it('should skip validation for null/undefined/NaN', () => {
+      /* eslint-disable unicorn/no-null */
+      expect(numberValidator(null).nonNegative().getError()).toBe('');
+      expect(numberValidator().nonNegative().getError()).toBe('');
+      /* eslint-enable unicorn/no-null */
+      expect(numberValidator(NaN).nonNegative().getError()).toBe('');
     });
   });
 
@@ -1660,6 +1695,15 @@ describe('numberValidator precision', () => {
   it('should reject a zero divisor', () => {
     expect(numberValidator(5).multipleOf(0).getError()).toBe('Must be a multiple of 0');
   });
+
+  it('should treat an unsafe integer with no decimal point as having zero decimal places', () => {
+    // Beyond Number.MAX_SAFE_INTEGER, isSafeInteger() is false but String() still has no '.' or 'e'
+    expect(
+      numberValidator(2 ** 60)
+        .decimal(2)
+        .getError()
+    ).toBe('');
+  });
 });
 
 describe('arrayValidator comparison keys', () => {
@@ -1700,5 +1744,35 @@ describe('arrayValidator comparison keys', () => {
         .includes(1 as unknown as string)
         .getError()
     ).toBe('Must include 1');
+  });
+
+  it('should compare nested arrays by structure', () => {
+    expect(
+      arrayValidator([
+        [1, 2],
+        [1, 2]
+      ])
+        .unique()
+        .getError()
+    ).toBe('Items must be unique');
+    expect(
+      arrayValidator([
+        [1, 2],
+        [1, 3]
+      ])
+        .unique()
+        .getError()
+    ).toBe('');
+  });
+
+  it('should treat undefined entries inside nested structures as equal', () => {
+    expect(
+      arrayValidator([
+        [1, undefined],
+        [1, undefined]
+      ])
+        .unique()
+        .getError()
+    ).toBe('Items must be unique');
   });
 });

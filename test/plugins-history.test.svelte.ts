@@ -146,6 +146,23 @@ describe('historyPlugin', () => {
     expect(popstateListeners.length).toBe(0);
   });
 
+  it('should stay a safe no-op during SSR, where window is unavailable', () => {
+    // Undo the beforeEach mock: neither onInit's URL read nor onChange's URL write may touch it
+    delete (globalThis as Record<string, unknown>).window;
+
+    const history = historyPlugin({ fields: { query: 'q' } });
+
+    expect(() => {
+      const { data, destroy } = createSvState({ query: 'initial' }, undefined, { plugins: [history] });
+      expect(data.query).toBe('initial');
+
+      data.query = 'changed';
+      expect(data.query).toBe('changed');
+
+      destroy();
+    }).not.toThrow();
+  });
+
   describe('nested fields', () => {
     it('should update URL when a dotted field is mutated directly', () => {
       const history = historyPlugin({ fields: { 'filters.q': 'q' } });
