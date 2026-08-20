@@ -62,6 +62,23 @@ describe('syncPlugin', () => {
     expect(state2.data.name).toBe('updated');
   });
 
+  it('should reject an incoming payload nested deeper than the depth limit', async () => {
+    const sync1 = syncPlugin({ key: 'depth-test', throttle: 10 });
+    const sync2 = syncPlugin({ key: 'depth-test', throttle: 10 });
+
+    const state1 = createSvState({ deep: 'unset' as unknown }, undefined, { plugins: [sync1] });
+    const state2 = createSvState({ deep: 'unset' as unknown }, undefined, { plugins: [sync2] });
+
+    // 12 levels of object nesting inside "deep" pushes the whole payload past the 10-level limit
+    let tooDeep: unknown = 'leaf';
+    for (let index = 0; index < 12; index++) tooDeep = { nested: tooDeep };
+
+    state1.data.deep = tooDeep;
+    await new Promise((r) => setTimeout(r, 40));
+
+    expect(state2.data.deep).toBe('unset');
+  });
+
   it('should not create echo loops', async () => {
     const sync1 = syncPlugin({ key: 'echo-test', throttle: 10 });
     const sync2 = syncPlugin({ key: 'echo-test', throttle: 10 });
@@ -185,5 +202,36 @@ describe('syncPlugin inbound throttling', () => {
     await new Promise((r) => setTimeout(r, 40));
 
     expect(errors).toHaveLength(1);
+  });
+
+  it('should stay a safe no-op when BroadcastChannel is unavailable', async () => {
+    vi.stubGlobal('BroadcastChannel', undefined);
+
+    const sync = syncPlugin({ key: 'no-bc', throttle: 10 });
+    const { data, destroy } = createSvState({ name: 'initial' }, undefined, { plugins: [sync] });
+
+    data.name = 'updated';
+    // Let the throttled broadcast actually fire with no channel to post through, instead of
+    // cancelling it via an immediate destroy()
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(() => destroy()).not.toThrow();
+  });
+
+  it('should ignore a non-sync message and a non-object payload', async () => {
+    const sync1 = syncPlugin({ key: 'ignore-test', throttle: 10 });
+    const sync2 = syncPlugin({ key: 'ignore-test', throttle: 10 });
+
+    const state1 = createSvState({ name: 'initial' }, undefined, { plugins: [sync1] });
+    const state2 = createSvState({ name: 'initial' }, undefined, { plugins: [sync2] });
+
+    const channel = MockBroadcastChannel.channels.get('ignore-test')![0]!;
+    channel.postMessage({ type: 'not-sync', data: { name: 'should-not-apply' } });
+    channel.postMessage({ type: 'sync', data: 'not-an-object' });
+
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(state1.data.name).toBe('initial');
+    expect(state2.data.name).toBe('initial');
   });
 });

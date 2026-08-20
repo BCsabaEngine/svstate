@@ -370,6 +370,32 @@ describe('ChangeProxy', () => {
 
       expect(changed).toHaveBeenCalledWith(expect.any(Object), '123abc', 'updated', 'test');
     });
+
+    it('should set a symbol-keyed property directly on the raw object without reporting a change', () => {
+      const source: Record<string, unknown> = {};
+      const changed = vi.fn();
+      const proxy = ChangeProxy(source, changed) as Record<symbol, unknown>;
+      const sym = Symbol('tag');
+
+      proxy[sym] = 'value';
+
+      expect(source[sym]).toBe('value');
+      expect(proxy[sym]).toBe('value');
+      expect(changed).not.toHaveBeenCalled();
+    });
+
+    it('should delete a symbol-keyed property directly on the raw object without reporting a change', () => {
+      const sym = Symbol('tag');
+      const source: Record<symbol, unknown> = { [sym]: 'value' };
+      const changed = vi.fn();
+      const proxy = ChangeProxy(source, changed) as Record<symbol, unknown>;
+
+      const wasDeleted = delete proxy[sym];
+
+      expect(wasDeleted).toBe(true);
+      expect(Object.hasOwn(source, sym)).toBe(false);
+      expect(changed).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -458,5 +484,80 @@ describe('ChangeProxy identity, deletes and paths', () => {
 
     expect(changed).toHaveBeenNthCalledWith(1, expect.any(Object), 'list', 9, 1);
     expect(changed).toHaveBeenNthCalledWith(2, expect.any(Object), 'list', 1, 3);
+  });
+});
+
+describe('prototype pollution guard', () => {
+  it('should not reassign the raw object prototype via __proto__', () => {
+    const source: Record<string, unknown> = { a: 1 };
+    const changed = vi.fn();
+    const proxy = ChangeProxy(source, changed) as Record<string, unknown>;
+
+    proxy.__proto__ = { isAdmin: true };
+
+    expect(Object.getPrototypeOf(source)).toBe(Object.prototype);
+    expect((source as { isAdmin?: boolean }).isAdmin).toBeUndefined();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('should not create own constructor/prototype properties', () => {
+    const source: Record<string, unknown> = { a: 1 };
+    const changed = vi.fn();
+    const proxy = ChangeProxy(source, changed) as Record<string, unknown>;
+
+    proxy.constructor = 'hijacked';
+    proxy.prototype = 'hijacked';
+
+    expect(Object.hasOwn(source, 'constructor')).toBe(false);
+    expect(Object.hasOwn(source, 'prototype')).toBe(false);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('should no-op deleting __proto__ without throwing or affecting the prototype', () => {
+    const source: Record<string, unknown> = { a: 1 };
+    const proxy = ChangeProxy(source, vi.fn()) as Record<string, unknown>;
+
+    expect(() => delete proxy.__proto__).not.toThrow();
+    expect(Object.getPrototypeOf(source)).toBe(Object.prototype);
+  });
+
+  it('should not pollute the prototype via Object.assign with a __proto__ payload', () => {
+    const source: Record<string, unknown> = { a: 1 };
+    const proxy = ChangeProxy(source, vi.fn()) as Record<string, unknown>;
+
+    const untrusted = JSON.parse('{"__proto__":{"polluted":"yes"}}') as Record<string, unknown>;
+    Object.assign(proxy, untrusted);
+
+    expect(Object.getPrototypeOf(source)).toBe(Object.prototype);
+    expect((source as { polluted?: string }).polluted).toBeUndefined();
+  });
+
+  it('should return the real prototype from __proto__, not a reactive wrapper', () => {
+    const source: Record<string, unknown> = { a: 1 };
+    const proxy = ChangeProxy(source, vi.fn()) as Record<string, unknown>;
+
+    expect(proxy.__proto__).toBe(Object.prototype);
+  });
+
+  it('should return the real constructor unwrapped, not a reactive proxy', () => {
+    const source: Record<string, unknown> = { a: 1 };
+    const proxy = ChangeProxy(source, vi.fn()) as Record<string, unknown>;
+
+    expect(proxy.constructor).toBe(Object);
+  });
+
+  it('should guard __proto__/constructor/prototype at any nesting depth, not just the root', () => {
+    const source = { nested: { a: 1 } as Record<string, unknown> };
+    const changed = vi.fn();
+    const proxy = ChangeProxy(source, changed) as { nested: Record<string, unknown> };
+
+    proxy.nested.__proto__ = { isAdmin: true };
+    proxy.nested.constructor = 'hijacked';
+    delete proxy.nested.__proto__;
+
+    expect(Object.getPrototypeOf(source.nested)).toBe(Object.prototype);
+    expect(Object.hasOwn(source.nested, 'constructor')).toBe(false);
+    expect((source.nested as { isAdmin?: boolean }).isAdmin).toBeUndefined();
+    expect(changed).not.toHaveBeenCalled();
   });
 });

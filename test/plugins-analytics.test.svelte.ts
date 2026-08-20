@@ -41,6 +41,30 @@ describe('analyticsPlugin', () => {
     expect(flushed.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('should use the default 5000ms flush interval when not specified', () => {
+    vi.useFakeTimers();
+    try {
+      const flushed: AnalyticsEvent[][] = [];
+      const analytics = analyticsPlugin({
+        onFlush: (events) => {
+          flushed.push([...events]);
+        },
+        batchSize: 100
+      });
+      const { data, destroy } = createSvState({ name: 'test' }, undefined, { plugins: [analytics] });
+
+      data.name = 'updated';
+      expect(flushed.length).toBe(0);
+
+      vi.advanceTimersByTime(5000);
+      expect(flushed.length).toBe(1);
+
+      destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('should filter by include types', () => {
     const flushed: AnalyticsEvent[][] = [];
     const analytics = analyticsPlugin({

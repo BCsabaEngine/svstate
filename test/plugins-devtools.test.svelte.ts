@@ -77,6 +77,65 @@ describe('devtoolsPlugin', () => {
     expect(actionCalls.length).toBe(2);
   });
 
+  it('should default to enabled outside of production when enabled is not specified', () => {
+    const devtools = devtoolsPlugin();
+    const { data } = createSvState({ name: 'test' }, undefined, { plugins: [devtools] });
+
+    data.name = 'updated';
+
+    expect(groupCollapsedSpy).toHaveBeenCalled();
+  });
+
+  it('should include from/to values when logValues is true', () => {
+    const devtools = devtoolsPlugin({ enabled: true, logValues: true });
+    const { data } = createSvState({ name: 'old' }, undefined, { plugins: [devtools] });
+
+    data.name = 'new';
+
+    const changeDetail = logSpy.mock.calls.find((c) => (c[0] as { property?: string })?.property === 'name')?.[0] as
+      { from?: string; to?: string } | undefined;
+    expect(changeDetail).toEqual({ property: 'name', from: 'old', to: 'new' });
+  });
+
+  it('should log the error message when an action fails', async () => {
+    const devtools = devtoolsPlugin({ enabled: true });
+    const { execute } = createSvState(
+      { name: 'test' },
+      {
+        action: async () => {
+          throw new Error('boom');
+        }
+      },
+      { plugins: [devtools] }
+    );
+
+    await execute();
+
+    const errorDetail = logSpy.mock.calls.find((c) => (c[0] as { error?: string })?.error === 'boom');
+    expect(errorDetail).toBeDefined();
+  });
+
+  it('should log snapshot, rollback and reset events', () => {
+    const devtools = devtoolsPlugin({ enabled: true });
+    const { data, rollback, reset } = createSvState(
+      { name: 'initial' },
+      { effect: ({ snapshot }) => snapshot('Changed') },
+      { plugins: [devtools] }
+    );
+
+    data.name = 'updated';
+    const snapshotCall = groupCollapsedSpy.mock.calls.find((c) => (c[0] as string).includes('snapshot'));
+    expect(snapshotCall).toBeDefined();
+
+    rollback();
+    const rollbackCall = groupCollapsedSpy.mock.calls.find((c) => (c[0] as string).includes('rollback'));
+    expect(rollbackCall).toBeDefined();
+
+    reset();
+    const resetCall = groupCollapsedSpy.mock.calls.find((c) => (c[0] as string).includes('reset'));
+    expect(resetCall).toBeDefined();
+  });
+
   it('should use custom name in log prefix', () => {
     const devtools = devtoolsPlugin({ enabled: true, name: 'myForm' });
     const { data } = createSvState({ name: 'test' }, undefined, { plugins: [devtools] });

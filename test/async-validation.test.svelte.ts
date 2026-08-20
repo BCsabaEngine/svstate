@@ -171,6 +171,48 @@ describe('async validation - cancellation', () => {
   });
 });
 
+describe('async validation - error handling', () => {
+  it('should store the error message when the async validator throws', async () => {
+    const { data, state } = createSvState(
+      { username: '' },
+      {
+        asyncValidator: {
+          username: async () => {
+            throw new Error('Server unreachable');
+          }
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    data.username = 'test';
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(get(state.asyncErrors)).toEqual({ username: 'Server unreachable' });
+    expect(get(state.hasAsyncErrors)).toBe(true);
+    expect(get(state.asyncValidating)).toEqual([]);
+  });
+
+  it('should unwrap a non-Error throw into a message', async () => {
+    const { data, state } = createSvState(
+      { username: '' },
+      {
+        asyncValidator: {
+          username: async () => {
+            throw 'plain string rejection';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    data.username = 'test';
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(get(state.asyncErrors)).toEqual({ username: 'plain string rejection' });
+  });
+});
+
 describe('async validation - asyncValidating store', () => {
   it('should update asyncValidating store during validation', async () => {
     const { data, state } = createSvState(
@@ -560,6 +602,59 @@ describe('async validation - nested paths', () => {
 
     expect(isAsyncValidatorCalled).toBe(true);
     expect(get(state.asyncErrors)).toEqual({ user: 'User invalid' });
+  });
+
+  it('should pass undefined to the validator when a path segment resolves through a null ancestor', async () => {
+    let receivedValue: unknown = 'not called';
+
+    const { data } = createSvState(
+      { user: { email: 'x@y.z' } as { email: string } | null },
+      {
+        asyncValidator: {
+          'user.email': async (value) => {
+            receivedValue = value;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    // "user" becoming null matches registered "user.email" (parent triggers child), and reading
+    // through the now-null "user" must not throw
+    // eslint-disable-next-line unicorn/no-null
+    data.user = null;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(receivedValue).toBeUndefined();
+  });
+
+  it('should still run when only a descendant path has a sync error, not the registered path itself', async () => {
+    let isAsyncValidatorCalled = false;
+
+    const { data, state } = createSvState(
+      { user: { name: 'x' } },
+      {
+        validator: (source) => ({
+          user: { name: source.user.name ? '' : 'Required' }
+        }),
+        asyncValidator: {
+          // "user" itself resolves to a nested object, not a string, so the sync-error check
+          // (which only looks at the exact registered path) must not block this
+          user: async () => {
+            isAsyncValidatorCalled = true;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 10 }
+    );
+
+    data.user.name = '';
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(get(state.errors)).toEqual({ user: { name: 'Required' } });
+    expect(isAsyncValidatorCalled).toBe(true);
   });
 });
 
