@@ -117,7 +117,7 @@ const userSchema = z.object({
   );
 }
 
-const { data, batch, state: { errors, hasErrors } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
   validator: (source) => zodToSvstateErrors(userSchema, source, allFields)
 });
 

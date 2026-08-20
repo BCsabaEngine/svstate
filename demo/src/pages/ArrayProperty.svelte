@@ -96,10 +96,10 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 
 {#each data.items as item, index}
   <input bind:value={item.name} />
-  <ErrorText error={($errors as ItemErrors)?.[...\`item_\${index}\`]?.name ?? ''} />
+  <ErrorText error={($errors as ItemErrors)?.[\`item_\${index}\`]?.name ?? ''} />
 
   <input bind:value={item.email} />
-  <ErrorText error={($errors as ItemErrors)?.[...\`item_\${index}\`]?.email ?? ''} />
+  <ErrorText error={($errors as ItemErrors)?.[\`item_\${index}\`]?.email ?? ''} />
 {/each}`;
 </script>
 
