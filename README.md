@@ -2,7 +2,7 @@
 
 ### Supercharged `$state()` for Svelte 5
 
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green.svg)](https://nodejs.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-orange.svg)](https://svelte.dev/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![Tests](https://img.shields.io/badge/tests-600%2B-brightgreen.svg)](<>)
@@ -104,7 +104,7 @@ data.billing.bankAccount.iban = 'NEW-IBAN'; // ✅ Detected, validated, snapshot
 npm install svstate
 ```
 
-**Requirements:** Node.js ≥20, Svelte 5
+**Requirements:** Node.js ≥22, Svelte 5
 
 **Note:** This package is distributed as ESM (ES Modules) only.
 
