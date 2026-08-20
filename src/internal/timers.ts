@@ -2,11 +2,17 @@
 // Internal module — not part of the public API surface.
 
 export type Debouncer = {
-  /** (Re)starts the delay; `run` fires once the delay elapses without another call. */
+  /**
+  (Re)starts the delay; `run` fires once the delay elapses without another call.
+  */
   schedule(): void;
-  /** Drops a pending run without executing it. */
+  /**
+  Drops a pending run without executing it.
+  */
   cancel(): void;
-  /** Runs `run` immediately if one is pending, otherwise does nothing. */
+  /**
+  Runs `run` immediately if one is pending, otherwise does nothing.
+  */
   flush(): void;
   isPending(): boolean;
 };

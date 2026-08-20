@@ -389,7 +389,9 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   runValidation();
 
-  /** Runs sync validation immediately (bypassing debounce) and returns the result. */
+  /**
+  Runs sync validation immediately (bypassing debounce) and returns the result.
+  */
   const validate = (): ValidationResult<V> => {
     clearValidationTimer();
     runValidation();

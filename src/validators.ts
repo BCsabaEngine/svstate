@@ -307,7 +307,9 @@ export function numberValidator(input: number | null | undefined): NumberValidat
       return builder;
     },
 
-    /** Alias of {@link multipleOf}. */
+    /**
+    Alias of {@link multipleOf}.
+    */
     step(n: number) {
       return builder.multipleOf(n);
     },

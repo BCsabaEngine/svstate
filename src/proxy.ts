@@ -5,10 +5,14 @@ export type ProxyChanged<T extends object> = (
   oldValue: unknown
 ) => void;
 
-/** Reading this symbol off a change proxy yields the underlying raw object. */
+/**
+Reading this symbol off a change proxy yields the underlying raw object.
+*/
 const RAW = Symbol('svstate.raw');
 
-/** Canonical array index (no leading zeros, no sign, no whitespace). */
+/**
+Canonical array index (no leading zeros, no sign, no whitespace).
+*/
 const ARRAY_INDEX = /^(?:0|[1-9]\d*)$/;
 
 const isProxiable = (value: unknown): boolean =>

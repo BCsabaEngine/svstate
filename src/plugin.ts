@@ -1,6 +1,8 @@
 import type { Snapshot, SnapshotFunction, StateResult, SvStateOptions, Validator } from './state.svelte';
 
-/** The same stores `createSvState` returns, with errors widened to the untyped shape. */
+/**
+The same stores `createSvState` returns, with errors widened to the untyped shape.
+*/
 export type PluginStores<T> = StateResult<T, Validator>;
 
 export type PluginContext<T extends Record<string, unknown>> = {

@@ -1,6 +1,6 @@
 {
   "name": "svstate",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Supercharged $state() for Svelte 5: deep reactive proxy with validation, cross-field rules, computed & side-effects",
   "author": "BCsabaEngine",
   "license": "ISC",
@@ -55,22 +55,22 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
     "@eslint/js": "^10.0.1",
-    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@types/node": "^22.20.1",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^10.8.0",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^14.0.0",
-    "eslint-plugin-unicorn": "^72.0.0",
+    "eslint-plugin-unicorn": "^73.0.0",
     "nodemon": "^3.1.14",
     "prettier": "^3.9.6",
-    "svelte": "^5.56.8",
+    "svelte": "^5.56.9",
     "ts-node": "^10.9.2",
-    "tsx": "^4.23.1",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
