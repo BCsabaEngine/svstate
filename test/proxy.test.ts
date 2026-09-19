@@ -140,7 +140,7 @@ describe('ChangeProxy', () => {
 
       proxy.users[0].name = 'Updated';
 
-      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'users.name', 'Updated', 'Alice');
+      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'users.0.name', 'Updated', 'Alice');
     });
 
     it('should handle push operations', () => {
@@ -167,7 +167,7 @@ describe('ChangeProxy', () => {
       proxy.matrix[0][0] = 10;
 
       expect(proxy.matrix[0][0]).toBe(10);
-      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'matrix', 10, 1);
+      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'matrix.0', 10, 1);
     });
   });
 
