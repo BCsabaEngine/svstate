@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-09-19
+
+A logic-correctness pass over the core, the plugins and the validators. Every item below was a
+reproducible defect; each has a regression test in `test/regressions.test.svelte.ts`.
+
+### Added
+
+- **`pathEffect` actuator** — effects keyed by property path, matching like `asyncValidator` (exact, descendant or ancestor path). Replaces `if (property === 'a' || property === 'b')` chains inside `effect`; runs after `effect` with the same context. New exported type `PathEffect<T>`.
+- **`"sideEffects": false`** in `package.json`, so bundlers can drop the plugins a consumer doesn't import.
+
+### Documentation
+
+- README and `CLAUDE.md` now state that every snapshot is a full deep clone and how to tune `maxSnapshots`.
+
+### Breaking
+
+- **Fields inside array elements report their indexed path** — `data.inventory[2].quantity = 0` was reported (and marked dirty) as `inventory.quantity`; it is now `inventory.2.quantity`, with `inventory.2` and `inventory` marked dirty as parents. This makes async validators registered on indexed paths (`'inventory.2.quantity'`) fire from row edits and lets `isDirtyByField` tell rows apart. Writing an element itself (`data.items[0] = x`), writing `length`, and the array methods still report the array path. **Migrate:** async validator keys and `isDirtyByField` lookups that used the collapsed form (`'inventory.quantity'`) must use the indexed form. A row follows its index, so after a reorder an element is reported at its new position, and a proxy for a row obtained _before_ the reorder keeps reporting the old index.
+
+### Fixed
+
+- **Superseded async validation could clobber the newer run** — when a change cancelled an in-flight async validator and scheduled a new one, the old run's cleanup deleted the _new_ run's tracker and validating flag. The new debounce timer could then no longer be cancelled (duplicate validator calls), and `asyncValidating` and the concurrency limit were wrong while the new run was in flight. Cleanup now only touches a tracker that still belongs to the run.
+- **`execute()` and `actionCompleted`** — a throwing `actionCompleted` on the success path used to be called a second time with its own error; a throw inside the failure path escaped `execute()` and skipped `actionError` and the `onAction` "after" hook. `actionCompleted` now runs exactly once and its failure is reported through `actionError` like any other.
+- **Concurrent actions** — with `allowConcurrentActions`, `actionInProgress` went `false` as soon as the first action finished. It is now counted.
+- **A throwing `effect` skipped the rest of the change pipeline** — the value was already written and marked dirty, but plugin `onChange` and validation scheduling were skipped, leaving state that was never validated. They now run regardless, and the error is still thrown to the caller.
+- **`rollback()` / `rollbackTo()` cleared every dirty flag** — even when the target snapshot differed from the initial state. Dirty fields are now recomputed against the `Initial` snapshot.
+- **`rollback()` / `rollbackTo()` / `reset()` silently dropped async errors** — a restored invalid value showed `hasCombinedErrors === false`. Async validators for values that still differ from the initial state are re-scheduled (all of them on `reset()` when `runAsyncValidationOnInit` is set).
+- **`snapshot('Initial')` could overwrite the Initial snapshot**, losing the `reset()` target. The Initial snapshot is never replaced.
+- **`batch()` ignored `shouldReplace`** — its snapshot was always appended. It now honours the first snapshot request made inside the batch.
+- **`onValidation` fired before plugins' `onInit`** — the validation that runs at creation is now reported after `onInit`.
+- **Array methods fired one change per shifted index** — `splice(0, 1)` on four items ran `effect`, plugin `onChange`, dirty tracking and validation scheduling five times. `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill` and `copyWithin` now report a single change on the array path per call, and nothing when the call changes nothing. **Behavior note:** for these calls `currentValue` is now the whole array and `oldValue` a copy from before the call, instead of one element per event.
+- **Per-row validation errors** — a validator returning row errors as an array (`inventory: source.inventory.map((row) => ({ quantity: ... }))`) is now supported: the public `Validator` type admits arrays (new exported `ValidatorNode`), and the "skip the async validator when sync validation already failed" check now walks arrays, so it fires for paths like `inventory.2.quantity` instead of silently never firing.
+- **`data.key = undefined` on a missing key was a no-op** — the key is now created and a change is reported.
+- **`historyPlugin` push mode** — applying the URL (on init or `popstate`) was echoed back through `pushState`, adding a history entry per back/forward press and cutting off the forward stack. Reading the URL no longer writes it.
+- **`historyPlugin` kept stale values** — going back to a URL without a param left the old value in state. On `popstate`/`syncFromUrl()` a missing param now restores the field's initial value. `reset()` and `rollback()` now update the URL, and writes that would not change the URL are skipped.
+- **`analyticsPlugin` redaction leaked child values** — with `redact: ['user.ssn']`, assigning `data.user = {...}` logged the whole object including the ssn. Redacted paths below the changed property are now masked in a copy of the value.
+- **`autosavePlugin` re-saved unchanged data** — `isDirty` stays true after a save, so `interval` (or visibility) saves repeated forever. It now saves only when something changed since the last successful save (a failed save is retried). `rollback()` and `reset()` schedule a save too, since they clear `isDirty` although the state moved.
+- **`persistPlugin` after `rollback()`** — storage kept the pre-rollback state; it is now written like after `reset()`.
+- **`persistPlugin` restore** — nested defaults missing from stored data were lost (shallow merge) and data written under a different `version` was loaded when no `migrate` was given. Restore now deep-merges plain objects, ignores other-version data without `migrate`, and applies `include`/`exclude` when reading as well as writing.
+- **`syncPlugin`** — `reset()` and `rollback()` are now broadcast to other tabs, and the 10-level depth limit also descends into arrays (nesting could hide inside one).
+- **`undoRedoPlugin`** — a `rollbackTo()` that removed nothing after a `reset()` or action re-baseline pushed a stale snapshot onto the redo stack.
+- **`dateValidator().weekday()` / `.weekend()`** — a `'YYYY-MM-DD'` string is parsed as UTC but was read in local time, so in zones west of UTC a Monday reported Sunday. Date-only strings are now read in UTC.
+- **`stringValidator().regexp()`** — a global or sticky regexp alternated between pass and fail because `test()` keeps `lastIndex`. It is reset before each test.
+- **`numberValidator().multipleOf()` / `.step()`** — a divisor below `1e-9` accepted every number. The tolerance now scales with the divisor.
+- **`arrayValidator().unique()` / `.includes*()`** — all `Map`, `Set` and `RegExp` values compared equal, and a nested `NaN` collided with `null`. They are now compared by content.
+- **`deepClone`** — a `Date` or `RegExp` shared by several places was duplicated; sharing is now preserved in the clone.
+
+### Known limitations (unchanged)
+
+- `syncPlugin` still serializes with JSON, so a field set to `undefined` (or deleted) in one tab is not cleared in the others.
+
 ## [2.0.2] - 2026-08-20
 
 ### Fixed

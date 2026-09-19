@@ -124,7 +124,7 @@ data.address.street = '123 Main St';
 
 - When a nested field changes, all parent paths are also marked dirty (e.g., changing `address.street` also marks `address` as dirty)
 - `isDirty` is derived from `isDirtyByField` — it's `true` when any field is dirty
-- Cleared on `reset()`, `rollback()`, and successful action (respecting `resetDirtyOnAction`)
+- Cleared on `reset()` and on a successful action (respecting `resetDirtyOnAction`); after `rollback()` / `rollbackTo()` it is recomputed against the `Initial` snapshot, so fields that still differ from it stay dirty
 - Useful for highlighting changed fields in the UI or showing "unsaved changes" per section
 
 ```svelte
@@ -384,7 +384,7 @@ const {
 
 - Async validators only run if sync validation **passes** for that path
 - When a property changes, pending async validation for that path is **cancelled** (via `AbortSignal`)
-- `rollback()` and `reset()` cancel all pending async validations and clear async errors
+- `rollback()` and `reset()` cancel all pending async validations and clear async errors; validators for values that still differ from the initial state are then re-scheduled (and all of them on `reset()` when `runAsyncValidationOnInit` is on)
 - Use `debounceAsyncValidation` (default: 300ms) to avoid excessive API calls during typing
 - Use `maxConcurrentAsyncValidations` (default: 4) to limit parallel requests
 
@@ -458,13 +458,14 @@ The `property` is a dot-notation path string:
 | `data.name = 'John'`             | `"name"`              |
 | `data.address.city = 'NYC'`      | `"address.city"`      |
 | `data.billing.bank.iban = '...'` | `"billing.bank.iban"` |
-| `data.contacts[0].email = '...'` | `"contacts.email"`    |
+| `data.contacts[0].email = '...'` | `"contacts.0.email"`  |
+| `data.contacts[0] = {...}`       | `"contacts"`          |
 | `data.tags.push('new')`          | `"tags"`              |
 | `data.tags.length = 0`           | `"tags"`              |
 | `delete data.draft`              | `"draft"`             |
 | `data.users['123'].name = '...'` | `"users.123.name"`    |
 
-**Note:** Array indices and array `length` writes are collapsed onto the array's own path — you get `"contacts.email"` not `"contacts.0.email"`. Numeric-looking keys on plain objects are _not_ collapsed, so a record keyed by id keeps its segment (`"users.123.name"`).
+**Note:** Fields _inside_ an array element keep the element's index (`"contacts.0.email"`), so an async validator or `isDirtyByField` key can target one row (`"inventory.2.quantity"`). Writing an element itself (`data.contacts[0] = {...}`), the array's `length`, or calling an array method is a change of the array and is reported on the array's own path (`"contacts"`). A row follows its index: after `reverse()`/`sort()`/`splice()` the row that moved is reported at its new index.
 
 Deleting a property (`delete data.draft`) also emits a change, with `currentValue` set to `undefined`.
 
@@ -1050,3 +1051,9 @@ By default, svstate prevents concurrent action execution. If `actionInProgress` 
 - **Documentation**: See [README.md](README.md) for comprehensive guides
 - **Issues**: [GitHub Issues](https://github.com/BCsabaEngine/svstate/issues)
 - **Live Demo**: [Try it in your browser](https://bcsabaengine.github.io/svstate/)
+
+### Why does my effect run once for `splice()` / `sort()` — and what is `currentValue` then?
+
+The mutating array methods (`push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) move many indices internally. svstate runs each call as one unit and reports **one** change on the array path: `effect` and plugin `onChange` fire once, `currentValue` is the whole array and `oldValue` is a copy taken before the call. A call that changes nothing (e.g. sorting an already sorted array) reports nothing.
+
+Individual index writes (`data.items[0] = x`) and `length` writes are still reported per write. To group several separate assignments, use `batch()`. Side effects such as API calls still belong in `action` rather than `effect`.

@@ -90,8 +90,9 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 - `src/plugin.ts` - Plugin type definitions (`SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`). `PluginStores<T>` is an alias of `StateResult<T, Validator>` — the same stores `createSvState` returns, with the error type widened
 - `src/internal/` - Internal helpers shared by the core and the plugins, not exported publicly:
   - `clone.ts` — `deepClone` (prototype-preserving, reconstructs `Map`/`Set`/`RegExp`, handles cycles)
-  - `paths.ts` — `DANGEROUS_KEYS`, `getValueAtPath`, `setValueAtPath`, `isPlainObject`, `safeMerge`, `asRecord`, `getMatchingPaths`
+  - `paths.ts` — `DANGEROUS_KEYS`, `getValueAtPath`, `setValueAtPath`, `isPlainObject`, `safeMerge`, `safeDeepMerge`, `asRecord`, `getMatchingPaths`
   - `errors.ts` — `hasAnyErrors`, `toError`
+  - `diff.ts` — `isDeepEqual`, `getChangedPaths` (dirty-field recomputation after rollback)
   - `timers.ts` — `createDebouncer` (trailing-edge debounce with `schedule`/`cancel`/`flush`/`isPending`), shared by `persist`, `autosave` and `sync`
 - `src/plugins/` - Built-in plugins: `persistPlugin`, `autosavePlugin`, `devtoolsPlugin`, `historyPlugin`, `syncPlugin`, `undoRedoPlugin`, `analyticsPlugin`
 
@@ -117,7 +118,7 @@ const { data, execute, state, rollback, rollbackTo, reset, destroy, validate, ba
   - `errors: Readable<V | undefined>` - Validation errors (sync)
   - `hasErrors: Readable<boolean>` - Whether any sync validation errors exist
   - `isDirty: Readable<boolean>` - Whether state has been modified (derived from `isDirtyByField`)
-  - `isDirtyByField: Readable<DirtyFields>` - Per-field dirty tracking; keys are dot-notation property paths. When a nested field changes, all parent paths are also marked dirty (e.g., changing `customer.address.street` marks `customer.address` and `customer` as dirty). Cleared on `reset()`, `rollback()`, and successful action (respecting `resetDirtyOnAction`).
+  - `isDirtyByField: Readable<DirtyFields>` - Per-field dirty tracking; keys are dot-notation property paths. When a nested field changes, all parent paths are also marked dirty (e.g., changing `customer.address.street` marks `customer.address` and `customer` as dirty). Cleared on `reset()` and successful action (respecting `resetDirtyOnAction`); `rollback()`/`rollbackTo()` recompute it against the Initial snapshot (`getChangedPaths` in `src/internal/diff.ts`), so fields still differing from it stay dirty.
   - `actionInProgress: Readable<boolean>` - Action execution status
   - `actionError: Readable<Error | undefined>` - Last action error; anything thrown is wrapped into an `Error` by reading `.message` then `.body.message` before falling back to `String()` (primitives included)
   - `snapshots: Readable<Snapshot<T>[]>` - Snapshot history for undo
@@ -130,6 +131,7 @@ const { data, execute, state, rollback, rollbackTo, reset, destroy, validate, ba
 
 - `validator?: (source: T) => V` - Sync validation function returning error structure
 - `effect?: (context: EffectContext<T>) => void` - Side effect receiving context object with `snapshot` function
+- `pathEffect?: PathEffect<T>` - Effects keyed by property path (same matching rules as `asyncValidator`: exact, descendant or ancestor); run after `effect` with the same context and the same synchronous requirement
 - `action?: (params?: P) => Promise<void> | void` - Async action to execute
 - `actionCompleted?: (error?: unknown) => void | Promise<void>` - Callback after action completes (can be async)
 - `asyncValidator?: AsyncValidator<T>` - Async validators keyed by property path (see Async Validation System)
@@ -170,6 +172,7 @@ effect: ({ snapshot, property }) => {
 - Successful action execution resets snapshots with current state as new initial
 - `rollback()`, `rollbackTo()`, and `reset()` trigger validation after restoring state
 - `rollbackTo(title)` searches from the end to find the last matching snapshot; returns `false` if not found or only initial snapshot exists
+- Every snapshot is a full `deepClone` of the state, so memory/CPU scale with tree size × `maxSnapshots`
 - `maxSnapshots` option (default 50) trims oldest non-Initial snapshots via LRU; Initial snapshot (index 0) is always preserved
 
 ### Async Validation System
@@ -190,7 +193,7 @@ type AsyncValidator<T> = {
 - When a property changes, matching async validators are scheduled after `debounceAsyncValidation` ms
 - If sync validation fails for a property path, async validation is skipped for that path
 - Changing a property cancels any pending async validation for that path
-- `rollback()` and `reset()` cancel all async validations and clear async errors
+- `rollback()` and `reset()` cancel all async validations and clear async errors, then re-schedule validators for values still differing from the initial state (all of them on `reset()` when `runAsyncValidationOnInit` is set)
 - The `maxConcurrentAsyncValidations` option limits how many async validators run simultaneously; additional validators are queued
 
 **Matching rules for property paths:**
@@ -230,15 +233,15 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 
 **Built-in plugins (src/plugins/):**
 
-| Plugin            | File           | Purpose                                      | Key options                                                                                                                                                                         |
-| ----------------- | -------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude`, `onError`                                                                                                 |
-| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`                                                                                                             |
-| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`                                                                                                                        |
-| `historyPlugin`   | `history.ts`   | Sync state fields to URL params              | `fields` (required), `mode`, `serialize`, `deserialize`, `onError`; dotted field paths match both ways (changing `filters` updates a registered `filters.q`, and vice versa)        |
-| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel          | `key` (required), `throttle`, `merge`, `onError`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
-| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback       | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                                          |
-| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics          | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact` (covers nested paths), `onError`                                                                            |
+| Plugin            | File           | Purpose                                                                                                                                                                            | Key options                                                                                                                                                                         |
+| ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage (deep-merged on restore; data from another `version` is ignored unless `migrate` is given; also written after `reset()`/`rollback()`) | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude`, `onError`                                                                                                 |
+| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                                                                                                                                                      | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`                                                                                                             |
+| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                                                                                                                                                      | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`                                                                                                                        |
+| `historyPlugin`   | `history.ts`   | Sync state fields to URL params                                                                                                                                                    | `fields` (required), `mode`, `serialize`, `deserialize`, `onError`; dotted field paths match both ways (changing `filters` updates a registered `filters.q`, and vice versa)        |
+| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel                                                                                                                                                | `key` (required), `throttle`, `merge`, `onError`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
+| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback                                                                                                                                             | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                                          |
+| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics                                                                                                                                                | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact` (covers nested paths), `onError`                                                                            |
 
 ### Deep Clone System (src/internal/clone.ts)
 
@@ -275,7 +278,7 @@ Other cloning behavior:
 - **No proxies in the raw tree**: values are unwrapped (via a `RAW` symbol) before assignment, so `data.b = data.a` stores the raw object; later `data.b.x = 1` reports `b.x` once instead of firing twice with a stale `a.x`
 - **`deleteProperty` trap**: `delete data.x` emits a change with `currentValue: undefined` (nothing is emitted if the key was absent)
 - Excludes non-proxiable types: Date, Map, Set, WeakMap, WeakSet, RegExp, Error, Promise
-- Array indices and array `length` writes collapse to the array's own path; numeric-looking keys on plain objects keep their segment (`users.123.name`)
+- Array element writes, array `length` writes and the mutating array methods are changes of the array and report the array's own path; fields inside an element keep the index (`items.2.name`), so indexed async-validator paths (`inventory.2.quantity`) match row edits; the mutating array methods (`push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) run as one unit and emit a single change with the array as `currentValue` and a pre-call copy as `oldValue`; numeric-looking keys on plain objects keep their segment (`users.123.name`)
 
 ### Security Model
 

@@ -250,6 +250,20 @@ const { data } = createSvState(formData, {
 - 📸 Create snapshots for undo/redo
 - 📊 Analytics tracking
 - 🔗 Cross-field updates (computed fields)
+
+**Path-scoped effects:** for "recompute X when Y changes" you don't need a `property === ...` chain inside `effect`. `pathEffect` is keyed by property path, like `asyncValidator`, and receives the same context:
+
+```typescript
+createSvState(init, {
+  pathEffect: {
+    quantity: () => recalc(),
+    'customer.address': ({ snapshot }) => snapshot('Address changed')
+  }
+});
+```
+
+A path effect runs after the global `effect` and uses the same matching rules as async validators: a change to the path itself, to something below it, or to a parent of it (`customer` → `customer.address`) triggers it. It must be synchronous, like `effect`.
+
 - 🌐 Trigger API calls on specific changes
 
 ---
@@ -413,19 +427,21 @@ const { data } = createSvState(formData, actuators, {
 });
 ```
 
-| Option                          | Default         | Description                                                     |
-| ------------------------------- | --------------- | --------------------------------------------------------------- |
-| `resetDirtyOnAction`            | `true`          | Clear dirty flag after successful action                        |
-| `debounceValidation`            | `0`             | Delay sync validation (0 = next microtask)                      |
-| `allowConcurrentActions`        | `false`         | Block execute() while action runs                               |
-| `persistActionError`            | `false`         | Clear error on next change or action                            |
-| `debounceAsyncValidation`       | `300`           | Delay async validation in ms                                    |
-| `runAsyncValidationOnInit`      | `false`         | Run async validators on creation                                |
-| `clearAsyncErrorsOnChange`      | `true`          | Clear async error when property changes                         |
-| `maxConcurrentAsyncValidations` | `4`             | Max concurrent async validators                                 |
-| `maxSnapshots`                  | `50`            | Max snapshots to keep (0 = unlimited)                           |
-| `onPluginError`                 | `console.error` | Called as `(error, pluginName, hook)` when a plugin hook throws |
-| `plugins`                       | `[]`            | Array of plugins to extend behavior                             |
+| Option                          | Default         | Description                                                                 |
+| ------------------------------- | --------------- | --------------------------------------------------------------------------- |
+| `resetDirtyOnAction`            | `true`          | Clear dirty flag after successful action                                    |
+| `debounceValidation`            | `0`             | Delay sync validation (0 = next microtask)                                  |
+| `allowConcurrentActions`        | `false`         | Block execute() while action runs                                           |
+| `persistActionError`            | `false`         | Clear error on next change or action                                        |
+| `debounceAsyncValidation`       | `300`           | Delay async validation in ms                                                |
+| `runAsyncValidationOnInit`      | `false`         | Run async validators on creation                                            |
+| `clearAsyncErrorsOnChange`      | `true`          | Clear async error when property changes                                     |
+| `maxConcurrentAsyncValidations` | `4`             | Max concurrent async validators                                             |
+| `maxSnapshots`                  | `50`            | Max snapshots to keep (0 = unlimited); each is a full deep clone, see below |
+| `onPluginError`                 | `console.error` | Called as `(error, pluginName, hook)` when a plugin hook throws             |
+| `plugins`                       | `[]`            | Array of plugins to extend behavior                                         |
+
+**Snapshot cost:** every snapshot is a full deep clone of the state tree, and up to `maxSnapshots` of them are kept. That is negligible for a form, but for a large nested object (an ERP customer with hundreds of line items) memory grows with `size × maxSnapshots` and each undo point costs a full clone. Tune it accordingly: lower `maxSnapshots`, group edits with `batch()` (one snapshot per batch), reuse a title so `snapshot(title)` replaces instead of appends, or snapshot only on meaningful steps rather than on every keystroke.
 
 #### Validating before submit
 
@@ -514,11 +530,10 @@ const {
     unitPrice: numberValidator(source.unitPrice).required().positive().getError(),
     quantity: numberValidator(source.quantity).required().integer().min(1).getError()
   }),
-  effect: ({ property }) => {
-    // Call method directly on state when inputs change
-    if (property === 'unitPrice' || property === 'quantity') {
-      data.calculateTotals();
-    }
+  // Call method directly on state when one of the inputs changes
+  pathEffect: {
+    unitPrice: () => data.calculateTotals(),
+    quantity: () => data.calculateTotals()
   }
 });
 
@@ -590,7 +605,7 @@ const autosave = autosavePlugin({
   idle: 1000, // Save after 1s of inactivity (default: 1000)
   interval: 30000, // Also save every 30s (default: 0 = disabled)
   saveOnDestroy: true, // Save on cleanup (default: true)
-  onlyWhenDirty: true, // Skip if unchanged (default: true)
+  onlyWhenDirty: true, // Skip if nothing changed since the last save (default: true)
   onVisibilityHidden: false, // Save when tab goes hidden (default: false)
   onError: (err) => console.error(err)
 });
@@ -1150,6 +1165,7 @@ import type {
 | --------------------------- | --------------------------------------------------------------------------------------------------- |
 | `Validator`                 | Nested object type for validation errors — leaf values are error strings (empty = valid)            |
 | `EffectContext<T>`          | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }` |
+| `PathEffect<T>`             | Shape of the `pathEffect` actuator: effect callbacks keyed by property path                         |
 | `SnapshotFunction`          | Type for the `snapshot(title, shouldReplace?)` function used in effects                             |
 | `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
 | `SvStateOptions`            | Configuration options type for `createSvState`                                                      |
