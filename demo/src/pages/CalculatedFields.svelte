@@ -25,6 +25,12 @@
 		total: 0
 	};
 
+	const recalculateTotals = () => {
+		data.subtotal = data.item.unitPrice * data.item.quantity;
+		data.tax = data.subtotal * TAX_RATE;
+		data.total = data.subtotal + data.tax;
+	};
+
 	const {
 		data,
 		batch,
@@ -37,12 +43,10 @@
 				quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
 			}
 		}),
-		effect: ({ property }) => {
-			if (!(property === 'item.unitPrice' || property === 'item.quantity')) return;
-
-			data.subtotal = data.item.unitPrice * data.item.quantity;
-			data.tax = data.subtotal * TAX_RATE;
-			data.total = data.subtotal + data.tax;
+		// Recompute the totals only when one of the inputs changes
+		pathEffect: {
+			'item.unitPrice': recalculateTotals,
+			'item.quantity': recalculateTotals
 		}
 	});
 
@@ -62,7 +66,7 @@
 	const stateSourceCode = `const sourceData = {
   productName: '',
   item: { unitPrice: 0, quantity: 1 },
-  subtotal: 0, tax: 0, total: 0  // Calculated fields (set by effect)
+  subtotal: 0, tax: 0, total: 0  // Calculated fields (set by pathEffect)
 };
 
 const TAX_RATE = 0.08;
@@ -75,34 +79,38 @@ const { data, batch, state: { errors, hasErrors, isDirty } } = createSvState(sou
       quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
     }
   }),
-  effect: ({ property }) => {
-    if (property === 'item.unitPrice' || property === 'item.quantity') {
-      data.subtotal = data.item.unitPrice * data.item.quantity;
-      data.tax = data.subtotal * TAX_RATE;
-      data.total = data.subtotal + data.tax;
-    }
+  // Recompute the totals only when one of the inputs changes
+  pathEffect: {
+    'item.unitPrice': recalculateTotals,
+    'item.quantity': recalculateTotals
   }
 });`;
 
 	const batchSourceCode = `// One validation pass for the whole fill;
-// effect still recalculates the totals on each field it touches
+// pathEffect still recalculates the totals on each input it touches
 batch((draft) => {
   draft.productName = 'Widget';
   draft.item.unitPrice = 42;
   draft.item.quantity = 3;
 });`;
 
-	const effectSourceCode = `effect: ({ property }) => {
-  if (property === 'item.unitPrice' || property === 'item.quantity') {
-    data.subtotal = data.item.unitPrice * data.item.quantity;
-    data.tax = data.subtotal * TAX_RATE;
-    data.total = data.subtotal + data.tax;
-  }
+	const effectSourceCode = `// pathEffect is keyed by property path (like asyncValidator), so there is no
+// \`if (property === ...)\` chain. It runs after the global \`effect\`, if any,
+// and also fires when a parent or child path changes.
+const recalculateTotals = () => {
+  data.subtotal = data.item.unitPrice * data.item.quantity;
+  data.tax = data.subtotal * TAX_RATE;
+  data.total = data.subtotal + data.tax;
+};
+
+pathEffect: {
+  'item.unitPrice': recalculateTotals,
+  'item.quantity': recalculateTotals
 }`;
 </script>
 
 <PageLayout
-	description="Uses the effect callback to automatically compute derived values like subtotals, taxes, and totals."
+	description="Uses pathEffect to recompute derived values like subtotals, taxes, and totals when specific inputs change."
 	title="Calculated Fields Demo"
 >
 	{#snippet main()}
@@ -144,7 +152,7 @@ batch((draft) => {
 			</div>
 
 			<div>
-				<SectionHeader subtitle="computed by effect" title="Calculated Totals" />
+				<SectionHeader subtitle="computed by pathEffect" title="Calculated Totals" />
 				<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
 					<div class="space-y-2">
 						<div class="flex justify-between text-sm">
@@ -172,7 +180,7 @@ batch((draft) => {
 	{#snippet sourceCode()}
 		<SourceCodeSection>
 			<CodeBlock code={stateSourceCode} title="State Setup with Effect" />
-			<CodeBlock code={effectSourceCode} title="Effect Function" />
+			<CodeBlock code={effectSourceCode} title="Path-scoped Effect" />
 			<CodeBlock code={batchSourceCode} title="Batching Item Field Updates" />
 		</SourceCodeSection>
 	{/snippet}

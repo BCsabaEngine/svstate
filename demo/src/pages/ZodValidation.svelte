@@ -18,9 +18,9 @@
 	// ─────────────────────────────────────────────
 	const userSchema = z.object({
 		username: z.string().min(3).max(20).regex(/^\S+$/, 'Must not contain spaces'),
-		email: z.string().min(1, 'Required').email(),
+		email: z.string().min(1, 'Required').pipe(z.email()),
 		age: z.number().int().min(18).max(120),
-		website: z.string().url().optional().or(z.literal('')),
+		website: z.url().optional().or(z.literal('')),
 		bio: z.string().max(200).optional()
 	});
 
@@ -28,6 +28,8 @@
 
 	// ─────────────────────────────────────────────
 	// Bridge: Zod errors → svstate Record<string, string>
+	// Flat form: only the first issue of each top-level field is kept. For nested or
+	// array fields build the matching shape from issue.path (Validator accepts both).
 	// ─────────────────────────────────────────────
 	function zodToSvstateErrors<T extends z.ZodObject>(
 		schema: T,
@@ -96,9 +98,9 @@
 
 const userSchema = z.object({
   username: z.string().min(3).max(20).regex(/^\S+$/, 'Must not contain spaces'),
-  email: z.string().min(1, 'Required').email(),
+  email: z.string().min(1, 'Required').pipe(z.email()),
   age: z.number().int().min(18).max(120),
-  website: z.string().url().optional().or(z.literal('')),
+  website: z.url().optional().or(z.literal('')),
   bio: z.string().max(200).optional()
 });`;
 

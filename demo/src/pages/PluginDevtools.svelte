@@ -1,6 +1,7 @@
 <svelte:options runes />
 
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { type ChangeEvent, createSvState, devtoolsPlugin, stringValidator, type SvStatePlugin } from 'svstate';
 
 	import CodeBlock from '$components/CodeBlock.svelte';
@@ -19,16 +20,24 @@
 		timestamp: string;
 	};
 
+	const MAX_LOG_ENTRIES = 100;
+
 	let logEntries = $state<LogEntry[]>([]);
 	let simulatePluginError = $state(false);
 	let lastPluginError = $state<string | undefined>();
 
 	const addLog = (type: LogEntry['type'], message: string) => {
 		const timestamp = new Date().toISOString().slice(11, 23);
-		logEntries = [...logEntries, { id: randomId(), type, message, timestamp }];
+		logEntries = [...logEntries, { id: randomId(), type, message, timestamp }].slice(-MAX_LOG_ENTRIES);
 	};
 
 	type State = { name: string; email: string; message: string };
+
+	// The validator always returns an object, so only a non-empty leaf string means an error
+	const hasLeafError = (node: unknown): boolean =>
+		typeof node === 'string'
+			? node !== ''
+			: node !== null && typeof node === 'object' && Object.values(node).some((child) => hasLeafError(child));
 
 	const logMirrorPlugin: SvStatePlugin<State> = {
 		name: 'log-mirror',
@@ -37,7 +46,7 @@
 			addLog('change', `${event.property}: "${event.oldValue}" → "${event.currentValue}"`);
 		},
 		onValidation(errors) {
-			addLog('validation', errors ? 'Has errors' : 'Valid');
+			addLog('validation', hasLeafError(errors) ? 'Has errors' : 'Valid');
 		},
 		onSnapshot(snapshot) {
 			addLog('snapshot', snapshot.title);
@@ -57,6 +66,7 @@
 	const {
 		data,
 		batch,
+		destroy,
 		execute,
 		reset,
 		rollback,
@@ -83,6 +93,9 @@
 			}
 		}
 	);
+
+	// Timers, channels and plugins outlive the component unless the state is torn down
+	onDestroy(destroy);
 
 	const fillWithValidData = () => {
 		batch((draft) => {

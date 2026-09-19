@@ -6,7 +6,7 @@
 	let { class: className = 'h-4 w-4' }: Properties = $props();
 </script>
 
-<svg class="{className} animate-spin" fill="none" viewBox="0 0 24 24">
+<svg class="{className} animate-spin" aria-label="Loading" fill="none" role="status" viewBox="0 0 24 24">
 	<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 	<path
 		class="opacity-75"

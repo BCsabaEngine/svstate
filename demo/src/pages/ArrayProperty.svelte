@@ -1,6 +1,7 @@
 <svelte:options runes />
 
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { arrayValidator, createSvState, stringValidator } from 'svstate';
 
 	import ArrayItemCard from '$components/ArrayItemCard.svelte';
@@ -14,48 +15,49 @@
 	import StatusBadges from '$components/StatusBadges.svelte';
 	import { randomId } from '$lib/utilities';
 
-	type ItemErrors = Record<string, { name?: string; email?: string }>;
+	type Contact = { id: string; name: string; email: string };
 
 	const sourceData = {
 		listName: '',
-		items: [] as { name: string; email: string }[]
+		items: [] as Contact[]
 	};
 
 	const {
 		data,
 		batch,
-		state: { errors, hasErrors, isDirty }
+		destroy,
+		state: { errors, hasErrors, isDirty, isDirtyByField }
 	} = createSvState(sourceData, {
 		validator: (source) => ({
 			listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
+			// Error of the array as a whole...
 			items: arrayValidator(source.items).required().minLength(1).getError(),
-			...Object.fromEntries(
-				source.items.map((item, index) => [
-					`item_${index}`,
-					{
-						name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
-						email: stringValidator(item.email).prepare('trim').required().email().getError()
-					}
-				])
-			)
+			// ...and one error object per row, in the same order as the rows
+			rows: source.items.map((item) => ({
+				name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
+				email: stringValidator(item.email).prepare('trim').required().email().getError()
+			}))
 		})
 	});
 
+	onDestroy(destroy);
+
+	// Array methods report a single change per call, so validation and effects run once
 	const addItem = () => {
-		data.items = [...data.items, { name: '', email: '' }];
+		data.items.push({ id: randomId(), name: '', email: '' });
 	};
 
 	const removeItem = (index: number) => {
-		data.items = data.items.filter((_, index_) => index_ !== index);
+		data.items.splice(index, 1);
 	};
 
 	const fillWithValidData = () => {
 		batch((draft) => {
 			draft.listName = `Contact List ${randomId()}`;
 			draft.items = [
-				{ name: 'John Doe', email: 'john@example.com' },
-				{ name: 'Jane Smith', email: 'jane@example.com' },
-				{ name: 'Bob Wilson', email: 'bob@example.com' }
+				{ id: randomId(), name: 'John Doe', email: 'john@example.com' },
+				{ id: randomId(), name: 'Jane Smith', email: 'jane@example.com' },
+				{ id: randomId(), name: 'Bob Wilson', email: 'bob@example.com' }
 			];
 		});
 	};
@@ -65,46 +67,61 @@
 	// ─────────────────────────────────────────────
 	const stateSourceCode = `const sourceData = {
   listName: '',
-  items: [] as { name: string; email: string }[]
+  items: [] as { id: string; name: string; email: string }[]
 };
 
-const { data, batch, state: { errors, hasErrors, isDirty } } = createSvState(sourceData, {
+const { data, batch, state: { errors, hasErrors, isDirty, isDirtyByField } } = createSvState(sourceData, {
   validator: (source) => ({
     listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
+    // Error of the array as a whole
     items: arrayValidator(source.items).required().minLength(1).getError(),
-    // Per-item validation using indexed keys
-    ...Object.fromEntries(
-      source.items.map((item, index) => [
-        \`item_\${index}\`,
-        {
-          name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
-          email: stringValidator(item.email).prepare('trim').required().email().getError()
-        }
-      ])
-    )
+    // One error object per row: Validator accepts arrays, no casts needed
+    rows: source.items.map((item) => ({
+      name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
+      email: stringValidator(item.email).prepare('trim').required().email().getError()
+    }))
   })
 });`;
 
-	const batchSourceCode = `// batch() runs one validation pass for the name + whole array swap
+	const mutationSourceCode = `// Array methods report ONE change per call (effect, plugins and
+// validation run once), not one per shifted index
+data.items.push({ id: randomId(), name: '', email: '' });
+data.items.splice(index, 1);
+
+// Fields inside a row report their indexed path:
+data.items[2].email = 'x@y.z';   // property "items.2.email"
+// isDirtyByField: { 'items.2.email': true, 'items.2': true, items: true }
+
+// batch() runs one validation pass for the name + whole array swap
 batch((draft) => {
   draft.listName = 'Contact List';
-  draft.items = [{ name: 'John Doe', email: 'john@example.com' }];
+  draft.items = [{ id: randomId(), name: 'John Doe', email: 'john@example.com' }];
 });`;
 
-	const formSourceCode = `// Define type for item errors
-type ItemErrors = Record<string, { name?: string; email?: string }>;
+	const formSourceCode = `{#each data.items as item, index (item.id)}
+  <input bind:value={data.items[index].name} />
+  <ErrorText error={$errors?.rows?.[index]?.name ?? ''} />
 
-{#each data.items as item, index}
-  <input bind:value={item.name} />
-  <ErrorText error={($errors as ItemErrors)?.[\`item_\${index}\`]?.name ?? ''} />
+  <input bind:value={data.items[index].email} />
+  <ErrorText error={$errors?.rows?.[index]?.email ?? ''} />
 
-  <input bind:value={item.email} />
-  <ErrorText error={($errors as ItemErrors)?.[\`item_\${index}\`]?.email ?? ''} />
+  <!-- per-field dirty state of a row -->
+  {#if $isDirtyByField[\`items.\${index}.email\`]} ... {/if}
 {/each}`;
+
+	const asyncSourceCode = `// Async validators are keyed by path, and rows have indexed paths,
+// so a validator can target one row. Keys are static, so this fits a
+// known set of rows (the path only fires for edits of that exact row):
+asyncValidator: {
+  'items.0.email': async (value, source, signal) => {
+    const res = await fetch(\`/api/email-taken?e=\${value}\`, { signal });
+    return (await res.json()).taken ? 'Already registered' : '';
+  }
+}`;
 </script>
 
 <PageLayout
-	description="Shows how to validate dynamic arrays with per-item validation using indexed error keys."
+	description="Shows how to validate dynamic arrays with one error object per row (Validator accepts arrays), indexed dirty tracking, and array methods that report a single change."
 	title="Array Property Demo"
 >
 	{#snippet main()}
@@ -146,36 +163,44 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 					<EmptyState message="No contacts yet. Click &quot;Add Contact&quot; to get started." />
 				{:else}
 					<div class="space-y-3">
-						{#each data.items as item, index}
+						{#each data.items as item, index (item.id)}
 							<ArrayItemCard {index} label="Contact" onRemove={() => removeItem(index)}>
 								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 									<div>
-										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-name-{index}">Name</label>
+										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-name-{index}">
+											Name
+											{#if $isDirtyByField[`items.${index}.name`]}
+												<span class="ml-1 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+											{/if}
+										</label>
 										<input
 											id="item-name-{index}"
-											class="block w-full rounded-lg border p-2 text-sm {($errors as ItemErrors)?.[`item_${index}`]
-												?.name
+											class="block w-full rounded-lg border p-2 text-sm {$errors?.rows?.[index]?.name
 												? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400'
 												: 'border-gray-300 bg-white text-gray-900'}"
 											placeholder="Enter name"
 											type="text"
-											bind:value={item.name}
+											bind:value={data.items[index]!.name}
 										/>
-										<ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.name ?? ''} />
+										<ErrorText error={$errors?.rows?.[index]?.name ?? ''} />
 									</div>
 									<div>
-										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-email-{index}">Email</label>
+										<label class="mb-1 block text-xs font-bold text-gray-700" for="item-email-{index}">
+											Email
+											{#if $isDirtyByField[`items.${index}.email`]}
+												<span class="ml-1 inline-block h-2 w-2 rounded-full bg-amber-400" title="Modified"></span>
+											{/if}
+										</label>
 										<input
 											id="item-email-{index}"
-											class="block w-full rounded-lg border p-2 text-sm {($errors as ItemErrors)?.[`item_${index}`]
-												?.email
+											class="block w-full rounded-lg border p-2 text-sm {$errors?.rows?.[index]?.email
 												? 'border-red-500 bg-red-50 text-red-900 placeholder-red-400'
 												: 'border-gray-300 bg-white text-gray-900'}"
 											placeholder="Enter email"
 											type="email"
-											bind:value={item.email}
+											bind:value={data.items[index]!.email}
 										/>
-										<ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.email ?? ''} />
+										<ErrorText error={$errors?.rows?.[index]?.email ?? ''} />
 									</div>
 								</div>
 							</ArrayItemCard>
@@ -192,6 +217,7 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 			errors={$errors}
 			hasErrors={$hasErrors}
 			isDirty={$isDirty}
+			isDirtyByField={$isDirtyByField}
 			onFill={fillWithValidData}
 			width="xl:w-96"
 		/>
@@ -199,9 +225,10 @@ type ItemErrors = Record<string, { name?: string; email?: string }>;
 
 	{#snippet sourceCode()}
 		<SourceCodeSection>
-			<CodeBlock code={stateSourceCode} title="State Setup with Array Item Validation" />
-			<CodeBlock code={batchSourceCode} title="Batching listName + items" />
+			<CodeBlock code={stateSourceCode} title="State Setup with Per-Row Errors" />
+			<CodeBlock code={mutationSourceCode} title="Array Methods, Indexed Paths and batch()" />
 			<CodeBlock code={formSourceCode} title="Array Form Binding Examples" />
+			<CodeBlock code={asyncSourceCode} title="Async Validation on a Row" />
 		</SourceCodeSection>
 	{/snippet}
 </PageLayout>

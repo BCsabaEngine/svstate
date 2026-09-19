@@ -1,6 +1,7 @@
 <svelte:options runes />
 
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import { createSvState, stringValidator, undoRedoPlugin } from 'svstate';
 
@@ -22,6 +23,7 @@
 	const {
 		data,
 		batch,
+		destroy,
 		reset,
 		rollback,
 		state: { errors, hasErrors, isDirty, snapshots }
@@ -39,6 +41,9 @@
 		},
 		{ maxSnapshots: 10, plugins: [undoRedo] }
 	);
+
+	// Timers, channels and plugins outlive the component unless the state is torn down
+	onDestroy(destroy);
 
 	const fillWithValidData = () => {
 		batch((draft) => {
