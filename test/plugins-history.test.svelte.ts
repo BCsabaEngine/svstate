@@ -251,3 +251,124 @@ describe('historyPlugin', () => {
     });
   });
 });
+
+describe('historyPlugin - errors, nesting and teardown', () => {
+  const url = { search: '', href: 'http://localhost/' };
+  const listeners: (() => void)[] = [];
+  const replaced: string[] = [];
+
+  beforeEach(() => {
+    url.search = '';
+    url.href = 'http://localhost/';
+    listeners.length = 0;
+    replaced.length = 0;
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        location: {
+          get search() {
+            return url.search;
+          },
+          get href() {
+            return url.href;
+          }
+        },
+        history: {
+          pushState: () => {},
+          replaceState: (_state: unknown, _title: string, next: string) => {
+            replaced.push(next);
+            url.href = next;
+            url.search = new URL(next).search;
+          }
+        },
+        addEventListener: (_event: string, handler: () => void) => void listeners.push(handler),
+        removeEventListener: (_event: string, handler: () => void) => {
+          const index = listeners.indexOf(handler);
+          if (index !== -1) listeners.splice(index, 1);
+        }
+      },
+      writable: true,
+      configurable: true
+    });
+  });
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).window;
+  });
+
+  it('keeps applying the other fields when a deserializer throws', () => {
+    url.search = '?a=1&b=2';
+    url.href = 'http://localhost/?a=1&b=2';
+    const errors: unknown[] = [];
+    const { data } = createSvState({ a: 'x', b: 'y' }, undefined, {
+      plugins: [
+        historyPlugin({
+          fields: { a: 'a', b: 'b' },
+          deserialize: (parameter, field) => {
+            if (field === 'a') throw new Error('bad a');
+            return parameter;
+          },
+          onError: (error) => void errors.push(error)
+        })
+      ]
+    });
+
+    expect(data.a).toBe('x');
+    expect(data.b).toBe('2');
+    expect(errors.length).toBe(1);
+  });
+
+  it('leaves the URL alone and reports when serialize throws', () => {
+    const errors: unknown[] = [];
+    const { data } = createSvState({ a: 'x' }, undefined, {
+      plugins: [
+        historyPlugin({
+          fields: { a: 'a' },
+          serialize: () => {
+            throw new Error('bad serialize');
+          },
+          onError: (error) => void errors.push(error)
+        })
+      ]
+    });
+
+    data.a = 'y';
+
+    expect(replaced).toEqual([]);
+    expect(errors.length).toBe(1);
+  });
+
+  it('syncs dotted fields both ways and removes empty values from the URL', () => {
+    const { data } = createSvState({ filters: { q: '', page: 1 } }, undefined, {
+      plugins: [historyPlugin({ fields: { 'filters.q': 'q' } })]
+    });
+
+    data.filters.q = 'abc';
+    expect(url.search).toBe('?q=abc');
+
+    data.filters = { q: '', page: 2 }; // replacing the parent updates the registered child
+    expect(url.search).toBe('');
+  });
+
+  it('refuses dangerous field paths and removes its popstate listener on destroy', () => {
+    url.search = '?p=polluted';
+    url.href = 'http://localhost/?p=polluted';
+    const { destroy } = createSvState({ a: 'x' }, undefined, {
+      plugins: [historyPlugin({ fields: { '__proto__.polluted': 'p' } })]
+    });
+
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+    expect(listeners.length).toBe(1);
+    destroy();
+    expect(listeners.length).toBe(0);
+  });
+
+  it('does not write the URL when it already matches (reset on a state read from the URL)', () => {
+    url.search = '?a=x';
+    url.href = 'http://localhost/?a=x';
+    const { reset } = createSvState({ a: 'x' }, undefined, { plugins: [historyPlugin({ fields: { a: 'a' } })] });
+
+    reset();
+
+    expect(replaced).toEqual([]);
+  });
+});

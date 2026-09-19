@@ -805,3 +805,360 @@ describe('pathEffect', () => {
     expect(changes).toEqual(['a']);
   });
 });
+
+describe('array methods with the rest of the pipeline', () => {
+  it('inside batch(): one validation pass and one snapshot for several pushes', async () => {
+    let validations = 0;
+    const { data, batch, state } = createSvState(
+      { items: [] as number[] },
+      {
+        validator: () => {
+          validations++;
+          return { items: '' };
+        },
+        effect: ({ snapshot }) => snapshot('edit')
+      }
+    );
+    validations = 0;
+
+    batch((draft) => {
+      draft.items.push(1, 2);
+      draft.items.splice(0, 1);
+    });
+    await Promise.resolve();
+
+    expect(data.items).toEqual([2]);
+    expect(validations).toBe(1);
+    expect(get(state.snapshots).map((s) => s.title)).toEqual(['Initial', 'edit']);
+  });
+
+  it('an effect that mutates the array again neither loops forever nor sticks in coalescing mode', () => {
+    let runs = 0;
+    const { data } = createSvState(
+      { items: [] as number[] },
+      {
+        effect: ({ property }) => {
+          runs++;
+          if (property === 'items' && data.items.length < 3) data.items.push(9);
+        }
+      }
+    );
+
+    data.items.push(1);
+
+    expect(data.items).toEqual([1, 9, 9]);
+    expect(runs).toBe(3);
+    data.items.push(5); // still reported normally afterwards
+    expect(runs).toBe(4);
+  });
+});
+
+describe('async validators on row paths', () => {
+  it('fire only for their own row, and are not skipped by a sync error on an ancestor', async () => {
+    const calls: string[] = [];
+    const { data } = createSvState(
+      { items: [{ name: 'a' }, { name: 'b' }] },
+      {
+        // A string error on `items` itself sits above the row paths, not on them
+        validator: () => ({ items: 'Too few items' }),
+        asyncValidator: {
+          'items.0.name': async (value) => {
+            calls.push(`0:${String(value)}`);
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 5 }
+    );
+
+    data.items[1]!.name = 'other row';
+    await sleep(30);
+    expect(calls).toEqual([]);
+
+    data.items[0]!.name = 'changed';
+    await sleep(30);
+    expect(calls).toEqual(['0:changed']);
+  });
+});
+
+describe('pathEffect in the pipeline', () => {
+  it('runs per mutation inside batch() and its snapshot joins the batch snapshot', () => {
+    const runs: string[] = [];
+    const { data, batch, state } = createSvState(
+      { a: 0, b: 0 },
+      {
+        pathEffect: {
+          a: ({ snapshot }) => {
+            runs.push('a');
+            snapshot('path edit');
+          },
+          b: () => void runs.push('b')
+        }
+      }
+    );
+
+    batch((draft) => {
+      draft.a = 1;
+      draft.b = 1;
+      draft.a = 2;
+    });
+
+    expect(runs).toEqual(['a', 'b', 'a']);
+    expect(data.a).toBe(2);
+    expect(get(state.snapshots).map((s) => s.title)).toEqual(['Initial', 'path edit']);
+  });
+
+  it('a throwing path effect still notifies plugins and schedules validation, then rethrows', async () => {
+    const changes: string[] = [];
+    const { data, state } = createSvState(
+      { a: '' },
+      {
+        validator: (source) => ({ a: stringValidator(source.a).required().getError() }),
+        pathEffect: {
+          a: () => {
+            throw new Error('path effect failed');
+          }
+        }
+      },
+      { plugins: [{ name: 'spy', onChange: (event) => void changes.push(event.property) }] }
+    );
+
+    expect(() => (data.a = 'x')).toThrow('path effect failed');
+    await Promise.resolve();
+
+    expect(changes).toEqual(['a']);
+    expect(get(state.errors)).toEqual({ a: '' });
+  });
+
+  it('fires for a row edit when registered on the array path, but not on rollback or reset', () => {
+    let runs = 0;
+    const { data, rollback, reset } = createSvState(
+      { items: [{ name: 'a' }] },
+      {
+        effect: ({ snapshot }) => snapshot('edit'),
+        pathEffect: { items: () => void runs++ }
+      }
+    );
+
+    data.items[0]!.name = 'b';
+    expect(runs).toBe(1);
+
+    rollback();
+    reset();
+    expect(runs).toBe(1);
+  });
+});
+
+describe('rollback and reset details', () => {
+  it('rollbackTo recomputes dirty like rollback, marking parents of nested differences', () => {
+    const { data, rollbackTo, state } = createSvState(
+      { a: { b: 0, c: 0 }, d: 0 },
+      { effect: ({ snapshot, property }) => snapshot(`set ${property}`) }
+    );
+
+    data.a.b = 1;
+    data.d = 1;
+    data.a.c = 1;
+    expect(rollbackTo('set a.b')).toBe(true);
+
+    expect(data.a).toEqual({ b: 1, c: 0 });
+    expect(data.d).toBe(0);
+    expect(get(state.isDirtyByField)).toEqual({ 'a.b': true, a: true });
+  });
+
+  it('compares by content: a Date or array changed back to its initial value is not dirty', () => {
+    const { data, rollback, state } = createSvState(
+      { when: new Date(0), tags: ['a'], n: 0 },
+      { effect: ({ snapshot, property }) => snapshot(`set ${property}`) }
+    );
+
+    data.when = new Date(0); // different instance, same time
+    data.tags = ['a'];
+    data.n = 1;
+    rollback();
+    expect(get(state.isDirty)).toBe(false);
+  });
+
+  it('reset re-runs every async validator when runAsyncValidationOnInit is set', async () => {
+    let calls = 0;
+    const { data, reset } = createSvState(
+      { username: 'x', email: 'y' },
+      {
+        asyncValidator: {
+          username: async () => {
+            calls++;
+            return '';
+          },
+          email: async () => {
+            calls++;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 5, runAsyncValidationOnInit: true }
+    );
+
+    await sleep(30);
+    expect(calls).toBe(2);
+
+    data.username = 'z';
+    await sleep(30);
+    calls = 0;
+    reset();
+    await sleep(30);
+
+    expect(calls).toBe(2);
+  });
+
+  it('reset does not run async validators when runAsyncValidationOnInit is off', async () => {
+    let calls = 0;
+    const { data, reset } = createSvState(
+      { username: '' },
+      {
+        asyncValidator: {
+          username: async () => {
+            calls++;
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 5 }
+    );
+
+    data.username = 'z';
+    await sleep(30);
+    calls = 0;
+    reset();
+    await sleep(30);
+
+    expect(calls).toBe(0);
+  });
+});
+
+describe('execute() details', () => {
+  it('passes the raw thrown value to actionCompleted and nothing on success', async () => {
+    const completed = vi.fn();
+    let shouldFail = true;
+    const thrown = { code: 500 };
+    const { execute } = createSvState(
+      { a: 1 },
+      {
+        action: () => {
+          if (shouldFail) throw thrown;
+        },
+        actionCompleted: completed
+      }
+    );
+
+    await execute();
+    expect(completed).toHaveBeenLastCalledWith(thrown);
+
+    shouldFail = false;
+    await execute();
+    expect(completed).toHaveBeenLastCalledWith();
+  });
+
+  it('the success "after" event has no error key, and a later success clears the failure', async () => {
+    const events: Record<string, unknown>[] = [];
+    let shouldFail = true;
+    const { execute, state } = createSvState(
+      { a: 1 },
+      {
+        action: () => {
+          if (shouldFail) throw new Error('boom');
+        }
+      },
+      { plugins: [{ name: 'spy', onAction: (event) => void events.push({ ...event }) }] }
+    );
+
+    await execute();
+    expect(get(state.actionError)?.message).toBe('boom');
+
+    shouldFail = false;
+    await execute();
+
+    expect(get(state.actionError)).toBeUndefined();
+    const last = events.at(-1)!;
+    expect(last).toEqual({ phase: 'after', params: undefined });
+    expect(Object.hasOwn(last, 'error')).toBe(false);
+  });
+});
+
+describe('async validation teardown', () => {
+  it('destroy() while a superseded run and its replacement are pending leaves no validator calls behind', async () => {
+    let calls = 0;
+    const { data, destroy } = createSvState(
+      { name: '' },
+      {
+        asyncValidator: {
+          name: async () => {
+            calls++;
+            await sleep(40);
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 20 }
+    );
+
+    data.name = 'a';
+    await sleep(30); // running
+    data.name = 'b'; // superseded, replacement debouncing
+    destroy();
+    await sleep(150);
+
+    expect(calls).toBe(1);
+  });
+
+  it('rollback() cancels a debounce scheduled after a superseded run', async () => {
+    let calls = 0;
+    const { data, rollback } = createSvState(
+      { name: '' },
+      {
+        effect: ({ snapshot }) => snapshot('edit'),
+        asyncValidator: {
+          name: async () => {
+            calls++;
+            await sleep(40);
+            return '';
+          }
+        }
+      },
+      { debounceAsyncValidation: 100 }
+    );
+
+    data.name = 'a';
+    await sleep(120); // first run in flight
+    data.name = 'b'; // superseded; the new debounce is pending
+    rollback(); // back to the initial name: cancels everything pending
+    await sleep(250);
+
+    expect(data.name).toBe('');
+    expect(calls).toBe(1);
+  });
+});
+
+describe('undoRedoPlugin - stack limits', () => {
+  it('a new change clears the redo stack; maxRedoStack trims; redo works after rollbackTo', () => {
+    const undoRedo = undoRedoPlugin<{ n: number }>({ maxRedoStack: 1 });
+    const { data, rollback, rollbackTo } = createSvState(
+      { n: 0 },
+      { effect: ({ snapshot, currentValue }) => snapshot(`n:${String(currentValue)}`) },
+      { plugins: [undoRedo] }
+    );
+
+    data.n = 1;
+    data.n = 2;
+    rollback();
+    data.n = 5;
+    expect(undoRedo.canRedo()).toBe(false);
+
+    data.n = 6;
+    rollbackTo('n:5');
+    expect(data.n).toBe(5);
+    expect(get(undoRedo.redoStack).length).toBe(1);
+
+    undoRedo.redo();
+    expect(data.n).toBe(6);
+  });
+});

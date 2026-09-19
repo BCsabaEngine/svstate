@@ -235,3 +235,96 @@ describe('syncPlugin inbound throttling', () => {
     expect(state2.data.name).toBe('initial');
   });
 });
+
+describe('syncPlugin - teardown, merge modes and restored state', () => {
+  beforeEach(() => {
+    MockBroadcastChannel.reset();
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('stops broadcasting and receiving after disconnect', async () => {
+    const senderPlugin = syncPlugin({ key: 'disc', throttle: 10 });
+    const receiverPlugin = syncPlugin({ key: 'disc', throttle: 10 });
+    const sender = createSvState({ name: 'initial' }, undefined, { plugins: [senderPlugin] });
+    const receiver = createSvState({ name: 'initial' }, undefined, { plugins: [receiverPlugin] });
+
+    receiverPlugin.disconnect();
+    sender.data.name = 'one';
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(receiver.data.name).toBe('initial');
+
+    senderPlugin.disconnect();
+    sender.data.name = 'two';
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(receiver.data.name).toBe('initial');
+  });
+
+  it("merge: 'ignore' still broadcasts but never applies incoming state", async () => {
+    const listener = createSvState({ name: 'initial' }, undefined, {
+      plugins: [syncPlugin({ key: 'ign', throttle: 10, merge: 'ignore' })]
+    });
+    const other = createSvState({ name: 'initial' }, undefined, {
+      plugins: [syncPlugin({ key: 'ign', throttle: 10 })]
+    });
+
+    other.data.name = 'from-other';
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(listener.data.name).toBe('initial');
+
+    listener.data.name = 'from-listener';
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(other.data.name).toBe('from-listener');
+  });
+
+  it('broadcasts the rolled-back state', async () => {
+    const first = createSvState(
+      { name: 'initial' },
+      { effect: ({ snapshot }) => snapshot('edit') },
+      { plugins: [syncPlugin({ key: 'rb', throttle: 10 })] }
+    );
+    const second = createSvState({ name: 'initial' }, undefined, {
+      plugins: [syncPlugin({ key: 'rb', throttle: 10 })]
+    });
+
+    first.data.name = 'edited';
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(second.data.name).toBe('edited');
+
+    first.rollback();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(second.data.name).toBe('initial');
+  });
+
+  it('ignores messages of another type and non-object payloads', async () => {
+    const receiver = createSvState({ name: 'initial' }, undefined, {
+      plugins: [syncPlugin({ key: 'junk', throttle: 10 })]
+    });
+    const raw = new MockBroadcastChannel('junk');
+
+    raw.postMessage({ type: 'other', data: { name: 'x' } });
+    raw.postMessage({ type: 'sync', data: 'not-an-object' });
+    raw.postMessage({ type: 'sync', data: [1, 2] });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(receiver.data.name).toBe('initial');
+  });
+
+  it('applies the newest payload of a burst when the throttle window closes', async () => {
+    const receiver = createSvState({ name: 'initial' }, undefined, {
+      plugins: [syncPlugin({ key: 'burst', throttle: 50 })]
+    });
+    const raw = new MockBroadcastChannel('burst');
+
+    raw.postMessage({ type: 'sync', data: { name: 'first' } });
+    raw.postMessage({ type: 'sync', data: { name: 'second' } });
+    raw.postMessage({ type: 'sync', data: { name: 'third' } });
+    expect(receiver.data.name).toBe('first');
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(receiver.data.name).toBe('third');
+  });
+});

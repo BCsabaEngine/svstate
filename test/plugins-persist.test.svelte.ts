@@ -374,3 +374,75 @@ describe('persistPlugin hydration baseline', () => {
     expect(JSON.parse(storage.getItem('test')!).data.name).toBe('flushed');
   });
 });
+
+const stored = (storage: ReturnType<typeof createMockStorage>, key: string) =>
+  JSON.parse(storage.getItem(key)!).data as Record<string, unknown>;
+
+describe('persistPlugin - filtering and migration edge cases', () => {
+  it('removes only the nested excluded key on write and ignores a missing path', () => {
+    const storage = createMockStorage();
+    const { data, destroy } = createSvState({ a: { b: 1, c: 2 }, x: 1 }, undefined, {
+      plugins: [persistPlugin({ key: 'k', storage, exclude: ['a.b', 'missing.deep', 'x'], throttle: 10 })]
+    });
+
+    data.a.c = 3;
+    destroy(); // flushes the pending write
+
+    expect(stored(storage, 'k')).toEqual({ a: { c: 3 } });
+  });
+
+  it('applies include on read and leaves other keys alone', () => {
+    const storage = createMockStorage();
+    storage.setItem('k', JSON.stringify({ version: 1, data: { name: 'stored', secret: 'leaked' } }));
+    const { data } = createSvState({ name: 'initial', secret: 'own' }, undefined, {
+      plugins: [persistPlugin({ key: 'k', storage, include: ['name'] })]
+    });
+
+    expect(data.name).toBe('stored');
+    expect(data.secret).toBe('own');
+  });
+
+  it('migrates old data and still applies exclude to the migrated result', () => {
+    const storage = createMockStorage();
+    storage.setItem('k', JSON.stringify({ version: 1, data: { fullName: 'John', token: 't' } }));
+    const persist = persistPlugin({
+      key: 'k',
+      storage,
+      version: 2,
+      exclude: ['token'],
+      migrate: (old) => ({ name: (old as { fullName: string }).fullName, token: 'migrated-token' })
+    });
+    const { data } = createSvState({ name: '', token: 'own' }, undefined, { plugins: [persist] });
+
+    expect(data.name).toBe('John');
+    expect(data.token).toBe('own');
+    expect(persist.isRestored()).toBe(true);
+  });
+
+  it('does not restore when the stored payload is not in the storage format', () => {
+    const storage = createMockStorage();
+    storage.setItem('k', JSON.stringify({ name: 'no-envelope' }));
+    const persist = persistPlugin({ key: 'k', storage });
+    const { data } = createSvState({ name: 'initial' }, undefined, { plugins: [persist] });
+
+    expect(data.name).toBe('initial');
+    expect(persist.isRestored()).toBe(false);
+  });
+
+  it('reports storage failures through onError instead of throwing', () => {
+    const errors: unknown[] = [];
+    const storage = {
+      ...createMockStorage(),
+      setItem: () => {
+        throw new Error('quota');
+      }
+    };
+    const { data, destroy } = createSvState({ name: 'a' }, undefined, {
+      plugins: [persistPlugin({ key: 'k', storage, throttle: 10, onError: (error) => void errors.push(error) })]
+    });
+
+    data.name = 'b';
+    expect(() => destroy()).not.toThrow();
+    expect(errors.length).toBe(1);
+  });
+});
