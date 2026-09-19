@@ -31,9 +31,10 @@ export function undoRedoPlugin<T extends Record<string, unknown>>(
     onInit(context_) {
       context = context_;
       unsubscribe = context_.state.snapshots.subscribe((snaps) => {
-        // If snapshots got shorter, it was a rollback — save the previous tip for redo
-        if (snaps.length < cachedSnapshots.length && cachedSnapshots.length > 0)
-          previousTipSnapshot = cachedSnapshots.at(-1);
+        // If snapshots got shorter, it was a rollback — save the previous tip for redo. Any other
+        // update drops the saved tip, so a rollback that removes nothing can't reuse a stale one.
+        previousTipSnapshot =
+          snaps.length < cachedSnapshots.length && cachedSnapshots.length > 0 ? cachedSnapshots.at(-1) : undefined;
 
         cachedSnapshots = snaps;
       });

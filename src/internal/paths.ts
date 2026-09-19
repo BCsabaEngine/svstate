@@ -50,3 +50,17 @@ export const setValueAtPath = (target: Record<string, unknown>, path: string, va
 export const safeMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
   for (const [key, value] of Object.entries(source)) if (!DANGEROUS_KEYS.has(key)) target[key] = value;
 };
+
+/**
+ * Like {@link safeMerge}, but plain objects present on both sides are merged key by key instead of
+ * being replaced, so defaults the source doesn't know about survive. Arrays and other values replace.
+ */
+export const safeDeepMerge = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
+  for (const [key, value] of Object.entries(source)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    const existing = target[key];
+    if (isPlainObject(value) && isPlainObject(existing) && !(value instanceof Date) && !(existing instanceof Date))
+      safeDeepMerge(existing, value);
+    else target[key] = value;
+  }
+};

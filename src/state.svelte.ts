@@ -1,13 +1,16 @@
 import { derived, get, type Readable, writable } from 'svelte/store';
 
 import { deepClone } from './internal/clone';
+import { getChangedPaths } from './internal/diff';
 import { hasAnyErrors, toError } from './internal/errors';
-import { getMatchingPaths, getValueAtPath, isPlainObject } from './internal/paths';
+import { getMatchingPaths, getValueAtPath } from './internal/paths';
 import type { SvStatePlugin } from './plugin';
 import { ChangeProxy } from './proxy';
 
 // Types
-export type Validator = { [S in string]: string | Validator };
+// Per-row errors are arrays: `inventory: source.inventory.map((item) => ({ quantity: ... }))`
+export type ValidatorNode = string | Validator | ValidatorNode[];
+export type Validator = { [S in string]: ValidatorNode };
 
 type Action<P extends object> = (parameters?: P) => Promise<void> | void;
 
@@ -46,9 +49,15 @@ export type ValidationResult<V> = {
   hasErrors: boolean;
 };
 
+// Effects keyed by property path; each runs only when a matching path changes
+export type PathEffect<T> = {
+  [propertyPath: string]: (context: EffectContext<T>) => void;
+};
+
 type Actuators<T extends Record<string, unknown>, V extends Validator, P extends object> = {
   validator?: (source: T) => V;
   effect?: (context: EffectContext<T>) => void;
+  pathEffect?: PathEffect<T>;
   action?: Action<P>;
   actionCompleted?: (error?: unknown) => void | Promise<void>;
   asyncValidator?: AsyncValidator<T>;
@@ -69,13 +78,13 @@ export type StateResult<T, V> = {
 };
 
 // Async validation helpers
-// Walks only through objects on purpose: a string ancestor means the error sits above this
-// path, not on it, and indexing into that string would yield a bogus single-character "error"
+// Walks only through objects and arrays on purpose: a string ancestor means the error sits above
+// this path, not on it, and indexing into that string would yield a bogus single-character "error"
 const getSyncErrorForPath = (errors: Validator | undefined, path: string): string => {
   let current: unknown = errors;
   for (const part of path.split('.')) {
-    if (!isPlainObject(current)) return '';
-    current = current[part];
+    if (typeof current !== 'object' || current === null) return '';
+    current = (current as Record<string, unknown>)[part];
   }
   return typeof current === 'string' ? current : '';
 };
@@ -121,7 +130,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 ) {
   const usedOptions: SvStateOptions = { ...defaultOptions, ...options };
 
-  const { validator, effect, asyncValidator } = actuators ?? {};
+  const { validator, effect, pathEffect, asyncValidator } = actuators ?? {};
 
   const errors = writable<V | undefined>();
   const hasErrors = derived(errors, hasAnyErrors);
@@ -170,6 +179,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
   // Nothing can mutate before the onInit hook runs, so this stays false until hydration
   let hasChanged = false;
   let batchedSnapshotTitle: string | undefined;
+  let isBatchedSnapshotReplace = true;
   const batchedAsyncPaths = new Set<string>();
 
   // Plugin system
@@ -190,17 +200,20 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     for (const plugin of plugins) callPlugin(plugin, hook, arguments_);
   };
 
-  const runValidation = () => {
+  const runValidation = (shouldNotify = true) => {
     if (!validator) return;
     const result = validator(data);
     errors.set(result);
-    callPlugins('onValidation', result);
+    if (shouldNotify) callPlugins('onValidation', result);
   };
 
   const createSnapshot: SnapshotFunction = (title: string, shouldReplace = true) => {
     // Inside a batch every mutation still runs `effect`, but the batch yields one undo point
     if (isBatching) {
-      batchedSnapshotTitle ??= title;
+      if (batchedSnapshotTitle === undefined) {
+        batchedSnapshotTitle = title;
+        isBatchedSnapshotReplace = shouldReplace;
+      }
       return;
     }
 
@@ -208,8 +221,9 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     const createdSnapshot: Snapshot<T> = { title, data: deepClone(stateObject) };
     const lastSnapshot = currentSnapshots.at(-1);
 
+    // The Initial snapshot (index 0) is the reset target and is never replaced
     let updatedSnapshots: Snapshot<T>[] =
-      shouldReplace && lastSnapshot && lastSnapshot.title === title
+      shouldReplace && lastSnapshot && currentSnapshots.length > 1 && lastSnapshot.title === title
         ? [...currentSnapshots.slice(0, -1), createdSnapshot]
         : [...currentSnapshots, createdSnapshot];
 
@@ -312,8 +326,13 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       if (!controller.signal.aborted)
         asyncErrorsStore.update(($asyncErrors) => ({ ...$asyncErrors, [path]: toError(error).message }));
     } finally {
-      asyncValidationTrackers.delete(path);
-      unmarkValidating(path);
+      // A change mid-flight cancels this run and may already have scheduled a newer one for the
+      // same path; only clean up the tracker (and the validating flag) if it is still ours
+      const tracker = asyncValidationTrackers.get(path);
+      if (!tracker || (tracker.kind === 'running' && tracker.controller === controller)) {
+        asyncValidationTrackers.delete(path);
+        unmarkValidating(path);
+      }
       onComplete();
     }
   };
@@ -374,20 +393,37 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     for (const path of matchingPaths) scheduleAsyncValidation(path);
   };
 
+  const runEffect = (function_: ((context: EffectContext<T>) => void) | undefined, context: EffectContext<T>) => {
+    const result: unknown = function_?.(context);
+    if (result instanceof Promise) {
+      // The rejection can't be handled by anyone, so don't let it surface as an unhandled one
+      void Promise.resolve(result).then(undefined, () => {});
+      throw new Error('svstate: effect callback must be synchronous. Use action for async operations.');
+    }
+  };
+
   const data = ChangeProxy(stateObject, (target: T, property: string, currentValue: unknown, oldValue: unknown) => {
     if (isDestroyed) return;
     hasChanged = true;
     if (!usedOptions.persistActionError) actionError.set(undefined);
     markDirtyWithParents(property);
-    const effectResult: unknown = effect?.({ snapshot: createSnapshot, target, property, currentValue, oldValue });
-    if (effectResult instanceof Promise)
-      throw new Error('svstate: effect callback must be synchronous. Use action for async operations.');
-    callPlugins('onChange', { target, property, currentValue, oldValue });
-    if (!isBatching) scheduleValidation();
-    scheduleAsyncValidationsForPath(property);
+    // The value is already written, so a failing effect must not skip plugins or validation
+    try {
+      const context: EffectContext<T> = { snapshot: createSnapshot, target, property, currentValue, oldValue };
+      runEffect(effect, context);
+      if (pathEffect) {
+        const matchingPaths = getMatchingPaths(Object.keys(pathEffect), property);
+        for (const path of matchingPaths) runEffect(pathEffect[path], context);
+      }
+    } finally {
+      callPlugins('onChange', { target, property, currentValue, oldValue });
+      if (!isBatching) scheduleValidation();
+      scheduleAsyncValidationsForPath(property);
+    }
   });
 
-  runValidation();
+  // Plugins hear about this first result after onInit, once they are set up
+  runValidation(false);
 
   /**
   Runs sync validation immediately (bypassing debounce) and returns the result.
@@ -418,7 +454,7 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
       if (batchedSnapshotTitle !== undefined) {
         const title = batchedSnapshotTitle;
         batchedSnapshotTitle = undefined;
-        createSnapshot(title, false);
+        createSnapshot(title, isBatchedSnapshotReplace);
       }
       flushDeferredValidation();
     }
@@ -434,24 +470,45 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     snapshots.set([{ title: INITIAL_SNAPSHOT_TITLE, data: deepClone(stateObject) }]);
   };
 
+  // Counted, so with allowConcurrentActions the first action to finish doesn't flip the flag off
+  let runningActions = 0;
+
   const execute = async (parameters?: P) => {
-    if (!usedOptions.allowConcurrentActions && get(actionInProgress)) return;
+    if (!usedOptions.allowConcurrentActions && runningActions > 0) return;
 
     callPlugins('onAction', { phase: 'before', params: parameters });
     actionError.set(undefined);
+    runningActions++;
     actionInProgress.set(true);
     try {
-      await actuators?.action?.(parameters);
-      resetBaseline(usedOptions.resetDirtyOnAction);
-      await actuators?.actionCompleted?.();
-      callPlugins('onAction', { phase: 'after', params: parameters });
-    } catch (caughtError) {
-      await actuators?.actionCompleted?.(caughtError);
-      const actionError_ = toError(caughtError);
-      actionError.set(actionError_);
-      callPlugins('onAction', { phase: 'after', params: parameters, error: actionError_ });
+      let hasFailed = false;
+      let failure: unknown;
+      try {
+        await actuators?.action?.(parameters);
+        resetBaseline(usedOptions.resetDirtyOnAction);
+      } catch (caughtError) {
+        hasFailed = true;
+        failure = caughtError;
+      }
+
+      // Runs exactly once, and a throw from it is reported like any other action failure
+      try {
+        await (hasFailed ? actuators?.actionCompleted?.(failure) : actuators?.actionCompleted?.());
+      } catch (completedError) {
+        if (!hasFailed) {
+          hasFailed = true;
+          failure = completedError;
+        }
+      }
+
+      if (hasFailed) {
+        const actionError_ = toError(failure);
+        actionError.set(actionError_);
+        callPlugins('onAction', { phase: 'after', params: parameters, error: actionError_ });
+      } else callPlugins('onAction', { phase: 'after', params: parameters });
     } finally {
-      actionInProgress.set(false);
+      runningActions--;
+      actionInProgress.set(runningActions > 0);
     }
   };
 
@@ -467,10 +524,28 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
     const targetSnapshot = currentSnapshots[targetIndex];
     if (!targetSnapshot) return;
     cancelAllAsyncValidations();
-    dirtyFieldsStore.set({});
     replaceStateObject(targetSnapshot.data);
     snapshots.set(currentSnapshots.slice(0, targetIndex + 1));
+
+    // Restoring a later snapshot still leaves the state different from the initial one
+    const initialData = currentSnapshots[0]!.data;
+    const changedPaths = targetIndex === 0 ? [] : getChangedPaths(stateObject, initialData);
+    dirtyFieldsStore.set({});
+    for (const path of changedPaths) markDirtyWithParents(path);
+
     runValidation();
+
+    // Cancelling dropped every async error, so re-check the values that still differ from
+    // the initial state (and everything on reset when validators run on init)
+    if (asyncValidator) {
+      const pathsToRevalidate = new Set<string>();
+      const registeredPaths = Object.keys(asyncValidator);
+      if (targetIndex === 0 && usedOptions.runAsyncValidationOnInit)
+        for (const path of registeredPaths) pathsToRevalidate.add(path);
+      for (const changedPath of changedPaths)
+        for (const path of getMatchingPaths(registeredPaths, changedPath)) pathsToRevalidate.add(path);
+      for (const path of pathsToRevalidate) scheduleAsyncValidation(path);
+    }
     return targetSnapshot;
   };
 
@@ -544,6 +619,9 @@ export function createSvState<T extends Record<string, unknown>, V extends Valid
 
   // Snapshots taken during hydration are superseded by the re-baseline below
   batchedSnapshotTitle = undefined;
+
+  // Now that every plugin is initialised, report the validation that ran at creation
+  if (validator) callPlugins('onValidation', get(errors));
 
   if (hasChanged) {
     resetBaseline();

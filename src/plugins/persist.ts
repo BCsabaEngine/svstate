@@ -1,4 +1,4 @@
-import { asRecord, getValueAtPath, isPlainObject, safeMerge, setValueAtPath } from '../internal/paths';
+import { asRecord, getValueAtPath, isPlainObject, safeDeepMerge, setValueAtPath } from '../internal/paths';
 import { createDebouncer } from '../internal/timers';
 import type { SvStatePlugin } from '../plugin';
 
@@ -107,13 +107,16 @@ export function persistPlugin<T extends Record<string, unknown>>(options: Persis
         if (!isValidStorageFormat(rawParsed)) return;
 
         let parsed: StorageFormat = rawParsed;
-        if (options.migrate && parsed.version !== version) {
+        if (parsed.version !== version) {
+          // Data written by another version can't be trusted to fit the current shape
+          if (!options.migrate) return;
           const migrated = options.migrate(parsed.data, parsed.version);
           if (!isPlainObject(migrated)) return;
           parsed = { version, data: migrated };
         }
 
-        safeMerge(asRecord(context.data), parsed.data);
+        // include/exclude describe what this store owns, so they apply when reading back too
+        safeDeepMerge(asRecord(context.data), filterData(parsed.data, options.include, options.exclude));
         isRestored = true;
       } catch {
         // Invalid stored data — ignore
@@ -125,6 +128,11 @@ export function persistPlugin<T extends Record<string, unknown>>(options: Persis
     },
 
     onReset() {
+      writeToStorage();
+    },
+
+    // Rollback restores state without going through the proxy, so no onChange fires
+    onRollback() {
       writeToStorage();
     },
 

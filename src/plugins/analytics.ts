@@ -1,4 +1,6 @@
+import { deepClone } from '../internal/clone';
 import { hasAnyErrors } from '../internal/errors';
+import { DANGEROUS_KEYS, isPlainObject } from '../internal/paths';
 import type { SvStatePlugin } from '../plugin';
 
 export type AnalyticsEvent = {
@@ -37,6 +39,28 @@ export function analyticsPlugin<T extends Record<string, unknown>>(
   const isRedacted = (property: string) =>
     options.redact?.some((path) => property === path || property.startsWith(path + '.')) ?? false;
 
+  // Masks the redacted paths that sit below the changed property: replacing `user` must not
+  // leak a redacted `user.ssn` that lives inside the assigned object
+  const maskAt = (value: unknown, parts: string[]) => {
+    if (Array.isArray(value)) {
+      for (const item of value) maskAt(item, parts);
+      return;
+    }
+    const [head, ...rest] = parts;
+    if (head === undefined || !isPlainObject(value) || DANGEROUS_KEYS.has(head) || !Object.hasOwn(value, head)) return;
+    if (rest.length === 0) value[head] = '[redacted]';
+    else maskAt(value[head], rest);
+  };
+
+  const redactValue = (property: string, value: unknown): unknown => {
+    if (isRedacted(property)) return '[redacted]';
+    const below = options.redact?.filter((path) => path.startsWith(property + '.')) ?? [];
+    if (typeof value !== 'object' || value === null || below.length === 0) return value;
+    const copy = deepClone(value);
+    for (const path of below) maskAt(copy, path.slice(property.length + 1).split('.'));
+    return copy;
+  };
+
   const addEvent = (type: AnalyticsEvent['type'], detail: Record<string, unknown>) => {
     if (!shouldTrack(type)) return;
     buffer.push({ type, timestamp: Date.now(), detail });
@@ -67,11 +91,10 @@ export function analyticsPlugin<T extends Record<string, unknown>>(
     },
 
     onChange(event) {
-      const redacted = isRedacted(event.property);
       addEvent('change', {
         property: event.property,
-        currentValue: redacted ? '[redacted]' : event.currentValue,
-        oldValue: redacted ? '[redacted]' : event.oldValue
+        currentValue: redactValue(event.property, event.currentValue),
+        oldValue: redactValue(event.property, event.oldValue)
       });
     },
 

@@ -24,11 +24,13 @@ export {
   createSvState,
   type DirtyFields,
   type EffectContext,
+  type PathEffect,
   type PluginHook,
   type Snapshot,
   type SnapshotFunction,
   type SvStateOptions,
   type ValidationResult,
-  type Validator
+  type Validator,
+  type ValidatorNode
 } from './state.svelte';
 export { arrayValidator, dateValidator, numberValidator, stringValidator } from './validators';

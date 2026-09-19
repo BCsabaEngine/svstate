@@ -17,6 +17,11 @@ Canonical array index (no leading zeros, no sign, no whitespace).
 */
 const ARRAY_INDEX = /^(?:0|[1-9]\d*)$/;
 
+/**
+Array methods that write several indices per call. They run as one unit and report one change.
+*/
+const ARRAY_MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
+
 const isProxiable = (value: unknown): boolean =>
   typeof value === 'object' &&
   value !== null &&
@@ -34,17 +39,29 @@ const unwrap = (value: unknown): unknown => {
   return (value as Record<symbol, unknown>)[RAW] ?? value;
 };
 
-// Array element and length writes are reported on the array itself; every other key —
-// including numeric-looking keys on plain objects — keeps its own path segment.
+const childPath = (property: string, parentPath: string): string =>
+  parentPath ? `${parentPath}.${property}` : property;
+
+// Writing an array element or its length is a change of the array itself and is reported on the
+// array's path. Everything else — including numeric-looking keys on plain objects and the fields
+// inside an element (`items.2.name`) — keeps its own path segment.
 const resolvePath = (object: object, property: string, parentPath: string): string => {
   if (Array.isArray(object) && (property === 'length' || ARRAY_INDEX.test(property))) return parentPath;
-  return parentPath ? `${parentPath}.${property}` : property;
+  return childPath(property, parentPath);
 };
 
 export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T>): T => {
   // raw object -> path -> proxy. The same object can be reachable through several paths, so the
   // path is part of the key. WeakRef values keep the cache from pinning raw objects in memory.
   const proxyCache = new WeakMap<object, Map<string, WeakRef<object>>>();
+
+  // Set while an array method runs: its index writes are collected instead of reported one by one
+  let coalescing: { hasChanged: boolean } | undefined;
+
+  const report = (path: string, currentValue: unknown, oldValue: unknown) => {
+    if (coalescing) coalescing.hasChanged = true;
+    else changed(data as T, path, currentValue, oldValue);
+  };
 
   const createProxy = (target: object, parentPath: string): object => {
     let byPath = proxyCache.get(target);
@@ -56,6 +73,29 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
       proxyCache.set(target, byPath);
     }
 
+    const methods = new Map<string, unknown>();
+
+    // One splice(0, 1) on four items writes five indices; the caller made one change
+    const coalesce = (name: string, method: (...arguments_: unknown[]) => unknown) => {
+      let wrapped = methods.get(name);
+      if (!wrapped) {
+        wrapped = (...arguments_: unknown[]) => {
+          if (coalescing) return method.apply(proxy, arguments_);
+          const before = [...(target as unknown[])];
+          const scope = { hasChanged: false };
+          coalescing = scope;
+          try {
+            return method.apply(proxy, arguments_);
+          } finally {
+            coalescing = undefined;
+            if (scope.hasChanged) changed(data as T, parentPath, target, before);
+          }
+        };
+        methods.set(name, wrapped);
+      }
+      return wrapped;
+    };
+
     const proxy = new Proxy(target, {
       get(object, property) {
         if (property === RAW) return object;
@@ -65,7 +105,9 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
         // a write through the returned proxy pollute every object in the process.
         if (DANGEROUS_KEYS.has(property)) return (object as Record<string, unknown>)[property];
         const value = (object as Record<string, unknown>)[property];
-        if (isProxiable(value)) return createProxy(value as object, resolvePath(object, property, parentPath));
+        if (typeof value === 'function' && Array.isArray(object) && ARRAY_MUTATORS.has(property))
+          return coalesce(property, value as (...arguments_: unknown[]) => unknown);
+        if (isProxiable(value)) return createProxy(value as object, childPath(property, parentPath));
         return value;
       },
 
@@ -82,10 +124,11 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
         // value was read from rather than the one it was written to.
         const nextValue = unwrap(incomingValue);
         const oldValue = (object as Record<string, unknown>)[property];
-        if (Object.is(oldValue, nextValue)) return true;
+        // Writing undefined to a missing key still creates the key, so it is a real change
+        if (Object.is(oldValue, nextValue) && (nextValue !== undefined || Object.hasOwn(object, property))) return true;
 
         (object as Record<string, unknown>)[property] = nextValue;
-        changed(data as T, resolvePath(object, property, parentPath), nextValue, oldValue);
+        report(resolvePath(object, property, parentPath), nextValue, oldValue);
         return true;
       },
 
@@ -97,7 +140,7 @@ export const ChangeProxy = <T extends object>(source: T, changed: ProxyChanged<T
         const oldValue = (object as Record<string, unknown>)[property];
         if (!Reflect.deleteProperty(object, property)) return false;
 
-        changed(data as T, resolvePath(object, property, parentPath), undefined, oldValue);
+        report(resolvePath(object, property, parentPath), undefined, oldValue);
         return true;
       }
     });

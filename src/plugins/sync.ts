@@ -6,7 +6,8 @@ const MAX_SYNC_DEPTH = 10;
 
 const isWithinDepthLimit = (value: unknown, depth = 0): boolean => {
   if (depth > MAX_SYNC_DEPTH) return false;
-  if (!isPlainObject(value)) return true;
+  // Arrays count too, otherwise nesting could hide inside one
+  if (value === null || typeof value !== 'object') return true;
   return Object.values(value).every((v) => isWithinDepthLimit(v, depth + 1));
 };
 
@@ -112,6 +113,15 @@ export function syncPlugin<T extends Record<string, unknown>>(options: SyncOptio
     onChange() {
       if (isReceiving) return;
       broadcaster.schedule();
+    },
+
+    // Rollback and reset restore state without going through the proxy, so no onChange fires
+    onRollback() {
+      if (!isReceiving) broadcaster.schedule();
+    },
+
+    onReset() {
+      if (!isReceiving) broadcaster.schedule();
     },
 
     destroy() {
