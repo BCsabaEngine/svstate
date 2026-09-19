@@ -15,9 +15,27 @@ reproducible defect; each has a regression test in `test/regressions.test.svelte
 - **`pathEffect` actuator** — effects keyed by property path, matching like `asyncValidator` (exact, descendant or ancestor path). Replaces `if (property === 'a' || property === 'b')` chains inside `effect`; runs after `effect` with the same context. New exported type `PathEffect<T>`.
 - **`"sideEffects": false`** in `package.json`, so bundlers can drop the plugins a consumer doesn't import.
 
+### Demo
+
+- Demo pages now destroy their state on unmount (leaked timers, `BroadcastChannel`s and plugins made a revisited Persist & Sync page run two live instances); the Options demo destroys the replaced instance and holds it in `$state.raw`.
+- Array Property uses per-row error arrays, `push`/`splice`, keyed rows and indexed dirty tracking instead of the `item_${index}` workaround; Calculated Fields/Class use `pathEffect`.
+- New **Plugin: History** page. Async Validation's Submit now runs an action; the Devtools validation log no longer always reads "Has errors" and is capped; Zod demo uses non-deprecated helpers.
+- The selected demo is kept in the URL hash; form inputs expose `aria-invalid`/`aria-describedby`; redundant Tailwind PostCSS config removed.
+- `demo/public/llms.txt` (the source of `docs/llms.txt`) refreshed for the 2.1.0 behavior.
+
+### Changed
+
+- Updated development dependencies in the library and in the demo.
+
 ### Documentation
 
+- README, FAQ, `CLAUDE.md` and `demo/public/llms.txt` describe the 2.1.0 behavior: `pathEffect`, per-row error arrays, indexed paths and array-method coalescing, effect-failure semantics, `actionCompleted` and concurrent actions, rollback/reset semantics (dirty recompute, async re-validation, plugins get `onRollback`/`onReset` not `onChange`), and the persist/autosave/history/sync/analytics changes. New FAQ entries cover path effects, snapshot memory, `actionCompleted`, URL sync, and migrating array-row paths.
+- The README inventory example uses per-row validation; the actuators are listed in the API reference.
 - README and `CLAUDE.md` now state that every snapshot is a full deep clone and how to tune `maxSnapshots`.
+
+### Tests
+
+- 788 tests (from 668): new `test/internal.test.ts` and `test/regressions.test.svelte.ts`, and added cases in the plugin, proxy and validator suites. Line coverage 99%, branch coverage 97.6%.
 
 ### Breaking
 

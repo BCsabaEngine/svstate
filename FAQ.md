@@ -306,7 +306,12 @@ const {
     })
   }
 );
+
+// In the template — the error type is inferred, no casts needed:
+// $errors?.contacts?.[index]?.email
 ```
+
+`Validator` accepts arrays, so the per-row errors keep the same shape as the data. If you also want an error for the array as a whole (e.g. "at least one contact"), put it under a separate key (`contactsError`), because a key can hold either a string or an array. `hasErrors` and `hasCombinedErrors` look through arrays. Fields inside a row report their indexed path (`contacts.2.email`), so `isDirtyByField`, `pathEffect` and async validators can target one row.
 
 ---
 
@@ -397,6 +402,7 @@ Async validators use dot-notation paths and trigger based on these matching rule
 - **Exact match**: validator for `"email"` triggers when `email` changes
 - **Parent triggers child**: validator for `"user.email"` triggers when `user` changes
 - **Child triggers parent**: validator for `"user"` triggers when `user.email` changes
+- **Rows**: a validator for `"items.1.email"` triggers when that row's email changes (or when `items` is replaced) — not when another row changes. Keys are static, so this suits a known set of rows.
 
 ---
 
@@ -471,6 +477,37 @@ Deleting a property (`delete data.draft`) also emits a change, with `currentValu
 
 ---
 
+### Why does my effect run once for `splice()` / `sort()` — and what is `currentValue` then?
+
+The mutating array methods (`push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) move many indices internally. svstate runs each call as one unit and reports **one** change on the array path: `effect` and plugin `onChange` fire once, `currentValue` is the whole array and `oldValue` is a copy taken before the call. A call that changes nothing (e.g. sorting an already sorted array) reports nothing.
+
+Individual index writes (`data.items[0] = x`) and `length` writes are still reported per write. To group several separate assignments, use `batch()`. Side effects such as API calls still belong in `action` rather than `effect`.
+
+---
+
+### How do I run an effect only when certain fields change?
+
+Use `pathEffect` instead of an `if (property === ...)` chain inside `effect`. It is keyed by property path, like `asyncValidator`:
+
+```typescript
+const { data } = createSvState(invoice, {
+  pathEffect: {
+    'item.unitPrice': () => recalculateTotals(),
+    'item.quantity': () => recalculateTotals()
+  }
+});
+```
+
+A path effect receives the same context as `effect`, runs **after** the global `effect`, and fires for the path itself, for anything below it, and for a parent of it (`customer.address` fires when `customer` is replaced). It must be synchronous. Rollback and reset don't fire it (they restore state without going through the proxy).
+
+---
+
+### What happens if my effect throws?
+
+The value has already been written, so svstate still notifies plugins (`onChange`), marks the field dirty and schedules validation, then rethrows the error to the code that made the assignment. Effects that can fail (network calls) belong in `action`.
+
+---
+
 ## Snapshots & Undo
 
 ### How does the snapshot/undo system work?
@@ -519,6 +556,8 @@ effect: ({ snapshot }) => {
 snapshot('Important change', false);
 ```
 
+The `Initial` snapshot is never replaced (so `reset()` always works), even if you pass its title. Inside `batch()` the first `snapshot()` call decides the title and `shouldReplace` of the single batch snapshot.
+
 ---
 
 ### How do I roll back to a specific named snapshot?
@@ -553,6 +592,14 @@ rollback(3);
 
 **Yes.** Both `rollback()`, `rollbackTo()`, and `reset()` trigger validation after restoring state, ensuring your error state stays in sync with your data.
 
+Async validation is cancelled and its errors are dropped; validators are then re-scheduled for the values that still differ from the `Initial` snapshot (and for all of them on `reset()` when `runAsyncValidationOnInit` is on). After `rollback()`/`rollbackTo()` `isDirtyByField` is recomputed against `Initial`, so fields that still differ stay dirty. Plugins are told through `onRollback`/`onReset` (not `onChange`).
+
+---
+
+### How much memory do snapshots use?
+
+Every snapshot is a full deep clone of the state, and up to `maxSnapshots` (default 50) are kept. For a login form that is nothing; for a large nested object (hundreds of line items) it is `size × maxSnapshots`, and each undo point costs a full clone. To keep it in check: lower `maxSnapshots`, group edits with `batch()` (one snapshot per batch), reuse a snapshot title so it replaces instead of appends, or snapshot on meaningful steps instead of every keystroke. The `Initial` snapshot is never replaced or trimmed.
+
 ---
 
 ## Actions
@@ -585,6 +632,12 @@ const { data, execute } = createSvState(formData, {
 // Trigger action manually
 await execute();
 ```
+
+---
+
+### When does `actionCompleted` run, and what does it receive?
+
+Exactly once per `execute()`, after the action: with the thrown value on failure (as thrown, not wrapped) and with no argument on success. On success the baseline is reset first (respecting `resetDirtyOnAction`). If `actionCompleted` itself throws, that error is reported through `actionError` (the action's own error wins if both fail); it never escapes `execute()`. The `onAction` plugin hook fires with `phase: 'after'` in every case.
 
 ---
 
@@ -635,6 +688,8 @@ svstate exports these types for building type-safe external functions:
 ```typescript
 import type {
   Validator,
+  ValidatorNode,
+  PathEffect,
   EffectContext,
   Snapshot,
   SnapshotFunction,
@@ -762,6 +817,8 @@ persist.clearPersistedState();
 
 Reload the page and your state will be automatically restored.
 
+Good to know: stored data is **deep-merged** into your defaults (new nested fields keep their default), data written under a different `version` is **ignored unless you pass `migrate`**, `include`/`exclude` apply on read as well as write, and `reset()`/`rollback()` are written to storage too.
+
 ---
 
 ### How do I add undo/redo support?
@@ -798,6 +855,24 @@ undoRedo.redoStack; // Readable<Snapshot[]>
 
 ---
 
+### How do I keep state in the URL (filters, page number)?
+
+Use `historyPlugin`, mapping state fields to URL params:
+
+```typescript
+import { historyPlugin } from 'svstate';
+
+const history = historyPlugin({
+  fields: { query: 'q', page: 'page' }, // { stateField: 'urlParam' }
+  mode: 'push', // 'push' adds a history entry per change, 'replace' (default) rewrites the current one
+  deserialize: (param, field) => (field === 'page' ? Number(param) : param) // URL params are strings
+});
+```
+
+The URL is applied to the state on creation (and becomes the baseline), and again on back/forward. Applying it never writes it back, so back/forward doesn't add history entries. A param that is missing from the URL restores the field's initial value. `reset()` and `rollback()` rewrite the URL. Dotted fields (`{ 'filters.q': 'q' }`) work in both directions.
+
+---
+
 ### How do I sync state across browser tabs?
 
 Use `syncPlugin` which uses BroadcastChannel to sync state changes:
@@ -828,7 +903,7 @@ const { data } = createSvState(formData, actuators, {
 
 If your state contains `Date` fields, convert them back after receiving (e.g. in your validator or an `effect`).
 
-Incoming messages deeper than 10 levels of nesting are rejected to prevent payload abuse.
+Incoming messages deeper than 10 levels of nesting (arrays included) are rejected to prevent payload abuse. Because `undefined` is dropped, clearing a field or deleting a key in one tab is not mirrored in the others. `reset()` and `rollback()` are broadcast like any other change.
 
 ---
 
@@ -874,6 +949,12 @@ const myPlugin: SvStatePlugin<MyState> = {
 ```
 
 **Hook execution order:** Hooks run in plugin array order (first to last), except `destroy` which runs last-to-first.
+
+---
+
+### Why doesn't my plugin see `rollback()` or `reset()` as changes?
+
+Restoring a snapshot replaces the state without going through the reactive proxy, so it fires `onRollback` / `onReset` and **not** `onChange`. A plugin that mirrors state somewhere (storage, URL, other tabs, a server) must handle those two hooks as well; the built-in `persist`, `sync`, `history` and `autosave` plugins do. The validation that runs when the state is created is reported to `onValidation` only after every plugin's `onInit`.
 
 ---
 
@@ -1020,6 +1101,12 @@ $effect(() => {
 
 ---
 
+### My `isDirtyByField` / async validator keys for array rows stopped matching. What changed?
+
+Fields inside an array element used to be reported on the collapsed array path (`contacts.email`); they now keep the element's index (`contacts.0.email`). Update async validator keys and `isDirtyByField` lookups to the indexed form. Writing an element itself, `length`, or calling an array method still reports the array path (`contacts`). See "What does the `property` path look like" above.
+
+---
+
 ### My action keeps getting blocked. What's happening?
 
 By default, svstate prevents concurrent action execution. If `actionInProgress` is true, subsequent `execute()` calls are ignored.
@@ -1036,6 +1123,8 @@ By default, svstate prevents concurrent action execution. If `actionInProgress` 
    });
    ```
 
+   `actionInProgress` then stays `true` until every running action has finished. A successful action resets the snapshot history, so a concurrent action finishing later can wipe undo points made in between.
+
 3. **Check status before calling:**
 
    ```svelte
@@ -1051,9 +1140,3 @@ By default, svstate prevents concurrent action execution. If `actionInProgress` 
 - **Documentation**: See [README.md](README.md) for comprehensive guides
 - **Issues**: [GitHub Issues](https://github.com/BCsabaEngine/svstate/issues)
 - **Live Demo**: [Try it in your browser](https://bcsabaengine.github.io/svstate/)
-
-### Why does my effect run once for `splice()` / `sort()` — and what is `currentValue` then?
-
-The mutating array methods (`push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`) move many indices internally. svstate runs each call as one unit and reports **one** change on the array path: `effect` and plugin `onChange` fire once, `currentValue` is the whole array and `oldValue` is a copy taken before the call. A call that changes nothing (e.g. sorting an already sorted array) reports nothing.
-
-Individual index writes (`data.items[0] = x`) and `length` writes are still reported per write. To group several separate assignments, use `batch()`. Side effects such as API calls still belong in `action` rather than `effect`.

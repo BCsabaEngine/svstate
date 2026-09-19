@@ -55,7 +55,7 @@ The `demo/` directory is a separate npm project for interactive testing of the l
 **Structure:**
 
 - `demo/src/App.svelte` - Root component
-- `demo/src/pages/` - Demo pages (e.g., `BasicValidation.svelte`)
+- `demo/src/pages/` - Demo pages (e.g., `BasicValidation.svelte`); each page that creates a state calls `destroy()` on unmount (`onDestroy(destroy)`) so timers, channels and plugins don't outlive it. The selected page is kept in the URL hash
 - `demo/src/components/` - Shared UI components (e.g., `ErrorText.svelte`)
 
 **Stack:** Vite + Svelte 5 + Tailwind CSS 4
@@ -77,13 +77,13 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 - `README.md` - Main documentation: features, API reference, examples, plugin guide
 - `FAQ.md` - Frequently asked questions: common patterns, troubleshooting, Zod integration, per-field dirty tracking
-- `docs/llms.txt` - LLM-oriented documentation with demo page descriptions and code snippets
+- `demo/public/llms.txt` - LLM-oriented documentation with demo page descriptions and code snippets. This is the source: `npm run demo:build` copies it to `docs/llms.txt` (the build empties `docs/`), so never edit `docs/llms.txt` directly
 
 ## Architecture
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, plugin types and built-in plugins, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`, `DirtyFields`, `SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`, `ValidationResult`, `PluginHook`, and per-plugin option/instance types)
+- `src/index.ts` - Public exports: `createSvState`, validator builders, plugin types and built-in plugins, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `ValidatorNode`, `PathEffect`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`, `DirtyFields`, `SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`, `ValidationResult`, `PluginHook`, and per-plugin option/instance types)
 - `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system, async validation, and plugin integration
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
@@ -113,7 +113,7 @@ const { data, execute, state, rollback, rollbackTo, reset, destroy, validate, ba
 - `reset()` - Return to initial snapshot, triggers validation
 - `destroy()` - Cleanup function: cancels in-flight and debounced async validations, clears the pending validation timer, ignores later mutations, then calls plugin `destroy` hooks in reverse order. Idempotent.
 - `validate()` - Runs sync validation immediately (bypassing debounce) and returns `ValidationResult<V>` = `{ errors, hasErrors }`
-- `batch(fn)` - Applies `fn(draft)` as one unit: one validation pass, each async validator scheduled at most once, and a single snapshot for the whole batch. `effect` and plugin `onChange` still fire per mutation. Nested `batch()` calls join the outer batch.
+- `batch(fn)` - Applies `fn(draft)` as one unit: one validation pass, each async validator scheduled at most once, and a single snapshot for the whole batch (titled and `shouldReplace`d after the first `snapshot()` call made inside it). `effect` and plugin `onChange` still fire per mutation. Nested `batch()` calls join the outer batch.
 - `state` - Object containing reactive stores:
   - `errors: Readable<V | undefined>` - Validation errors (sync)
   - `hasErrors: Readable<boolean>` - Whether any sync validation errors exist
@@ -133,7 +133,7 @@ const { data, execute, state, rollback, rollbackTo, reset, destroy, validate, ba
 - `effect?: (context: EffectContext<T>) => void` - Side effect receiving context object with `snapshot` function
 - `pathEffect?: PathEffect<T>` - Effects keyed by property path (same matching rules as `asyncValidator`: exact, descendant or ancestor); run after `effect` with the same context and the same synchronous requirement
 - `action?: (params?: P) => Promise<void> | void` - Async action to execute
-- `actionCompleted?: (error?: unknown) => void | Promise<void>` - Callback after action completes (can be async)
+- `actionCompleted?: (error?: unknown) => void | Promise<void>` - Callback after action completes (can be async). Runs exactly once per `execute()`: with the raw thrown value on failure, with no argument on success; a throw from it is reported through `actionError` (the action's own error wins). `actionInProgress` is counted, so with `allowConcurrentActions` it stays `true` until every running action finished.
 - `asyncValidator?: AsyncValidator<T>` - Async validators keyed by property path (see Async Validation System)
 
 **Options:**
@@ -165,7 +165,7 @@ effect: ({ snapshot, property }) => {
 };
 ```
 
-**Important:** The effect callback must be synchronous. Returning a Promise throws an error.
+**Important:** The effect callback (and every `pathEffect` callback) must be synchronous. Returning a Promise throws an error. The write has already happened when an effect runs, so if an effect throws, plugin `onChange`, dirty tracking and validation/async scheduling still run (in a `finally`) and the error is rethrown to the writer.
 
 - `snapshot(title, shouldReplace = true)` - Creates a snapshot; if `shouldReplace=true` and last snapshot has same title, replaces it (debouncing)
 - Initial state is saved as first snapshot with title `"Initial"`
@@ -231,6 +231,8 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 
 **Hydration re-baseline:** plugins that restore state in `onInit` (persist, history) write through the live proxy. Validation is deferred across the `onInit` hook, and if any change occurred the state is re-baselined afterwards: dirty fields are cleared and snapshot 0 is rewritten from the hydrated state. So restored values are the initial state, not a dirty change on top of it.
 
+**State-restoring operations and plugins:** `rollback()`, `rollbackTo()` and `reset()` write `stateObject` directly, **bypassing the proxy**, so they fire `onRollback`/`onReset` but never `onChange`. Any plugin that mirrors state (persist, sync, history, autosave) must handle both hooks. The validation that runs at creation is delivered to `onValidation` after every plugin's `onInit`.
+
 **Built-in plugins (src/plugins/):**
 
 | Plugin            | File           | Purpose                                                                                                                                                                            | Key options                                                                                                                                                                         |
@@ -242,6 +244,15 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 | `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel                                                                                                                                                | `key` (required), `throttle`, `merge`, `onError`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
 | `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback                                                                                                                                             | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                                          |
 | `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics                                                                                                                                                | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact` (covers nested paths), `onError`                                                                            |
+
+**Plugin behavior notes:**
+
+- `persist` — deep-merges (`safeDeepMerge`) restored data into the defaults; ignores data whose `version` differs unless `migrate` is given; applies `include`/`exclude` on read too; writes on `onReset` and `onRollback`
+- `autosave` — `onlyWhenDirty` means "changed since the last successful save" (`hasUnsavedChanges && isDirty`), a failed save is retried, `onRollback`/`onReset` force the next save (they clear `isDirty`)
+- `history` — an `isReading` guard stops applying the URL from being echoed back (no `pushState` on `popstate`); on `popstate`/`syncFromUrl()` params missing from the URL restore the field's initial value (captured before the URL is first read); `onReset`/`onRollback` rewrite the URL; a write that would not change the URL is skipped
+- `sync` — broadcasts after `onReset`/`onRollback`; `undefined`/deleted keys are not propagated (JSON); the depth guard descends into arrays
+- `undoRedo` — the snapshot-store subscription resets `previousTipSnapshot` on every non-shrinking update so a rollback that removes nothing cannot push a stale redo entry
+- `analytics` — `redact` masks the changed property itself, everything below a redacted path, and redacted paths _inside_ an assigned object/array (masked on a `deepClone` copy, state untouched)
 
 ### Deep Clone System (src/internal/clone.ts)
 
@@ -283,7 +294,7 @@ Other cloning behavior:
 ### Security Model
 
 - **Prototype pollution** — all path-traversal and deep-clone code guards against `__proto__`, `constructor`, and `prototype` keys via the shared `DANGEROUS_KEYS` set in `src/internal/paths.ts` (used by the core, `persist`, `history` and `sync`)
-- **BroadcastChannel messages** — `syncPlugin` rejects incoming payloads exceeding 10 levels of nesting (`isWithinDepthLimit` in `src/plugins/sync.ts`); accepted payloads are throttled with a trailing apply so a burst collapses to the newest state rather than dropping it
+- **BroadcastChannel messages** — `syncPlugin` rejects incoming payloads exceeding 10 levels of nesting (objects and arrays) (`isWithinDepthLimit` in `src/plugins/sync.ts`); accepted payloads are throttled with a trailing apply so a burst collapses to the newest state rather than dropping it
 - **Plugin isolation** — a throwing plugin hook cannot abort a state mutation or block later plugins; errors surface through `onPluginError`
 - **JSON serialization in sync** — state is serialized with `JSON.stringify`/`JSON.parse` (structuredClone cannot be used on Svelte reactive proxies); `Date` objects become strings and `undefined`/functions are dropped — document this for users
 - **No eval/Function** — the codebase contains no dynamic code execution
@@ -291,7 +302,7 @@ Other cloning behavior:
 
 ### Validation System
 
-Validation is deferred via `queueMicrotask()` (or `setTimeout` when `debounceValidation > 0`) to batch changes. The `Validator` type is a nested object where leaf values are error strings (empty = valid).
+Validation is deferred via `queueMicrotask()` (or `setTimeout` when `debounceValidation > 0`) to batch changes. The `Validator` type is a nested object where leaf values are error strings (empty = valid); a value may also be an array (`ValidatorNode = string | Validator | ValidatorNode[]`) for per-row errors, e.g. `rows: source.items.map((item) => ({ ... }))`. `getSyncErrorForPath` (async-validation skip check) and `hasAnyErrors` walk arrays.
 
 The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf strings are non-empty.
 
@@ -355,10 +366,12 @@ Test files go in `test/` directory:
 
 Current test files:
 
-- `validators.test.ts` - Fluent validator builder tests (~330 cases)
-- `proxy.test.ts` - ChangeProxy deep proxy tests, including delete events, proxy identity and path resolution
+- `validators.test.ts` - Fluent validator builder tests (~340 cases), including date-only weekday in several time zones, sticky/global regexps and `unique()` comparison keys
+- `internal.test.ts` - Internal helper tests: `isDeepEqual`/`getChangedPaths`, `hasAnyErrors`/`toError`, path helpers (`safeDeepMerge`, `getMatchingPaths`), `createDebouncer`
+- `proxy.test.ts` - ChangeProxy deep proxy tests, including delete events, proxy identity, indexed row paths and array-method coalescing
 - `state.test.svelte.ts` - Core createSvState tests (~105 cases), including `validate()`, `batch()`, destroy cleanup, non-plain values (Map/Set/RegExp/cycles) and plugin error isolation
 - `async-validation.test.svelte.ts` - Async validator tests
+- `regressions.test.svelte.ts` - Cross-cutting regression tests for the 2.1.0 fixes (superseded async runs, `execute()`, rollback/dirty recompute, `pathEffect`, per-row errors, plugin mirroring of rollback/reset). When fixing a bug, add its regression test here and check it fails without the fix
 - `performance.test.svelte.ts` - Performance/stress tests
 - `plugins.test.svelte.ts` - Plugin system integration tests
 - `plugins-analytics.test.svelte.ts`, `plugins-autosave.test.svelte.ts`, `plugins-devtools.test.svelte.ts`, `plugins-history.test.svelte.ts`, `plugins-persist.test.svelte.ts`, `plugins-sync.test.svelte.ts`, `plugins-undo-redo.test.svelte.ts` - Per-plugin tests
