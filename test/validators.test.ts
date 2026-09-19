@@ -1776,3 +1776,71 @@ describe('arrayValidator comparison keys', () => {
     ).toBe('Items must be unique');
   });
 });
+
+describe('validator edge cases', () => {
+  it('arrayValidator messages show objects as JSON', () => {
+    expect(
+      arrayValidator([{ a: 1 }])
+        .includes({ a: 2 })
+        .getError()
+    ).toBe('Must include {"a":2}');
+    expect(
+      arrayValidator<unknown>([1])
+        .includesAny([{ a: 1 }, 'x'])
+        .getError()
+    ).toBe('Must include at least one of: {"a":1}, x');
+    expect(
+      arrayValidator<unknown>([])
+        .includesAll([{ a: 1 }])
+        .getError()
+    ).toBe('Missing required items: {"a":1}');
+  });
+
+  it('unique() ignores Map entry order only where the Map is equal, and tells RegExp flags apart', () => {
+    expect(
+      arrayValidator([new Map([[1, 'a']]), new Map([[1, 'a']])])
+        .unique()
+        .getError()
+    ).toBe('Items must be unique');
+    expect(arrayValidator([/a/g, /a/i]).unique().getError()).toBe('');
+    expect(arrayValidator([/a/g, /a/g]).unique().getError()).toBe('Items must be unique');
+  });
+
+  it('regexp() with a sticky regexp gives stable answers', () => {
+    const pattern = /a/y;
+
+    for (let index = 0; index < 3; index++) expect(stringValidator('abc').regexp(pattern).getError()).toBe('');
+  });
+
+  it('multipleOf() handles negative values and divisors, and large magnitudes', () => {
+    expect(numberValidator(-0.3).multipleOf(0.1).getError()).toBe('');
+    expect(numberValidator(0.3).multipleOf(-0.1).getError()).toBe('');
+    expect(numberValidator(-7).multipleOf(2).getError()).toBe('Must be a multiple of 2');
+    expect(numberValidator(1e15).multipleOf(5).getError()).toBe('');
+    expect(numberValidator(5).multipleOf(0).getError()).toBe('Must be a multiple of 0');
+  });
+
+  it('date-only strings keep their calendar weekday across a year boundary in any zone', () => {
+    const previous = process.env['TZ'];
+    try {
+      for (const zone of ['Pacific/Honolulu', 'Asia/Tokyo', 'UTC']) {
+        process.env['TZ'] = zone;
+        expect(dateValidator('2023-12-31').weekend().getError()).toBe(''); // Sunday
+        expect(dateValidator('2024-01-01').weekday().getError()).toBe(''); // Monday
+        expect(dateValidator('2024-01-01').weekend().getError()).toBe('Must be a weekend');
+      }
+    } finally {
+      if (previous === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = previous;
+    }
+  });
+
+  it('minAge accepts a birth date exactly N years ago and rejects one born 17 years ago', () => {
+    const today = new Date();
+    const born = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+
+    expect(dateValidator(born).minAge(18).getError()).toBe('');
+    const tooYoung = new Date(today.getFullYear() - 17, today.getMonth(), today.getDate());
+    expect(dateValidator(tooYoung).minAge(18).getError()).toBe('Must be at least 18 years ago');
+  });
+});

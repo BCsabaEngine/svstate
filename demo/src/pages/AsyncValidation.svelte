@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { createSvState, stringValidator } from 'svstate';
 
 	import CodeBlock from '$components/CodeBlock.svelte';
@@ -15,6 +16,8 @@
 	const takenEmails = ['admin@example.com', 'test@example.com', 'user@example.com'];
 	const takenSlugs = ['admin', 'about', 'contact', 'help', 'support'];
 
+	let submitMessage = $state<string | undefined>();
+
 	const sourceData = {
 		username: '',
 		email: '',
@@ -24,7 +27,18 @@
 	const {
 		data,
 		batch,
-		state: { errors, hasErrors, isDirty, asyncErrors, hasAsyncErrors, asyncValidating, hasCombinedErrors }
+		destroy,
+		execute,
+		state: {
+			errors,
+			hasErrors,
+			isDirty,
+			asyncErrors,
+			hasAsyncErrors,
+			asyncValidating,
+			hasCombinedErrors,
+			actionInProgress
+		}
 	} = createSvState(
 		sourceData,
 		{
@@ -39,6 +53,11 @@
 				email: stringValidator(source.email).prepare('trim').required().email().getError(),
 				slug: stringValidator(source.slug).prepare('trim').required().minLength(2).slug().getError()
 			}),
+			// Only reachable while the form is valid, thanks to the disabled Submit button
+			action: async () => {
+				await new Promise((resolve) => setTimeout(resolve, 800));
+				submitMessage = `Registered "${data.username}" (${data.email}) at ${new Date().toISOString().slice(11, 19)}`;
+			},
 			asyncValidator: {
 				username: async (value, _source, signal) => {
 					// Simulate API delay (500ms)
@@ -83,6 +102,9 @@
 		},
 		{ maxConcurrentAsyncValidations: 2 }
 	);
+
+	// Timers, channels and plugins outlive the component unless the state is torn down
+	onDestroy(destroy);
 
 	const fillWithValidData = () => {
 		batch((draft) => {
@@ -259,7 +281,11 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 		<div class="mt-6 flex gap-2">
 			<button
 				class="flex-1 cursor-pointer rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
-				disabled={$hasCombinedErrors || $asyncValidating.length > 0}
+				disabled={$hasCombinedErrors || $asyncValidating.length > 0 || $actionInProgress}
+				onclick={() => {
+					submitMessage = undefined;
+					execute();
+				}}
 				type="button"
 			>
 				{#if $asyncValidating.length > 0}
@@ -267,11 +293,20 @@ $hasCombinedErrors // hasErrors || hasAsyncErrors`;
 						<Spinner />
 						Validating...
 					</span>
+				{:else if $actionInProgress}
+					<span class="inline-flex items-center gap-2">
+						<Spinner />
+						Submitting...
+					</span>
 				{:else}
 					Submit
 				{/if}
 			</button>
 		</div>
+
+		{#if submitMessage}
+			<div class="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{submitMessage}</div>
+		{/if}
 	{/snippet}
 
 	{#snippet sidebar()}

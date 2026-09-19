@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { createSvState, stringValidator } from 'svstate';
 
 	import CodeBlock from '$components/CodeBlock.svelte';
@@ -60,7 +61,8 @@
 	};
 
 	// Store the current state instance (use defaults to avoid lint warnings)
-	let stateInstance = $state(
+	// $state.raw: the state object is already reactive, Svelte must not wrap it in a second proxy
+	let stateInstance = $state.raw(
 		createState({
 			resetDirtyOnAction: true,
 			debounceValidation: 0,
@@ -70,6 +72,8 @@
 
 	// Recreate state when options change
 	const handleOptionsChange = () => {
+		// The replaced instance would otherwise keep its timers and pending validations alive
+		stateInstance.destroy();
 		lastChangedProperty = undefined;
 		lastActionResult = undefined;
 		validateResult = undefined;
@@ -80,6 +84,8 @@
 		});
 		optionsKey++;
 	};
+
+	onDestroy(() => stateInstance.destroy());
 
 	// Extract stores for reactive access
 	const errors = $derived(stateInstance.state.errors);

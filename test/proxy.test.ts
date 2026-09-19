@@ -140,7 +140,7 @@ describe('ChangeProxy', () => {
 
       proxy.users[0].name = 'Updated';
 
-      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'users.name', 'Updated', 'Alice');
+      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'users.0.name', 'Updated', 'Alice');
     });
 
     it('should handle push operations', () => {
@@ -167,7 +167,7 @@ describe('ChangeProxy', () => {
       proxy.matrix[0][0] = 10;
 
       expect(proxy.matrix[0][0]).toBe(10);
-      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'matrix', 10, 1);
+      expect(changed).toHaveBeenCalledWith(expect.any(Object), 'matrix.0', 10, 1);
     });
   });
 
@@ -559,5 +559,98 @@ describe('prototype pollution guard', () => {
     expect(Object.hasOwn(source.nested, 'constructor')).toBe(false);
     expect((source.nested as { isAdmin?: boolean }).isAdmin).toBeUndefined();
     expect(changed).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChangeProxy - symbols, non-configurable keys and array method wrappers', () => {
+  it('applies symbol writes and deletes without reporting them', () => {
+    const tag = Symbol('tag');
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ name: 'a' } as { name: string; [tag]?: number }, changed);
+
+    proxy[tag] = 1;
+    expect(proxy[tag]).toBe(1);
+    delete proxy[tag];
+
+    expect(proxy[tag]).toBeUndefined();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('reports failure when the property cannot be deleted', () => {
+    const changed = vi.fn();
+    const source: Record<string, unknown> = {};
+    Object.defineProperty(source, 'locked', { value: 1, configurable: false, enumerable: true });
+    const proxy = ChangeProxy(source, changed);
+
+    expect(() => delete proxy['locked']).toThrow(TypeError);
+    expect(proxy['locked']).toBe(1);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('hands out the same wrapper for the same method and keeps the array identity', () => {
+    const proxy = ChangeProxy({ items: [1, 2] }, vi.fn());
+
+    expect(proxy.items.push).toBe(proxy.items.push);
+    expect(proxy.items.map).toBe(Array.prototype.map);
+  });
+
+  it('reports fill and copyWithin once, with a copy of the old array', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ items: [1, 2, 3, 4] }, changed);
+
+    proxy.items.fill(0, 1, 3);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0]![1]).toBe('items');
+    expect([...(changed.mock.calls[0]![2] as number[])]).toEqual([1, 0, 0, 4]);
+    expect(changed.mock.calls[0]![3]).toEqual([1, 2, 3, 4]);
+
+    proxy.items.copyWithin(0, 2);
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it('still reports the partial change once when the method throws midway', () => {
+    const changed = vi.fn();
+    const items = [1, 2, 3];
+    Object.defineProperty(items, 2, { value: 3, writable: false, enumerable: true, configurable: true });
+    const proxy = ChangeProxy({ items }, changed);
+
+    // reverse() writes index 0, then fails on the read-only index 2
+    // eslint-disable-next-line unicorn/no-array-reverse -- the in-place mutator is what is under test
+    expect(() => proxy.items.reverse()).toThrow(TypeError);
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0]![1]).toBe('items');
+    expect(changed.mock.calls[0]![3]).toEqual([1, 2, 3]);
+  });
+
+  it('reports the path of the inner array for nested arrays and elements', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ matrix: [[1], [2]], rows: [{ tags: ['a'] }] }, changed);
+
+    proxy.matrix[0]!.push(9);
+    proxy.rows[0]!.tags.push('b');
+
+    expect(changed.mock.calls.map((call) => call[1])).toEqual(['matrix.0', 'rows.0.tags']);
+  });
+
+  it('reports a delete of a row field on the indexed path', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ items: [{ note: 'x' } as { note?: string }] }, changed);
+
+    delete proxy.items[0]!.note;
+
+    expect(changed).toHaveBeenCalledWith(expect.anything(), 'items.0.note', undefined, 'x');
+  });
+
+  it('follows the new index after a splice', () => {
+    const changed = vi.fn();
+    const proxy = ChangeProxy({ items: [{ n: 1 }, { n: 2 }, { n: 3 }] }, changed);
+
+    proxy.items.shift();
+    changed.mockClear();
+    proxy.items[0]!.n = 20;
+    proxy.items[1]!.n = 30;
+
+    expect(changed.mock.calls.map((call) => call[1])).toEqual(['items.0.n', 'items.1.n']);
   });
 });

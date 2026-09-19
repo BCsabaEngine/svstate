@@ -14,13 +14,26 @@ const countDecimalPlaces = (value: number): number => {
 // Tolerant divisibility: an exact `%` reports 0.3 as not a multiple of 0.1
 const isMultipleOf = (value: number, divisor: number): boolean => {
   if (divisor === 0) return false;
+  const magnitude = Math.abs(divisor);
+  // Scaled down for tiny divisors, otherwise a fixed epsilon would swallow the divisor itself
+  const tolerance = Math.min(EPSILON, magnitude * 1e-6);
   const remainder = Math.abs(value % divisor);
-  return remainder < EPSILON || Math.abs(remainder - Math.abs(divisor)) < EPSILON;
+  return remainder < tolerance || Math.abs(remainder - magnitude) < tolerance;
 };
 
 const stableStringify = (value: unknown): string => {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
+  if (typeof value === 'string' || value === null) return JSON.stringify(value);
+  // Not JSON.stringify: it turns NaN/Infinity into null and would collide with a real null
+  if (typeof value !== 'object') return String(value);
   if (value instanceof Date) return `Date(${value.getTime()})`;
+  if (value instanceof RegExp) return `RegExp(${String(value)})`;
+  if (value instanceof Map)
+    return `Map(${[...value].map(([key, item]) => `${stableStringify(key)}=>${stableStringify(item)}`).join(',')})`;
+  if (value instanceof Set)
+    return `Set(${[...value]
+      .map((item) => stableStringify(item))
+      .toSorted((a, b) => a.localeCompare(b))
+      .join(',')})`;
   if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
   const entries = Object.entries(value as Record<string, unknown>).toSorted(([a], [b]) => (a < b ? -1 : 1));
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(',')}}`;
@@ -38,7 +51,14 @@ const toDisplay = (value: unknown): string =>
 
 const toDate = (value: Date | string | number): Date => (value instanceof Date ? value : new Date(value));
 
-const isWeekendDay = (date: Date): boolean => date.getDay() === 0 || date.getDay() === 6;
+// 'YYYY-MM-DD' parses as UTC midnight, so its weekday has to be read in UTC as well; reading it
+// in local time would report the previous day in zones west of UTC
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+const isWeekendDay = (date: Date, isDateOnly: boolean): boolean => {
+  const day = isDateOnly ? date.getUTCDay() : date.getDay();
+  return day === 0 || day === 6;
+};
 
 // Today shifted back N years — the cut-off an age constraint compares against
 const yearsAgo = (years: number): Date => {
@@ -129,7 +149,11 @@ export function stringValidator(input: string | null | undefined): StringValidat
     },
 
     regexp(regexp: RegExp, message?: string) {
-      if (!error && processedInput && !regexp.test(processedInput)) setError(message ?? 'Not allowed chars');
+      if (!error && processedInput) {
+        // test() on a global/sticky regexp resumes from lastIndex, which makes results alternate
+        regexp.lastIndex = 0;
+        if (!regexp.test(processedInput)) setError(message ?? 'Not allowed chars');
+      }
       return builder;
     },
 
@@ -460,6 +484,7 @@ export function dateValidator(input: Date | string | number | null | undefined):
 
   const date = isNullish ? new Date(NaN) : toDate(input);
   const isValid = !isNullish && !Number.isNaN(date.getTime());
+  const isDateOnly = typeof input === 'string' && DATE_ONLY.test(input);
 
   const builder: DateValidatorBuilder = {
     required() {
@@ -509,12 +534,12 @@ export function dateValidator(input: Date | string | number | null | undefined):
     },
 
     weekday() {
-      if (!error && isValid && isWeekendDay(date)) setError('Must be a weekday');
+      if (!error && isValid && isWeekendDay(date, isDateOnly)) setError('Must be a weekday');
       return builder;
     },
 
     weekend() {
-      if (!error && isValid && !isWeekendDay(date)) setError('Must be a weekend');
+      if (!error && isValid && !isWeekendDay(date, isDateOnly)) setError('Must be a weekend');
       return builder;
     },
 

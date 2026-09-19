@@ -78,14 +78,15 @@ effect: ({ snapshot, property }) => {
 
 	const batchSourceCode = `// Inside batch(), effect still fires per mutation and calls snapshot()
 // per field, but those collapse into ONE snapshot for the whole batch,
-// titled after the first field it touched (shouldReplace is ignored).
+// titled after the first field it touched (and using that first
+// snapshot() call's shouldReplace).
 batch((draft) => {
   draft.firstName = 'John';
   draft.lastName = 'Doe';
   draft.email = 'john.doe@example.com';
 });
 // Result: exactly one new snapshot, e.g. "Changed First Name"
-// (previously: five separate snapshots, one per field)`;
+// (not one per field)`;
 
 	const rollbackSourceCode = `// Undo last change
 rollback();

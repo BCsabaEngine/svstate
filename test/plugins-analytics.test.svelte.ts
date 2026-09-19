@@ -279,3 +279,110 @@ describe('analyticsPlugin validation and redaction', () => {
     expect((errors[0] as Error).message).toBe('network down');
   });
 });
+
+describe('analyticsPlugin - failures, teardown and redaction', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reports a throwing or rejecting onFlush through onError without touching the state', async () => {
+    const errors: unknown[] = [];
+    let mode: 'throw' | 'reject' = 'throw';
+    const analytics = analyticsPlugin({
+      onFlush: () => {
+        if (mode === 'throw') throw new Error('sync failure');
+        return Promise.reject(new Error('async failure'));
+      },
+      batchSize: 1,
+      flushInterval: 0,
+      include: ['change'],
+      onError: (error) => void errors.push((error as Error).message)
+    });
+    const { data } = createSvState({ name: 'a' }, undefined, { plugins: [analytics] });
+
+    data.name = 'b';
+    mode = 'reject';
+    data.name = 'c';
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(data.name).toBe('c');
+    expect(errors).toEqual(['sync failure', 'async failure']);
+  });
+
+  it('flushes on destroy, stops the interval and keeps working without onError', () => {
+    vi.useFakeTimers();
+    const flushed: number[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: (events) => void flushed.push(events.length),
+      batchSize: 100,
+      flushInterval: 1000,
+      include: ['change']
+    });
+    const { data, destroy } = createSvState({ name: 'a' }, undefined, { plugins: [analytics] });
+
+    data.name = 'b';
+    expect(analytics.eventCount()).toBe(1);
+    vi.advanceTimersByTime(1000);
+    expect(flushed).toEqual([1]);
+
+    data.name = 'c';
+    destroy();
+    expect(flushed).toEqual([1, 1]);
+
+    data.name = 'd'; // ignored after destroy
+    vi.advanceTimersByTime(5000);
+    expect(flushed).toEqual([1, 1]);
+  });
+
+  it('does not flush an empty buffer', () => {
+    const onFlush = vi.fn();
+    const analytics = analyticsPlugin({ onFlush, flushInterval: 0 });
+    createSvState({ name: 'a' }, undefined, { plugins: [analytics] });
+
+    analytics.flush();
+
+    expect(onFlush).not.toHaveBeenCalled();
+  });
+
+  it('masks a redacted key inside an object pushed to an array, for old and new values', () => {
+    const flushed: Record<string, unknown>[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: (events) => void flushed.push(...events.map((event) => event.detail)),
+      redact: ['items.secret'],
+      include: ['change'],
+      flushInterval: 0
+    });
+    const { data } = createSvState({ items: [] as { name: string; secret: string }[] }, undefined, {
+      plugins: [analytics]
+    });
+
+    data.items.push({ name: 'a', secret: 's3cret' });
+    analytics.flush();
+
+    expect(flushed).toHaveLength(1);
+    const detail = flushed[0]!;
+    expect(detail['property']).toBe('items');
+    expect(JSON.stringify(detail)).not.toContain('s3cret');
+    expect(detail['currentValue']).toEqual([{ name: 'a', secret: '[redacted]' }]);
+    expect(data.items[0]!.secret).toBe('s3cret');
+  });
+
+  it('redacts exact paths and paths below them', () => {
+    const flushed: Record<string, unknown>[] = [];
+    const analytics = analyticsPlugin({
+      onFlush: (events) => void flushed.push(...events.map((event) => event.detail)),
+      redact: ['user'],
+      include: ['change'],
+      flushInterval: 0
+    });
+    const { data } = createSvState({ user: { ssn: '1' }, other: 'x' }, undefined, { plugins: [analytics] });
+
+    data.user.ssn = '2';
+    data.other = 'y';
+    analytics.flush();
+
+    expect(flushed[0]).toEqual({ property: 'user.ssn', currentValue: '[redacted]', oldValue: '[redacted]' });
+    expect(flushed[1]).toEqual({ property: 'other', currentValue: 'y', oldValue: 'x' });
+  });
+});

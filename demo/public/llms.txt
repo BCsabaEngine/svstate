@@ -102,64 +102,73 @@ const {
 
 ### ArrayProperty
 
-Shows how to validate dynamic arrays with per-item validation using indexed error keys.
+Shows how to validate dynamic arrays with one error object per row (`Validator` accepts arrays), per-field dirty tracking on indexed paths, and array methods that report a single change per call.
 
-**APIs:** createSvState(), arrayValidator(), stringValidator()
-**Stores:** errors, hasErrors, isDirty
+**APIs:** createSvState(), arrayValidator(), stringValidator(), batch(), isDirtyByField
+**Stores:** errors, hasErrors, isDirty, isDirtyByField
 
 ```typescript
-type ItemErrors = Record<string, { name?: string; email?: string }>;
+type Contact = { id: string; name: string; email: string };
 
 const sourceData = {
   listName: '',
-  items: [] as { name: string; email: string }[]
+  items: [] as Contact[]
 };
 
 const {
   data,
-  state: { errors, hasErrors, isDirty }
+  state: { errors, hasErrors, isDirty, isDirtyByField }
 } = createSvState(sourceData, {
   validator: (source) => ({
     listName: stringValidator(source.listName).prepare('trim').required().minLength(2).getError(),
+    // Error of the array as a whole
     items: arrayValidator(source.items).required().minLength(1).getError(),
-    ...Object.fromEntries(
-      source.items.map((item, index) => [
-        `item_${index}`,
-        {
-          name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
-          email: stringValidator(item.email).prepare('trim').required().email().getError()
-        }
-      ])
-    )
+    // One error object per row, in row order — no casts needed
+    rows: source.items.map((item) => ({
+      name: stringValidator(item.name).prepare('trim').required().minLength(2).getError(),
+      email: stringValidator(item.email).prepare('trim').required().email().getError()
+    }))
   })
 });
 
+// Array methods (push, pop, shift, unshift, splice, sort, reverse, fill, copyWithin)
+// report ONE change per call: effect, plugins and validation run once
 const addItem = () => {
-  data.items = [...data.items, { name: '', email: '' }];
+  data.items.push({ id: randomId(), name: '', email: '' });
 };
 
 const removeItem = (index: number) => {
-  data.items = data.items.filter((_, i) => i !== index);
+  data.items.splice(index, 1);
 };
+
+// Fields inside a row report their indexed path:
+data.items[2].email = 'x@y.z'; // property "items.2.email"
+// isDirtyByField -> { 'items.2.email': true, 'items.2': true, items: true }
+// Writing a row itself (data.items[2] = {...}), `length`, or calling an array
+// method is a change of the array and reports "items".
 ```
 
 ```svelte
-{#each data.items as item, index}
-  <input bind:value={item.name} />
-  <ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.name ?? ''} />
+{#each data.items as item, index (item.id)}
+  <input bind:value={data.items[index].name} />
+  <ErrorText error={$errors?.rows?.[index]?.name ?? ''} />
 
-  <input bind:value={item.email} />
-  <ErrorText error={($errors as ItemErrors)?.[`item_${index}`]?.email ?? ''} />
+  <input bind:value={data.items[index].email} />
+  <ErrorText error={$errors?.rows?.[index]?.email ?? ''} />
+
+  {#if $isDirtyByField[`items.${index}.email`]} <span>modified</span> {/if}
 {/each}
 ```
+
+Async validators are keyed by path, and rows have indexed paths, so a validator can target one row (static keys): `asyncValidator: { 'items.0.email': async (value, source, signal) => ... }`.
 
 ---
 
 ### CalculatedFields
 
-Uses the effect callback to automatically compute derived values like subtotals, taxes, and totals.
+Uses `pathEffect` to recompute derived values like subtotals, taxes, and totals when specific inputs change.
 
-**APIs:** createSvState(), effect callback
+**APIs:** createSvState(), pathEffect
 **Stores:** errors, hasErrors, isDirty
 
 ```typescript
@@ -184,21 +193,26 @@ const {
       quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
     }
   }),
-  effect: ({ property }) => {
-    if (property === 'item.unitPrice' || property === 'item.quantity') {
-      data.subtotal = data.item.unitPrice * data.item.quantity;
-      data.tax = data.subtotal * TAX_RATE;
-      data.total = data.subtotal + data.tax;
-    }
+  // pathEffect is keyed by property path (like asyncValidator): no `if (property === ...)` chain.
+  // It runs after the global `effect`, if any, and also fires for a parent or child path.
+  pathEffect: {
+    'item.unitPrice': recalculateTotals,
+    'item.quantity': recalculateTotals
   }
 });
+
+const recalculateTotals = () => {
+  data.subtotal = data.item.unitPrice * data.item.quantity;
+  data.tax = data.subtotal * TAX_RATE;
+  data.total = data.subtotal + data.tax;
+};
 ```
 
 ---
 
 ### SnapshotDemo
 
-Shows snapshot creation for undo functionality with rollback() support, and batch() for grouping several field changes into one undo point.
+Shows snapshot creation for undo functionality with rollback() support, and batch() for grouping several field changes into one undo point. Every snapshot is a full deep clone of the state, so for large trees keep `maxSnapshots` low and snapshot on meaningful steps.
 
 **APIs:** createSvState(), snapshot(), rollback(), rollbackTo(), reset(), batch()
 **Stores:** errors, hasErrors, isDirty, snapshots
@@ -501,9 +515,9 @@ const { data, state: { errors, hasErrors } } = createSvState(sourceData, {
 
 ### CalculatedClass
 
-Demonstrates using objects with methods as state. Methods are preserved through snapshots, rollback, and reset. The effect callback can call methods directly on the state object.
+Demonstrates using objects with methods as state. Methods are preserved through snapshots, rollback, and reset. A path-scoped effect (`pathEffect`) can call methods directly on the state object.
 
-**APIs:** createSvState(), stringValidator(), numberValidator(), state methods
+**APIs:** createSvState(), stringValidator(), numberValidator(), pathEffect, state methods
 **Stores:** errors, hasErrors, isDirty
 
 ```typescript
@@ -545,10 +559,10 @@ const { data, state: { errors, hasErrors, isDirty } } = createSvState(createSour
       quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
     }
   }),
-  effect: ({ property }) => {
-    if (property === 'item.unitPrice' || property === 'item.quantity') {
-      data.calculateTotals();  // Call method on state object!
-    }
+  pathEffect: {
+    // Call a method on the state object when an input changes
+    'item.unitPrice': () => data.calculateTotals(),
+    'item.quantity': () => data.calculateTotals()
   }
 });
 ```
@@ -623,9 +637,37 @@ const { data, execute, reset, rollback, state } = createSvState(
 
 ---
 
+### PluginHistory
+
+Syncs filter fields with the URL query string using `historyPlugin`. Switch between `push` and `replace` mode and use the browser back/forward buttons.
+
+**APIs:** createSvState(), historyPlugin(), numberValidator(), stringValidator(), reset()
+**Stores:** errors, hasErrors, isDirty
+
+```typescript
+const history = historyPlugin({
+  // state field -> URL parameter
+  fields: { query: 'q', category: 'cat', page: 'page' },
+  mode: 'push', // 'push' adds an entry per change, 'replace' rewrites the current one
+  // URL params are strings: convert back for non-string fields
+  deserialize: (parameter, field) => (field === 'page' ? Number(parameter) : parameter)
+});
+
+const { data, reset } = createSvState({ query: '', category: 'all', page: 1 }, { validator }, { plugins: [history] });
+
+// On creation the URL params are applied and become the baseline (form starts clean)
+data.query = 'svelte'; // URL -> ?q=svelte
+// Back/forward (popstate): state follows the URL. A param missing from the URL restores the
+// field's initial value. Applying the URL never writes it back, so no extra history entries.
+reset(); // state returns to the initial values and the URL is rewritten to match
+history.syncFromUrl(); // re-read the URL manually
+```
+
+---
+
 ### PluginPersistSync
 
-Settings form with persistPlugin (localStorage) and syncPlugin (cross-tab sync via BroadcastChannel). Restored state becomes the new baseline — isDirty is false and reset() returns to the restored values, not the pre-restore defaults.
+Settings form with persistPlugin (localStorage) and syncPlugin (cross-tab sync via BroadcastChannel). Restored state becomes the new baseline — isDirty is false and reset() returns to the restored values, not the pre-restore defaults. `rollback()`/`reset()` are written to storage and broadcast to other tabs too, and stored data is deep-merged into the defaults (data written under a different `version` is ignored unless `migrate` is given).
 
 **APIs:** createSvState(), persistPlugin(), syncPlugin()
 **Stores:** errors, hasErrors, isDirty

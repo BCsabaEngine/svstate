@@ -32,10 +32,14 @@ export function autosavePlugin<T extends Record<string, unknown>>(
   let isSaving = false;
   let isDestroyed = false;
   let hasPendingSave = false;
+  // isDirty stays true after a save, so it alone would re-save unchanged data on every tick
+  let hasUnsavedChanges = false;
+  // Rollback/reset clear isDirty although the state moved away from what was last saved
+  let isRestored = false;
 
   const doSave = async () => {
     if (!context) return;
-    if (onlyWhenDirty && !get(context.state.isDirty)) return;
+    if (onlyWhenDirty && !isRestored && !(hasUnsavedChanges && get(context.state.isDirty))) return;
     // A save requested mid-flight is not dropped — it runs once the current one settles
     if (isSaving) {
       hasPendingSave = true;
@@ -43,9 +47,13 @@ export function autosavePlugin<T extends Record<string, unknown>>(
     }
 
     isSaving = true;
+    hasUnsavedChanges = false;
+    isRestored = false;
     try {
       await options.save(context.data);
     } catch (error) {
+      // Nothing was stored, so the next tick has to try again
+      hasUnsavedChanges = true;
       options.onError?.(error);
     } finally {
       isSaving = false;
@@ -78,6 +86,17 @@ export function autosavePlugin<T extends Record<string, unknown>>(
     },
 
     onChange() {
+      hasUnsavedChanges = true;
+      idleSaver.schedule();
+    },
+
+    onRollback() {
+      isRestored = true;
+      idleSaver.schedule();
+    },
+
+    onReset() {
+      isRestored = true;
       idleSaver.schedule();
     },
 

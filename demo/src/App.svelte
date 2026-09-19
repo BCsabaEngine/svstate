@@ -1,5 +1,5 @@
 <script lang="ts">
-	import './app.postcss';
+	import './app.css';
 
 	import ActionDemo from './pages/ActionDemo.svelte';
 	import ArrayProperty from './pages/ArrayProperty.svelte';
@@ -11,6 +11,7 @@
 	import OptionsDemo from './pages/OptionsDemo.svelte';
 	import PluginAutosaveAnalytics from './pages/PluginAutosaveAnalytics.svelte';
 	import PluginDevtools from './pages/PluginDevtools.svelte';
+	import PluginHistory from './pages/PluginHistory.svelte';
 	import PluginPersistSync from './pages/PluginPersistSync.svelte';
 	import PluginUndoRedo from './pages/PluginUndoRedo.svelte';
 	import ResetDemo from './pages/ResetDemo.svelte';
@@ -30,6 +31,7 @@
 		| 'options-demo'
 		| 'zod-validation'
 		| 'plugin-devtools'
+		| 'plugin-history'
 		| 'plugin-persist-sync'
 		| 'plugin-undo-redo'
 		| 'plugin-autosave-analytics';
@@ -47,12 +49,43 @@
 		{ value: 'options-demo', name: 'Options' },
 		{ value: 'zod-validation', name: 'Zod Integration' },
 		{ value: 'plugin-devtools', name: 'Plugin: Devtools' },
+		{ value: 'plugin-history', name: 'Plugin: History (URL)' },
 		{ value: 'plugin-persist-sync', name: 'Plugin: Persist & Sync' },
 		{ value: 'plugin-undo-redo', name: 'Plugin: Undo/Redo' },
 		{ value: 'plugin-autosave-analytics', name: 'Plugin: Autosave & Analytics' }
 	];
 
-	let selectedMode: DemoMode = $state('basic-validation');
+	// The selected demo lives in the URL hash, so a refresh or a shared link opens the same page
+	const isDemoMode = (value: string): value is DemoMode => demoModes.some((mode) => mode.value === value);
+	const modeFromHash = (): DemoMode => {
+		const hash = location.hash.slice(1);
+		return isDemoMode(hash) ? hash : 'basic-validation';
+	};
+
+	let selectedMode: DemoMode = $state(modeFromHash());
+
+	$effect(() => {
+		const hash = `#${selectedMode}`;
+		// replaceState: switching demos must not add browser history entries
+		if (location.hash !== hash) history.replaceState(history.state, '', hash);
+	});
+
+	const onHashChange = () => {
+		selectedMode = modeFromHash();
+	};
+
+	$effect(() => {
+		addEventListener('hashchange', onHashChange);
+		return () => removeEventListener('hashchange', onHashChange);
+	});
+
+	let isCopied = $state(false);
+
+	const copyInstallCommand = async () => {
+		await navigator.clipboard.writeText('npm i svstate');
+		isCopied = true;
+		setTimeout(() => (isCopied = false), 1500);
+	};
 
 	/*global __PKG_VERSION__*/
 	const APP_VERSION = __PKG_VERSION__;
@@ -95,8 +128,8 @@
 				<span>npm i svstate</span>
 				<button
 					class="ml-1 cursor-pointer rounded p-0.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
-					onclick={() => navigator.clipboard.writeText(`npm i svstate@${APP_VERSION}`)}
-					title="Copy to clipboard"
+					onclick={copyInstallCommand}
+					title={isCopied ? 'Copied!' : 'Copy to clipboard'}
 					type="button"
 				>
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,6 +141,7 @@
 						/>
 					</svg>
 				</button>
+				{#if isCopied}<span class="text-green-400">Copied</span>{/if}
 			</div>
 			<a
 				class="hidden items-center px-2 py-2 font-mono text-xs text-gray-700 transition-colors hover:bg-gray-300 sm:inline-flex"
@@ -130,7 +164,7 @@
 					class="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-blue-500"
 					bind:value={selectedMode}
 				>
-					{#each demoModes as mode}
+					{#each demoModes as mode (mode.value)}
 						<option value={mode.value}>{mode.name}</option>
 					{/each}
 				</select>
@@ -163,6 +197,8 @@
 				<ZodValidation />
 			{:else if selectedMode === 'plugin-devtools'}
 				<PluginDevtools />
+			{:else if selectedMode === 'plugin-history'}
+				<PluginHistory />
 			{:else if selectedMode === 'plugin-persist-sync'}
 				<PluginPersistSync />
 			{:else if selectedMode === 'plugin-undo-redo'}

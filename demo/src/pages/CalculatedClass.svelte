@@ -58,8 +58,9 @@
 				quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
 			}
 		}),
-		effect: ({ property }) => {
-			if (property === 'item.unitPrice' || property === 'item.quantity') data.calculateTotals();
+		pathEffect: {
+			'item.unitPrice': () => data.calculateTotals(),
+			'item.quantity': () => data.calculateTotals()
 		}
 	});
 
@@ -114,10 +115,10 @@ const createSourceData = (): SourceData => ({
       quantity: numberValidator(source.item.quantity).required().integer().min(1).max(100).getError()
     }
   }),
-  effect: ({ property }) => {
-    if (property === 'item.unitPrice' || property === 'item.quantity') {
-      data.calculateTotals();  // Call method on state object!
-    }
+  pathEffect: {
+    // Call a method on the state object when an input changes
+    'item.unitPrice': () => data.calculateTotals(),
+    'item.quantity': () => data.calculateTotals()
   }
 });`;
 
@@ -134,7 +135,7 @@ batch((draft) => {
 </script>
 
 <PageLayout
-	description="Demonstrates using objects with methods as state. The effect callback can call methods directly on the state object."
+	description="Demonstrates using objects with methods as state. A path-scoped effect can call methods directly on the state object."
 	title="State with Methods Demo"
 >
 	{#snippet main()}

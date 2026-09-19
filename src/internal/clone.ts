@@ -22,10 +22,16 @@ export const deepClone = <T>(object: T, seen: WeakMap<object, unknown> = new Wea
   const reference = object as object;
   if (seen.has(reference)) return seen.get(reference) as T;
 
-  if (object instanceof Date) return new Date(object) as T;
+  // Registered too, so a Date/RegExp shared by several places stays shared in the clone
+  if (object instanceof Date) {
+    const clonedDate = new Date(object);
+    seen.set(reference, clonedDate);
+    return clonedDate as T;
+  }
   if (object instanceof RegExp) {
     const clonedRegexp = new RegExp(object.source, object.flags);
     clonedRegexp.lastIndex = object.lastIndex;
+    seen.set(reference, clonedRegexp);
     return clonedRegexp as T;
   }
   if (isCarriedByReference(reference)) return object;

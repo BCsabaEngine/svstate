@@ -183,3 +183,105 @@ describe('autosavePlugin', () => {
     expect(saved.length).toBe(0);
   });
 });
+
+describe('autosavePlugin - visibility, destroy and retry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('saves when the page becomes hidden and stops listening after destroy', async () => {
+    const listeners: (() => void)[] = [];
+    const fakeDocument = {
+      visibilityState: 'visible',
+      addEventListener: (_type: string, handler: () => void) => void listeners.push(handler),
+      removeEventListener: (_type: string, handler: () => void) => {
+        const index = listeners.indexOf(handler);
+        if (index !== -1) listeners.splice(index, 1);
+      }
+    };
+    vi.stubGlobal('document', fakeDocument);
+
+    const saved: string[] = [];
+    const autosave = autosavePlugin<{ name: string }>({
+      save: (data) => void saved.push(data.name),
+      idle: 10_000,
+      onVisibilityHidden: true,
+      saveOnDestroy: false
+    });
+    const { data, destroy } = createSvState({ name: 'a' }, undefined, { plugins: [autosave] });
+    data.name = 'b';
+
+    expect(listeners.length).toBe(1);
+    listeners[0]!(); // still visible: nothing happens
+    await Promise.resolve();
+    expect(saved).toEqual([]);
+
+    fakeDocument.visibilityState = 'hidden';
+    listeners[0]!();
+    await Promise.resolve();
+    expect(saved).toEqual(['b']);
+
+    destroy();
+    expect(listeners.length).toBe(0);
+  });
+
+  it('saveNow is a no-op after destroy and destroy does not save when nothing changed', async () => {
+    const save = vi.fn();
+    const autosave = autosavePlugin({ save, idle: 10_000 });
+    const { destroy } = createSvState({ name: 'a' }, undefined, { plugins: [autosave] });
+
+    destroy();
+    await autosave.saveNow();
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('retries after a failed save on the next interval tick', async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const errors: unknown[] = [];
+    const autosave = autosavePlugin({
+      save: () => {
+        attempts++;
+        if (attempts === 1) throw new Error('offline');
+      },
+      idle: 10_000,
+      interval: 100,
+      onError: (error) => void errors.push(error)
+    });
+    const { data, destroy } = createSvState({ name: 'a' }, undefined, { plugins: [autosave] });
+
+    data.name = 'b';
+    await vi.advanceTimersByTimeAsync(100);
+    expect(attempts).toBe(1);
+    expect(errors.length).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(attempts).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(300); // saved and unchanged: no more saves
+    expect(attempts).toBe(2);
+    destroy();
+  });
+
+  it('still saves after a rollback when onlyWhenDirty is false', async () => {
+    const saved: string[] = [];
+    const autosave = autosavePlugin<{ name: string }>({
+      save: (data) => void saved.push(data.name),
+      idle: 20,
+      onlyWhenDirty: false
+    });
+    const { data, rollback } = createSvState(
+      { name: 'initial' },
+      { effect: ({ snapshot }) => snapshot('edit') },
+      { plugins: [autosave] }
+    );
+
+    data.name = 'edited';
+    rollback();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(saved).toEqual(['initial']);
+  });
+});

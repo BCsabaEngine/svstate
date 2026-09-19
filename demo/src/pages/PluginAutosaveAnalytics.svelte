@@ -1,6 +1,7 @@
 <svelte:options runes />
 
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { type AnalyticsEvent, analyticsPlugin, autosavePlugin, createSvState, stringValidator } from 'svstate';
 
 	import CodeBlock from '$components/CodeBlock.svelte';
@@ -51,6 +52,7 @@
 	const {
 		data,
 		batch,
+		destroy,
 		execute,
 		reset,
 		state: { errors, hasErrors, isDirty, actionInProgress }
@@ -71,6 +73,9 @@
 		},
 		{ plugins: [autosave, analytics] }
 	);
+
+	// Timers, channels and plugins outlive the component unless the state is torn down
+	onDestroy(destroy);
 
 	const fillWithValidData = () => {
 		batch((draft) => {

@@ -163,6 +163,24 @@ const {
 - ⚡ First-error-wins: `getError()` returns the first failure
 - 🔀 Conditional validation: `requiredIf(condition)` on all validators
 
+**Per-row errors for arrays.** `Validator` admits arrays, so a validator can return one error object per row, in row order — no casts, no `item_0` keys:
+
+```typescript
+validator: (source) => ({
+  inventory: arrayValidator(source.inventory).required().minLength(1).getError(), // the array as a whole
+  rows: source.inventory.map((row) => ({
+    warehouseId: stringValidator(row.warehouseId).required().getError(),
+    quantity: numberValidator(row.quantity).required().nonNegative().integer().getError()
+  }))
+});
+
+// $errors?.rows?.[2]?.quantity → "Must be non-negative"
+```
+
+Fields inside a row are reported on their indexed path (`inventory.2.quantity`), so `isDirtyByField`, `pathEffect` and async validators can target a single row (see [Async Validation](#async-validation)). `hasErrors` and `hasCombinedErrors` look through arrays too.
+
+**Good to know:** `dateValidator` reads the weekday of a date-only string (`'2024-01-15'`) in UTC, matching how JavaScript parses it, so `weekday()`/`weekend()` don't shift in time zones west of UTC. `stringValidator().regexp()` is safe with global/sticky regexps. `arrayValidator().unique()` compares `Map`, `Set` and `RegExp` values by content.
+
 #### Async Validation
 
 For server-side validation (checking username availability, email verification, etc.), svstate supports async validators that run after sync validation passes:
@@ -252,6 +270,23 @@ const { data } = createSvState(formData, {
 - 🔗 Cross-field updates (computed fields)
 - 🌐 Trigger API calls on specific changes
 
+**Path-scoped effects:** for "recompute X when Y changes" you don't need a `property === ...` chain inside `effect`. `pathEffect` is keyed by property path, like `asyncValidator`, and receives the same context:
+
+```typescript
+createSvState(init, {
+  pathEffect: {
+    quantity: () => recalc(),
+    'customer.address': ({ snapshot }) => snapshot('Address changed')
+  }
+});
+```
+
+A path effect runs after the global `effect` and uses the same matching rules as async validators: a change to the path itself, to something below it, or to a parent of it (`customer` → `customer.address`) triggers it. It must be synchronous, like `effect`.
+
+**Paths and arrays.** Fields inside an array element report the element's index (`contacts.0.email`). Writing an element (`data.items[0] = x`), writing `length`, or calling a mutating array method is a change of the array and reports the array's own path (`items`). The mutating methods — `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin` — run as one unit: `effect`, plugin `onChange`, dirty tracking and validation run **once per call** (not once per shifted index), with `currentValue` set to the whole array and `oldValue` to a copy from before the call. A call that changes nothing reports nothing. A row follows its index, so after a reorder an edit is reported at the row's new position.
+
+**If an effect throws**, the value is already written: plugin `onChange` and validation still run, and the error is rethrown to the code that made the assignment. Keep side effects that can fail (API calls) in `action`.
+
 ---
 
 ### 3️⃣ Action — Submit to Backend with Loading States
@@ -317,7 +352,8 @@ const { data, execute } = createSvState(articleData, {
 - 🎯 **One action per state** — focused on data submission
 - ⏳ **`actionInProgress`** — show spinners, disable inputs while waiting
 - 🔀 **Action parameters** — different behaviors from multiple submit points
-- 🔒 Prevents concurrent execution by default
+- 🔒 Prevents concurrent execution by default (with `allowConcurrentActions`, `actionInProgress` stays `true` until every running action has finished)
+- ✅ `actionCompleted` runs exactly once — with the thrown value on failure, with no argument on success; if it throws, that is reported through `actionError`
 - ❌ `actionError` store captures failures
 - 🔄 Successful action resets dirty state and snapshots
 
@@ -372,6 +408,10 @@ $snapshots.forEach((s, i) => console.log(`${i}: ${s.title}`));
 - 📜 `snapshots` store — access full history
 - 🔀 Smart deduplication: same title replaces previous snapshot
 - 📏 `maxSnapshots` option — LRU trimming to prevent unbounded growth
+- 🛡️ The `Initial` snapshot is never replaced or trimmed, so `reset()` always works
+- 🧮 After `rollback()`/`rollbackTo()` dirty fields are recomputed against `Initial` (fields that still differ stay dirty; `reset()` clears everything)
+- 🔁 Rollback and reset cancel async validations and drop their errors, then re-schedule the async validators for values that still differ from `Initial` (all of them on `reset()` when `runAsyncValidationOnInit` is on)
+- 📦 `batch()` yields one snapshot, using the first `snapshot()` call's title and `shouldReplace`
 
 ---
 
@@ -413,19 +453,21 @@ const { data } = createSvState(formData, actuators, {
 });
 ```
 
-| Option                          | Default         | Description                                                     |
-| ------------------------------- | --------------- | --------------------------------------------------------------- |
-| `resetDirtyOnAction`            | `true`          | Clear dirty flag after successful action                        |
-| `debounceValidation`            | `0`             | Delay sync validation (0 = next microtask)                      |
-| `allowConcurrentActions`        | `false`         | Block execute() while action runs                               |
-| `persistActionError`            | `false`         | Clear error on next change or action                            |
-| `debounceAsyncValidation`       | `300`           | Delay async validation in ms                                    |
-| `runAsyncValidationOnInit`      | `false`         | Run async validators on creation                                |
-| `clearAsyncErrorsOnChange`      | `true`          | Clear async error when property changes                         |
-| `maxConcurrentAsyncValidations` | `4`             | Max concurrent async validators                                 |
-| `maxSnapshots`                  | `50`            | Max snapshots to keep (0 = unlimited)                           |
-| `onPluginError`                 | `console.error` | Called as `(error, pluginName, hook)` when a plugin hook throws |
-| `plugins`                       | `[]`            | Array of plugins to extend behavior                             |
+| Option                          | Default         | Description                                                                 |
+| ------------------------------- | --------------- | --------------------------------------------------------------------------- |
+| `resetDirtyOnAction`            | `true`          | Clear dirty flag after successful action                                    |
+| `debounceValidation`            | `0`             | Delay sync validation (0 = next microtask)                                  |
+| `allowConcurrentActions`        | `false`         | Block execute() while action runs                                           |
+| `persistActionError`            | `false`         | Clear error on next change or action                                        |
+| `debounceAsyncValidation`       | `300`           | Delay async validation in ms                                                |
+| `runAsyncValidationOnInit`      | `false`         | Run async validators on creation                                            |
+| `clearAsyncErrorsOnChange`      | `true`          | Clear async error when property changes                                     |
+| `maxConcurrentAsyncValidations` | `4`             | Max concurrent async validators                                             |
+| `maxSnapshots`                  | `50`            | Max snapshots to keep (0 = unlimited); each is a full deep clone, see below |
+| `onPluginError`                 | `console.error` | Called as `(error, pluginName, hook)` when a plugin hook throws             |
+| `plugins`                       | `[]`            | Array of plugins to extend behavior                                         |
+
+**Snapshot cost:** every snapshot is a full deep clone of the state tree, and up to `maxSnapshots` of them are kept. That is negligible for a form, but for a large nested object (an ERP customer with hundreds of line items) memory grows with `size × maxSnapshots` and each undo point costs a full clone. Tune it accordingly: lower `maxSnapshots`, group edits with `batch()` (one snapshot per batch), reuse a title so `snapshot(title)` replaces instead of appends, or snapshot only on meaningful steps rather than on every keystroke.
 
 #### Validating before submit
 
@@ -514,11 +556,10 @@ const {
     unitPrice: numberValidator(source.unitPrice).required().positive().getError(),
     quantity: numberValidator(source.quantity).required().integer().min(1).getError()
   }),
-  effect: ({ property }) => {
-    // Call method directly on state when inputs change
-    if (property === 'unitPrice' || property === 'quantity') {
-      data.calculateTotals();
-    }
+  // Call method directly on state when one of the inputs changes
+  pathEffect: {
+    unitPrice: () => data.calculateTotals(),
+    quantity: () => data.calculateTotals()
   }
 });
 
@@ -580,6 +621,8 @@ persist.clearPersistedState(); // Remove stored data
 
 Restored state becomes the baseline: after hydration `isDirty` is `false` and `reset()` returns to the restored values, not to the defaults passed to `createSvState`.
 
+Restoring **deep-merges** plain objects into your defaults (a field added to a nested object in a newer release keeps its default); arrays and other values replace. Data written under a different `version` is **ignored unless `migrate` is given**. `include`/`exclude` apply when reading as well as when writing. `reset()` and `rollback()` are written to storage too.
+
 **`autosavePlugin`** — Auto-save after idle period or on interval.
 
 ```typescript
@@ -590,7 +633,7 @@ const autosave = autosavePlugin({
   idle: 1000, // Save after 1s of inactivity (default: 1000)
   interval: 30000, // Also save every 30s (default: 0 = disabled)
   saveOnDestroy: true, // Save on cleanup (default: true)
-  onlyWhenDirty: true, // Skip if unchanged (default: true)
+  onlyWhenDirty: true, // Skip if nothing changed since the last save (default: true)
   onVisibilityHidden: false, // Save when tab goes hidden (default: false)
   onError: (err) => console.error(err)
 });
@@ -599,6 +642,8 @@ const autosave = autosavePlugin({
 await autosave.saveNow(); // Trigger immediate save
 autosave.isSaving(); // Is a save in progress?
 ```
+
+`onlyWhenDirty` means "changed since the last successful save": an `interval` or visibility save does not repeat while nothing changed, and a failed save is retried on the next tick. `rollback()` and `reset()` schedule a save too, even though they clear `isDirty`. A change made while a save is running triggers exactly one follow-up save.
 
 **`devtoolsPlugin`** — Log all state events to the browser console.
 
@@ -631,6 +676,8 @@ const history = historyPlugin({
 history.syncFromUrl(); // Manually re-read URL into state
 ```
 
+Applying the URL (on creation, on `popstate`, on `syncFromUrl()`) never writes it back, so back/forward doesn't add history entries in `push` mode. On `popstate`/`syncFromUrl()` a parameter that is missing from the URL restores the field's initial value, so going back to a URL without `?q=` clears the query instead of keeping a stale one. `reset()` and `rollback()` rewrite the URL, and a write that would not change the URL is skipped. URL params are strings: pass `deserialize` for non-string fields.
+
 > **Nested fields:** field keys may be dot-notation paths (`{ 'filters.q': 'q' }`). Matching works in both
 > directions — replacing the parent (`data.filters = {...}`) and mutating the leaf (`data.filters.q = '…'`)
 > both update the URL, and a registered parent (`{ filters: 'f' }`) is updated when any of its children change.
@@ -651,7 +698,7 @@ const sync = syncPlugin({
 sync.disconnect(); // Close the channel
 ```
 
-> **Serialization note:** State is serialized with `JSON.stringify` before broadcasting. `Date` objects become strings, `undefined` values and functions are dropped. If your state contains these types, restore them (e.g. re-parse dates) after reading synced values. Incoming messages exceeding 10 levels of nesting are silently rejected.
+> **Serialization note:** State is serialized with `JSON.stringify` before broadcasting. `Date` objects become strings, `undefined` values and functions are dropped. If your state contains these types, restore them (e.g. re-parse dates) after reading synced values. Incoming messages exceeding 10 levels of nesting (arrays included) are silently rejected. Because `undefined` is dropped, clearing a field (or deleting a key) in one tab is not mirrored in the others. `reset()` and `rollback()` are broadcast like any other change.
 
 **`undoRedoPlugin`** — Adds redo capability on top of built-in rollback.
 
@@ -668,6 +715,8 @@ undoRedo.canRedo(); // Are there redo states?
 undoRedo.redoStack; // Readable<Snapshot<T>[]> — reactive redo history
 ```
 
+A rollback that removes no snapshot (e.g. `rollbackTo` the current top) does not add a redo entry, and `reset()` clears the redo stack.
+
 **`analyticsPlugin`** — Buffer and batch state events for analytics.
 
 ```typescript
@@ -682,6 +731,8 @@ analyticsPlugin({
   onError: (error) => report(error) // onFlush threw or rejected
 });
 ```
+
+Redaction also works from above: with `redact: ['user.ssn']`, assigning `data.user = {...}` (or pushing an object with that key) logs a copy of the value with `ssn` masked; your real state is untouched.
 
 #### Writing Custom Plugins
 
@@ -710,6 +761,8 @@ const myPlugin: SvStatePlugin<MyState> = {
 ```
 
 **Available hooks:** `onInit`, `onChange`, `onValidation`, `onSnapshot`, `onAction`, `onRollback`, `onReset`, `destroy`
+
+`rollback()`, `rollbackTo()` and `reset()` restore state without going through the proxy, so they fire `onRollback`/`onReset` — **not** `onChange`. A plugin that mirrors state somewhere (storage, URL, another tab) must handle those two hooks as well. The first `onValidation` (the validation that runs at creation) is delivered after every plugin's `onInit`. A throwing hook is reported through `onPluginError` and never aborts the mutation.
 
 ---
 
@@ -970,6 +1023,12 @@ const {
       .minLength(1)
       .getError(),
 
+    // 🔬 ...and every row (one error object per row, same order)
+    inventoryRows: source.inventory.map((row) => ({
+      warehouseId: stringValidator(row.warehouseId).prepare('trim').required().getError(),
+      quantity: numberValidator(row.quantity).required().integer().nonNegative().getError()
+    })),
+
     // 🏷️ Tags must be unique
     tags: arrayValidator(source.tags)
       .maxLength(10)
@@ -1030,9 +1089,12 @@ function removeTag(index: number) {
 
     {#each data.inventory as item, index}
       <div class="inventory-row">
-        <input bind:value={item.warehouseId} placeholder="Warehouse ID" />
-        <input type="number" bind:value={item.quantity} placeholder="Qty" />
-        <input type="number" bind:value={item.reorderPoint} placeholder="Reorder at" />
+        <input bind:value={data.inventory[index].warehouseId} placeholder="Warehouse ID" />
+        <input type="number" bind:value={data.inventory[index].quantity} placeholder="Qty" />
+        {#if $errors?.inventoryRows?.[index]?.quantity}
+          <span class="error">{$errors.inventoryRows[index].quantity}</span>
+        {/if}
+        <input type="number" bind:value={data.inventory[index].reorderPoint} placeholder="Reorder at" />
         <button onclick={() => removeWarehouse(index)}>Remove</button>
       </div>
     {/each}
@@ -1084,6 +1146,17 @@ function removeTag(index: number) {
 
 Creates a supercharged state object.
 
+**Actuators** (all optional):
+
+| Actuator          | Description                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `validator`       | `(source) => errors` — sync validation; the result may contain nested objects and per-row arrays             |
+| `asyncValidator`  | `{ [path]: (value, source, signal) => Promise<string> }` — async validators keyed by property path           |
+| `effect`          | `(context) => void` — runs on every change; must be synchronous                                              |
+| `pathEffect`      | `{ [path]: (context) => void }` — like `effect`, but only for matching paths (exact, descendant or ancestor) |
+| `action`          | `(params?) => Promise<void> \| void` — the one action run by `execute()`                                     |
+| `actionCompleted` | `(error?) => void` — called once after the action, with the thrown value on failure                          |
+
 **Returns:**
 
 | Property                  | Type                           | Description                                                     |
@@ -1128,6 +1201,8 @@ svstate exports TypeScript types to help you write type-safe external validator 
 ```typescript
 import type {
   Validator,
+  ValidatorNode,
+  PathEffect,
   EffectContext,
   Snapshot,
   SnapshotFunction,
@@ -1146,24 +1221,26 @@ import type {
 } from 'svstate';
 ```
 
-| Type                        | Description                                                                                         |
-| --------------------------- | --------------------------------------------------------------------------------------------------- |
-| `Validator`                 | Nested object type for validation errors — leaf values are error strings (empty = valid)            |
-| `EffectContext<T>`          | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }` |
-| `SnapshotFunction`          | Type for the `snapshot(title, shouldReplace?)` function used in effects                             |
-| `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                             |
-| `SvStateOptions`            | Configuration options type for `createSvState`                                                      |
-| `ValidationResult<V>`       | Return type of `validate()`: `{ errors, hasErrors }`                                                |
-| `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                          |
-| `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                        |
-| `AsyncErrors`               | Object mapping property paths to error strings                                                      |
-| `DirtyFields`               | Object mapping dot-notation property paths to `boolean` dirty status                                |
-| `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks (`onInit`, `onChange`, `onAction`, etc.)                      |
-| `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`                                    |
-| `PluginStores<T>`           | All readable stores exposed to plugins                                                              |
-| `PluginHook`                | Hook name passed to `onPluginError`, e.g. `'onChange'`                                              |
-| `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }`                              |
-| `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                                                |
+| Type                        | Description                                                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `Validator`                 | Nested object type for validation errors — leaf values are error strings (empty = valid); arrays allowed for per-row errors |
+| `ValidatorNode`             | A leaf string, a nested `Validator`, or an array of those                                                                   |
+| `EffectContext<T>`          | Context object passed to effect callbacks: `{ snapshot, target, property, currentValue, oldValue }`                         |
+| `PathEffect<T>`             | Shape of the `pathEffect` actuator: effect callbacks keyed by property path                                                 |
+| `SnapshotFunction`          | Type for the `snapshot(title, shouldReplace?)` function used in effects                                                     |
+| `Snapshot<T>`               | Shape of a snapshot entry: `{ title: string; data: T }`                                                                     |
+| `SvStateOptions`            | Configuration options type for `createSvState`                                                                              |
+| `ValidationResult<V>`       | Return type of `validate()`: `{ errors, hasErrors }`                                                                        |
+| `AsyncValidator<T>`         | Object mapping property paths to async validator functions                                                                  |
+| `AsyncValidatorFunction<T>` | Async function: `(value, source, signal) => Promise<string>`                                                                |
+| `AsyncErrors`               | Object mapping property paths to error strings                                                                              |
+| `DirtyFields`               | Object mapping dot-notation property paths to `boolean` dirty status                                                        |
+| `SvStatePlugin<T>`          | Plugin interface with lifecycle hooks (`onInit`, `onChange`, `onAction`, etc.)                                              |
+| `PluginContext<T>`          | Context passed to `onInit`: `{ data, state, options, snapshot }`                                                            |
+| `PluginStores<T>`           | All readable stores exposed to plugins                                                                                      |
+| `PluginHook`                | Hook name passed to `onPluginError`, e.g. `'onChange'`                                                                      |
+| `ChangeEvent<T>`            | Payload for `onChange`: `{ target, property, currentValue, oldValue }`                                                      |
+| `ActionEvent`               | Payload for `onAction`: `{ phase, params?, error? }`                                                                        |
 
 **Example: External validator and effect functions**
 

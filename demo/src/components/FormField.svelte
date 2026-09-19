@@ -50,6 +50,9 @@
 			: `border-gray-300 ${bgClass} text-gray-900 focus:border-blue-500 focus:ring-blue-500`} {disabled
 			? 'cursor-not-allowed opacity-50'
 			: ''}"
+		aria-describedby={error ? `${id}-error` : undefined}
+		aria-invalid={!!error}
+		aria-required={required}
 		{disabled}
 		{max}
 		{min}
@@ -58,5 +61,5 @@
 		{type}
 		bind:value
 	/>
-	<ErrorText error={error ?? ''} />
+	<ErrorText id="{id}-error" error={error ?? ''} />
 </div>
