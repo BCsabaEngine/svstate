@@ -12,66 +12,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Requires Node >=22, npm >=9**
 
-### Testing
-
-```bash
-npm test                              # Run all tests once
-npm run test:coverage                 # Run tests with coverage report
-npx vitest run test/validators.test.ts  # Run a single test file
-npx vitest run -t "should trim"       # Run tests matching pattern
-npx vitest                            # Watch mode (re-runs on file changes)
-```
-
-Coverage thresholds are set at 60% for lines, functions, branches, and statements.
-
-### Building
-
-```bash
-npm run build           # Clean build (tsc --build --clean && --force)
-npm run clean           # Clean TypeScript build artifacts
-```
-
-### Code Quality
-
-```bash
-npm run fix             # Run format → lint → format (recommended)
-npm run all             # Run fix → build → test → demo:build (full validation)
-npm run lint:check      # Check for linting errors
-npm run lint:fix        # Auto-fix linting errors
-npm run format:check    # Check code formatting
-npm run format:fix      # Auto-fix formatting issues
-```
-
-### Demo
-
-```bash
-npm run demo            # Start Vite dev server with demo app (in demo/ directory)
-```
+`npm run fix` runs format → lint → format (use after edits); `npm run all` is the full validation (fix → build → test → demo:build). Single test file: `npx vitest run test/validators.test.ts`; by name: `npx vitest run -t "should trim"`.
 
 ## Demo Subproject
 
-The `demo/` directory is a separate npm project for interactive testing of the library.
-
-**Structure:**
-
-- `demo/src/App.svelte` - Root component
-- `demo/src/pages/` - Demo pages (e.g., `BasicValidation.svelte`); each page that creates a state calls `destroy()` on unmount (`onDestroy(destroy)`) so timers, channels and plugins don't outlive it. The selected page is kept in the URL hash
-- `demo/src/components/` - Shared UI components (e.g., `ErrorText.svelte`)
-
-**Stack:** Vite + Svelte 5 + Tailwind CSS 4
-
-**Working directly in demo:**
-
-```bash
-cd demo
-npm install             # Install demo dependencies (separate from root)
-npm run dev             # Start dev server
-npm run build           # Production build
-npm run ts:check        # TypeScript check
-npm run all             # format → lint → ts:check → build
-```
-
-Note: The demo has its own `node_modules` and uses Zod for some validation examples.
+`demo/` is a separate npm project (own `node_modules`); see `demo/CLAUDE.md` when working there.
 
 ## Documentation Files
 
@@ -83,7 +28,7 @@ Note: The demo has its own `node_modules` and uses Zod for some validation examp
 
 ### Core Files
 
-- `src/index.ts` - Public exports: `createSvState`, validator builders, plugin types and built-in plugins, types (`Snapshot`, `EffectContext`, `SnapshotFunction`, `SvStateOptions`, `Validator`, `ValidatorNode`, `PathEffect`, `AsyncValidator`, `AsyncValidatorFunction`, `AsyncErrors`, `DirtyFields`, `SvStatePlugin`, `PluginContext`, `PluginStores`, `ChangeEvent`, `ActionEvent`, `ValidationResult`, `PluginHook`, and per-plugin option/instance types)
+- `src/index.ts` - Public exports: `createSvState`, validator builders, plugin types and built-in plugins, and the public types
 - `src/state.svelte.ts` - Main `createSvState<T, V, P>()` function with snapshot/undo system, async validation, and plugin integration
 - `src/proxy.ts` - `ChangeProxy` deep reactive proxy implementation
 - `src/validators.ts` - Fluent validator builders (string, number, array, date)
@@ -233,26 +178,7 @@ Plugins extend `createSvState` via lifecycle hooks. They are registered via `opt
 
 **State-restoring operations and plugins:** `rollback()`, `rollbackTo()` and `reset()` write `stateObject` directly, **bypassing the proxy**, so they fire `onRollback`/`onReset` but never `onChange`. Any plugin that mirrors state (persist, sync, history, autosave) must handle both hooks. The validation that runs at creation is delivered to `onValidation` after every plugin's `onInit`.
 
-**Built-in plugins (src/plugins/):**
-
-| Plugin            | File           | Purpose                                                                                                                                                                            | Key options                                                                                                                                                                         |
-| ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `persistPlugin`   | `persist.ts`   | Persist state to localStorage/custom storage (deep-merged on restore; data from another `version` is ignored unless `migrate` is given; also written after `reset()`/`rollback()`) | `key`, `storage`, `throttle`, `version`, `migrate`, `include`, `exclude`, `onError`                                                                                                 |
-| `autosavePlugin`  | `autosave.ts`  | Auto-save after idle/interval                                                                                                                                                      | `save` (required), `idle`, `interval`, `saveOnDestroy`, `onlyWhenDirty`                                                                                                             |
-| `devtoolsPlugin`  | `devtools.ts`  | Console logging of all events                                                                                                                                                      | `name`, `collapsed`, `logValidation`, `enabled`, `logValues`                                                                                                                        |
-| `historyPlugin`   | `history.ts`   | Sync state fields to URL params                                                                                                                                                    | `fields` (required), `mode`, `serialize`, `deserialize`, `onError`; dotted field paths match both ways (changing `filters` updates a registered `filters.q`, and vice versa)        |
-| `syncPlugin`      | `sync.ts`      | Cross-tab sync via BroadcastChannel                                                                                                                                                | `key` (required), `throttle`, `merge`, `onError`; uses JSON serialization (Dates become strings, undefined/functions dropped); incoming payloads deeper than 10 levels are rejected |
-| `undoRedoPlugin`  | `undo-redo.ts` | Redo stack on top of built-in rollback                                                                                                                                             | `maxRedoStack`; exposes `redo()`, `canRedo()`, `redoStack`                                                                                                                          |
-| `analyticsPlugin` | `analytics.ts` | Batch event buffering for analytics                                                                                                                                                | `onFlush` (required), `batchSize`, `flushInterval`, `include`, `redact` (covers nested paths), `onError`                                                                            |
-
-**Plugin behavior notes:**
-
-- `persist` — deep-merges (`safeDeepMerge`) restored data into the defaults; ignores data whose `version` differs unless `migrate` is given; applies `include`/`exclude` on read too; writes on `onReset` and `onRollback`
-- `autosave` — `onlyWhenDirty` means "changed since the last successful save" (`hasUnsavedChanges && isDirty`), a failed save is retried, `onRollback`/`onReset` force the next save (they clear `isDirty`)
-- `history` — an `isReading` guard stops applying the URL from being echoed back (no `pushState` on `popstate`); on `popstate`/`syncFromUrl()` params missing from the URL restore the field's initial value (captured before the URL is first read); `onReset`/`onRollback` rewrite the URL; a write that would not change the URL is skipped
-- `sync` — broadcasts after `onReset`/`onRollback`; `undefined`/deleted keys are not propagated (JSON); the depth guard descends into arrays
-- `undoRedo` — the snapshot-store subscription resets `previousTipSnapshot` on every non-shrinking update so a rollback that removes nothing cannot push a stale redo entry
-- `analytics` — `redact` masks the changed property itself, everything below a redacted path, and redacted paths _inside_ an assigned object/array (masked on a `deepClone` copy, state untouched)
+**Built-in plugins:** options and per-plugin behaviour notes are in `src/plugins/CLAUDE.md`.
 
 ### Deep Clone System (src/internal/clone.ts)
 
@@ -308,79 +234,20 @@ The `hasErrors` store uses `checkHasErrors` which recursively checks if any leaf
 
 ### Fluent Validator Builders (src/validators.ts)
 
-Four chainable validator builders with `getError()` to extract the first error. All validators accept `null` or `undefined` as input (nullish values skip most validations unless `required()` or `requiredIf()` is called).
+`stringValidator`, `numberValidator`, `arrayValidator` and `dateValidator` are chainable; `getError()` returns the first error. The method lists are in `src/validators.ts`. Non-obvious behaviour:
 
-- **stringValidator(input)** - String validation
-  - `.prepare(...ops)` - Preprocessing: `'trim'`, `'normalize'`, `'upper'`, `'lower'`, `'localeUpper'`, `'localeLower'`
-  - `.required()`, `.requiredIf(cond)` - Require non-empty value
-  - `.minLength(n)`, `.maxLength(n)` - Length constraints
-  - `.noSpace()`, `.notBlank()` - Whitespace rules
-  - `.uppercase()`, `.lowercase()` - Case enforcement
-  - `.startsWith(s)`, `.endsWith(s)`, `.contains(s)` - Content matching
-  - `.regexp(re, msg?)` - Custom regex validation
-  - `.in(values)`, `.notIn(values)` - Allowed/disallowed values (accepts array or object keys)
-  - `.email()`, `.website(mode?)` - Format validators
-  - `.alphanumeric()`, `.numeric()`, `.slug()`, `.identifier()` - Pattern validators
-
-- **numberValidator(input)** - Numeric validation
-  - `.required()`, `.requiredIf(cond)` - Require non-NaN value
-  - `.min(n)`, `.max(n)`, `.between(min, max)` - Range constraints
-  - `.integer()`, `.decimal(places)` - Type constraints
-  - `.positive()`, `.negative()`, `.nonNegative()`, `.notZero()` - Sign constraints
-  - `.multipleOf(n)`, `.step(n)` - Divisibility checks (epsilon-tolerant, so `0.3` is a multiple of `0.1`; a zero divisor never matches)
-  - `.percentage()` - Must be 0-100
-
-- **arrayValidator(input)** - Array validation
-  - `.required()`, `.requiredIf(cond)` - Require non-empty array
-  - `.minLength(n)`, `.maxLength(n)`, `.ofLength(n)` - Length constraints
-  - `.unique()` - All items must be unique (keys are type-tagged, so `1` and `'1'` differ; object key order is irrelevant; dates compare by time)
-  - `.includes(item)`, `.includesAny(items)`, `.includesAll(items)` - Item presence
-
-- **dateValidator(input)** - Date validation (accepts Date, string, or number)
-  - `.required()`, `.requiredIf(cond)` - Require valid date
-  - `.before(date)`, `.after(date)`, `.between(start, end)` - Range constraints
-  - `.past()`, `.future()` - Relative to now
-  - `.weekday()`, `.weekend()` - Day of week
-  - `.minAge(years)`, `.maxAge(years)` - Age calculations
-
-## Code Style
-
-### ESLint Rules
-
-- Import sorting enforced via `eslint-plugin-simple-import-sort`
-- Unicorn plugin enabled (most rules) with exceptions: `filename-case`, `no-array-reduce`, `no-nested-ternary` off
-- Curly braces: `"multi"` style (required only for multi-line blocks)
-- `no-alert`, `no-debugger` are errors
-
-### TypeScript
-
-- Target: ESNext with ESM (ES Modules)
-- Strict mode with: `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`, `noUncheckedIndexedAccess`
+- All accept `null`/`undefined`; nullish values skip most validations unless `required()` or `requiredIf()` is called
+- `numberValidator`: `multipleOf`/`step` are epsilon-tolerant (`0.3` is a multiple of `0.1`); a zero divisor never matches
+- `arrayValidator.unique()`: keys are type-tagged (`1` and `'1'` differ), object key order is irrelevant, dates compare by time
+- `dateValidator` accepts Date, string or number
 
 ## Testing
 
-Test files go in `test/` directory:
+Test files go in `test/`: `*.test.ts` for pure TypeScript (validators, proxy, internal helpers), `*.test.svelte.ts` for tests using Svelte 5 runes. Per-plugin tests are `plugins-<name>.test.svelte.ts`.
 
-- `*.test.ts` - Pure TypeScript tests (validators, proxy)
-- `*.test.svelte.ts` - Tests using Svelte 5 runes (`$state`, `$derived`, etc.)
+`regressions.test.svelte.ts` holds cross-cutting regression tests. When fixing a bug, add its regression test there and check it fails without the fix.
 
-Current test files:
-
-- `validators.test.ts` - Fluent validator builder tests (~340 cases), including date-only weekday in several time zones, sticky/global regexps and `unique()` comparison keys
-- `internal.test.ts` - Internal helper tests: `isDeepEqual`/`getChangedPaths`, `hasAnyErrors`/`toError`, path helpers (`safeDeepMerge`, `getMatchingPaths`), `createDebouncer`
-- `proxy.test.ts` - ChangeProxy deep proxy tests, including delete events, proxy identity, indexed row paths and array-method coalescing
-- `state.test.svelte.ts` - Core createSvState tests (~105 cases), including `validate()`, `batch()`, destroy cleanup, non-plain values (Map/Set/RegExp/cycles) and plugin error isolation
-- `async-validation.test.svelte.ts` - Async validator tests
-- `regressions.test.svelte.ts` - Cross-cutting regression tests for the 2.1.0 fixes (superseded async runs, `execute()`, rollback/dirty recompute, `pathEffect`, per-row errors, plugin mirroring of rollback/reset). When fixing a bug, add its regression test here and check it fails without the fix
-- `performance.test.svelte.ts` - Performance/stress tests
-- `plugins.test.svelte.ts` - Plugin system integration tests
-- `plugins-analytics.test.svelte.ts`, `plugins-autosave.test.svelte.ts`, `plugins-devtools.test.svelte.ts`, `plugins-history.test.svelte.ts`, `plugins-persist.test.svelte.ts`, `plugins-sync.test.svelte.ts`, `plugins-undo-redo.test.svelte.ts` - Per-plugin tests
-
-Vitest is configured with:
-
-- Globals enabled (no imports needed for `describe`, `it`, `expect`)
-- Node environment
-- Console output suppressed
+Vitest: globals enabled (no imports for `describe`, `it`, `expect`), Node environment, console output suppressed.
 
 ## Svelte 5 Runes Mode
 
